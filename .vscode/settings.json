@@ -2,4 +2,7 @@
     "editor.formatOnSave": true,
     "editor.formatOnSaveMode": "file",
     "terminal.integrated.defaultProfile.linux": "bash",
+    "files.watcherExclude": {
+        "**/target": true
+    },
 }

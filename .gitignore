@@ -6,7 +6,7 @@ out/
 test_run_dir/
 .metals/
 .bloop
-mill.Inzc0A
+mill.*
 
 build/
 

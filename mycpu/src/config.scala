@@ -4,14 +4,16 @@ import chisel3.util.experimental.BoringUtils
 
 trait MycpuParam {
   // General Parameter for mycpu
+
+  val excCodeWidth = 5
   //val PaddrWidth = TODO:
-  val PaddrTagWidth   = 11 //TODO:
+  val paddrTagWidth   = 11 //TODO:
   val cacheIndexWidth = 12
-  val VaddrWidth      = 32
+  val vaddrWidth      = 32
   val instrWidth      = 32
   val dataWidth       = 32
 
-  val PredictNum = 4
+  val predictNum = 4
   val fetchNum   = 4
   val decodeNum  = 2
   val renameNum  = 2
@@ -28,6 +30,14 @@ trait MycpuParam {
   val robIndexWidth = log2Up(robNum)
 
   val prfReadPortNum = srcDataNum * issueNum
+
+  val aluFuNum = 2
+
+  val forAlu = 0
+  val forMdu = 1
+  val forLsu = 2
+
+  val aluExternBypassNum = 1
 }
 
 abstract class MycpuBundle extends Bundle with MycpuParam

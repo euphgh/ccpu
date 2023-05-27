@@ -1,4 +1,4 @@
-/* only define a class if it will be reused*/
+/* only define a class if it will be  reused*/
 
 package bundle
 

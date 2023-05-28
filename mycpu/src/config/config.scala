@@ -3,6 +3,13 @@ package config
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
+
+object fuType extends Enumeration {
+
+  // 自动赋值枚举成员
+  val Alu, Lsu, Mdu = Value
+}
+
 trait MycpuParam {
   // General Parameter for mycpu
 

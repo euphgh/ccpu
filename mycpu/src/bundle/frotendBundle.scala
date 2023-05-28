@@ -19,6 +19,7 @@ import config._
  */
 class ExceptionInfoBundle extends MycpuBundle {
   val happen  = Output(Bool())
+  val isBd    = Output(Bool())
   val excCode = Output(UInt(excCodeWidth.W))
 }
 
@@ -34,6 +35,7 @@ class MisPredictRedirectBundle extends MycpuBundle {
   val realTarget    = Output(UInt(vaddrWidth.W))
   val realDirection = Output(Bool())
   val valid         = Output(Bool())
+  //type
 }
 
 //Gen nextTarget in ROB
@@ -42,11 +44,6 @@ class MisPredictRedirectBundle extends MycpuBundle {
 class ExceptionRedirectBundle extends MycpuBundle {
   val nextTarget = Output(UInt(vaddrWidth.W))
   val valid      = Output(Bool())
-}
-
-class RedirectBundle extends MycpuBundle {
-  val mispredict = new MisPredictRedirectBundle
-  val exception  = new ExceptionRedirectBundle
 }
 
 class PredictResultBundle extends MycpuBundle {
@@ -82,38 +79,27 @@ class RenameInfoBundle extends MycpuBundle {
 //TODO:no need a wen?use addr 0 to unable wen
 class WPrfBundle extends MycpuBundle {
   val wen      = Output(Bool())
-  val data     = Output(UInt(dataWidth.W))
+  val result   = Output(UInt(dataWidth.W))
   val destAddr = Output(UInt(pRegAddrWidth.W))
 }
-
-class BypassBundle extends MycpuBundle {
-  val data         = Output(UInt(dataWidth.W))
-  val destPregAddr = Output(UInt(pRegAddrWidth.W))
-}
-
-//TODO:
-class RobInfoBundle extends MycpuBundle {
+class RobToFuBundle extends MycpuBundle {
   val robIndex = Output(UInt(robIndexWidth.W))
 }
 
-/* TODO:
-how to decouple
-  mispredict(only alu use)
-  memReqVaddr(only lsu use)
- */
 class WbRobBundle extends MycpuBundle {
-  val robIndex         = Output(UInt(robIndexWidth.W))
-  val prevDestPregAddr = Output(UInt(pRegAddrWidth.W)) //to freeList
-  val exception        = new ExceptionInfoBundle
+  val robIndex  = Output(UInt(robIndexWidth.W))
+  val exception = new ExceptionInfoBundle
 
-  val mispredict  = new MisPredictRedirectBundle
-  val memReqVaddr = Output(UInt(vaddrWidth.W))
+  val isMispredict = Output(Bool())
+  val memReqVaddr  = Output(UInt(vaddrWidth.W))
 }
 
 class RetireBundle extends MycpuBundle {
-  val redirect         = new RedirectBundle
+  val exception        = new ExceptionRedirectBundle
+  val flushBackend     = Output(Bool())
   val prevDestPregAddr = Output(UInt(pRegAddrWidth.W)) //to freeList
 }
+
 //------------------------------------------------------------------------------------------------------
 /* 各流水级的OUT接口，这些接口不带valid-rdy */
 
@@ -147,15 +133,10 @@ class DecodeStageOutIO extends MycpuBundle {
   val exception     = new ExceptionInfoBundle
 }
 
-class RenameStageOutIO extends MycpuBundle {
-  val decodeStageOut = new DecodeStageOutIO
-  val renamed        = new RenameInfoBundle
-}
-
 /*
   rsOut:not OK
     decoded is needed until exeStage：uOps
-    renamed is needed until wbStage；use src in RoStage,use dest in wbStage
+    use psrc in RoStage,use pdest in wbStage
     Exception：needed until wbStage: detect in  exeStage,write in rob in wbStage
       mdu-算出溢出例外
       alu-算出溢出例外
@@ -165,33 +146,28 @@ class RenameStageOutIO extends MycpuBundle {
     basicTODO:no need to take it into FU
  */
 class RsOutIO(kind: Int) extends MycpuBundle {
-  val predictResult = if (kind == forAlu) Some(new PredictResultBundle) else None
+  val predictResult = if (kind == fuType.Alu.id) Some(new PredictResultBundle) else None
   val exception     = new ExceptionInfoBundle
   val decoded       = new DecodeInstInfoBundle
-  val renamed       = new RenameInfoBundle
+
+  val srcPregs     = Vec(srcDataNum, new SrcPregsBundle)
+  val destPregAddr = Output(UInt(pRegAddrWidth.W))
 }
 
-//actually,only alu need misoredict,but it's hard to decouple
-class FunctionUnitOutIO(kind: Int) extends MycpuBundle {
+class FunctionUnitOutIO extends MycpuBundle {
   val wbRob = new WbRobBundle
   val wPrf  = new WPrfBundle
-
-  val result = Output(UInt(dataWidth.W))
 }
 
+/*
+TODO:
+  for mem readOpstage,we can use roStage.io.out.srcDatas to cal a 12 bit index in Backend */
 class ReadOpStageOutIO(kind: Int) extends MycpuBundle {
-  val wbRob = new WbRobBundle
-  val wPrf  = new WPrfBundle
+  val wbRob        = new WbRobBundle
+  val destPregAddr = Output(UInt(pRegAddrWidth.W))
 
   val decoded  = new DecodeInstInfoBundle
   val srcDatas = Vec(2, Output(UInt(dataWidth.W)))
-}
-
-class ExeStageOutIO(kind: Int) extends MycpuBundle {
-  val wbRob = new WbRobBundle
-  val wPrf  = new WPrfBundle
-
-  val result = Output(UInt(dataWidth.W))
 }
 
 //decoded is for mem2:deal with loadData
@@ -199,20 +175,11 @@ class ExeStageOutIO(kind: Int) extends MycpuBundle {
 //tagOfMemReqPaddr is for mem2:hitOrMiss detect
 //store inst get into storeQ after mem1,so no need to take storeData in the FU pipeline
 class MemStage1OutIO extends MycpuBundle {
-  val wbRob = new WbRobBundle
-  val wPrf  = new WPrfBundle
+  val wbRob        = new WbRobBundle
+  val destPregAddr = Output(UInt(pRegAddrWidth.W))
 
   val decoded          = new DecodeInstInfoBundle
   val tagOfMemReqPaddr = Output(UInt(paddrTagWidth.W))
-}
-
-//memReqVaddr is for exception
-class MemStage2OutIO extends MycpuBundle {
-  val wbRob = new WbRobBundle
-  val wPrf  = new WPrfBundle
-
-  val memReqVaddr = Output(UInt(vaddrWidth.W))
-  val loadData    = Output(UInt(dataWidth.W))
 }
 
 class StoreQueueOutIO extends MycpuBundle {
@@ -229,9 +196,9 @@ class StoreQueueOutIO extends MycpuBundle {
 class PreIfIO extends MycpuBundle {
 
   val in = new Bundle {
-    val fromBackend = Flipped(new RedirectBundle)
-    val fromBpu     = Flipped(new BpuOutIO)
-    val allignMask  = Input(UInt(fetchNum.W))
+    //val fromBackend = Flipped(new RedirectBundle)
+    val fromBpu    = Flipped(new BpuOutIO)
+    val allignMask = Input(UInt(fetchNum.W))
   }
   val out = Decoupled(new PreIfOutIO)
 }
@@ -282,12 +249,31 @@ class DecodeStageIO extends MycpuBundle {
 //pay attention to WAW/RAW in a instGroup!
 //TODO:use addSink to gen wenPRF,instead of declare a port here!
 //listen to wenPRF...
+
+/*
+predictResult->RS
+decoded->RS
+exception->RS
+renamed
+  src,dest->RS
+  prevDest->ROB
+basic->ROB
+ */
 class RenameStageIO extends MycpuBundle {
   val in = new Bundle {
     val fromDecodeStage = Vec(decodeNum, Flipped(Decoupled(new DecodeStageOutIO)))
     val wPrf            = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
   }
-  val out = Vec(renameNum, Decoupled(new RenameStageOutIO))
+  val out = Vec(
+    renameNum,
+    Decoupled(new Bundle {
+      val predictResult = new PredictResultBundle
+      val basic         = new BasicInstInfoBundle
+      val decoded       = new DecodeInstInfoBundle
+      val exception     = new ExceptionInfoBundle
+      val renamed       = new RenameInfoBundle
+    })
+  )
 }
 
 //next cycle：write s-rat/RS/ROB
@@ -308,27 +294,58 @@ HasPriority："priorityMask" is actually a record of age
  LSU/MDU：not any older insts(in-order)
  ALU：not any rdy&older insts(ooo)
  */
+
+/*
+rsEntry
+  srcPregs
+  destPregAddr
+  predictResult
+  exception
+  decoded
+ */
 class RsIO(rsKind: Int) extends MycpuBundle {
   val in = new Bundle {
-    val fromRenameStage = Flipped(Decoupled(new RenameStageOutIO))
-    val wPrf            = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
+    val fromRenameStage = Flipped(Decoupled(new Bundle {
+      val srcPregs     = Vec(srcDataNum, new SrcPregsBundle)
+      val destPregAddr = Output(UInt(pRegAddrWidth.W))
+
+      val predictResult = if (rsKind == forAlu) Some(new PredictResultBundle) else None
+      val exception     = new ExceptionInfoBundle
+      val decoded       = new DecodeInstInfoBundle
+    }))
+    val wPrf = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
+
   }
   val out =
     if (rsKind == forAlu) Vec(aluFuNum, Decoupled(new RsOutIO(kind = rsKind)))
     else Decoupled(new RsOutIO(kind = rsKind))
 }
 
-//global!!
-//take rob index with the insts
-//no need to write an out port class for rob
+/*
+robEntry:
+  valid
+
+  pc?(renameIn)
+  instr?(renameIn)
+  prevDestPregAddr(renameIn)
+
+  memReqVaddr(wbIn)---fu produce
+  exception(wbIn)---fu produce
+  isMispredict-Boll(wbIn)---fu produce
+ */
+//RobToFuBundle is just rob index
 class RobIO extends MycpuBundle {
   val in = new Bundle {
-    val fromRenameStage = Flipped(Decoupled(new RenameStageOutIO))
-    val wbRob           = Vec(wBNum, Flipped(Decoupled(new WbRobBundle)))
+    val fromRenameStage = Flipped(Decoupled(new Bundle {
+      val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
+      val basic            = new BasicInstInfoBundle
+    }))
+    val wbRob = Vec(wBNum, Flipped(Decoupled(new WbRobBundle)))
   }
   val out = new Bundle {
-    val toFunctionUnit = Vec(issueNum, Decoupled(new RobInfoBundle))
+    val toFunctionUnit = Vec(issueNum, Decoupled(new RobToFuBundle))
     val toRetire       = Vec(retireNum, Decoupled(new RetireBundle))
+    val storeCommit    = Output(Bool())
   }
 }
 
@@ -360,15 +377,16 @@ class PrfIO extends MycpuBundle {
   LSU:
     connect wires to cache in FU module
  */
+
 class FunctionUnitIO(fuKind: Int) extends MycpuBundle {
   val in = new Bundle {
     val fromRs       = Flipped(Decoupled(new RsOutIO(kind = fuKind)))
-    val fromRob      = Flipped(Decoupled(new RobInfoBundle))
+    val fromRob      = Flipped(Decoupled(new RobToFuBundle))
     val datasFromPrf = Flipped(Decoupled(Vec(srcDataNum, Output(UInt(dataWidth.W)))))
     val datasFromBypass =
-      if (fuKind == forAlu) Some(Vec(aluExternBypassNum, Flipped(Decoupled(new BypassBundle)))) else None
+      if (fuKind == forAlu) Some(Vec(aluExternBypassNum, Flipped(Decoupled(new WPrfBundle)))) else None
   }
-  val out = Decoupled(new FunctionUnitOutIO(kind = fuKind))
+  val out = Decoupled(new FunctionUnitOutIO)
 }
 
 //TODO:  use addsource for load index?
@@ -378,17 +396,18 @@ class ReadOpStageIO(fuKind: Int) extends MycpuBundle {
 
   val in = new Bundle {
     val fromRs       = Flipped(Decoupled(new RsOutIO(kind = fuKind)))
-    val fromRob      = Flipped(Decoupled(new RobInfoBundle))
+    val fromRob      = Flipped(Decoupled(new RobToFuBundle))
     val datasFromPrf = Flipped(Decoupled(Vec(srcDataNum, Output(UInt(dataWidth.W)))))
     val datasFromBypass =
-      if (fuKind == forAlu) Some(Vec(aluExternBypassNum, Flipped(Decoupled(new BypassBundle)))) else None
+      if (fuKind == forAlu) Some(Vec(aluExternBypassNum, Flipped(Decoupled(new WPrfBundle)))) else None
   }
   val out = Decoupled(new ReadOpStageOutIO(kind = fuKind))
 }
 
+//bypass use wprfBundle
 class exeStageIO(fuKind: Int) extends MycpuBundle {
   val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuKind)))
-  val out = Decoupled(new ExeStageOutIO(kind = fuKind))
+  val out = Decoupled(new FunctionUnitOutIO)
 }
 
 /* instantiate dTLB in "Backend"
@@ -397,7 +416,7 @@ TODO:a port for tlbRead */
 //rise storeQEnq signal if the inst is store
 //TODO: load inst wake up :use addsink?
 class MemStage1IO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = forLsu)))
+  val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuType.Lsu.id)))
   val out = Decoupled(new MemStage1OutIO)
 }
 
@@ -409,5 +428,5 @@ class MemStage1IO extends MycpuBundle {
 //connect paddrTag to cache in "Backend",cache will resp a "hit or miss" signal
 class MemStage2IO extends MycpuBundle {
   val in  = Flipped(Decoupled(new MemStage1OutIO))
-  val out = Decoupled(new MemStage2OutIO)
+  val out = Decoupled(new FunctionUnitOutIO)
 }

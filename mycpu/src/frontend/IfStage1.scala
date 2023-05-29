@@ -6,7 +6,7 @@ import chisel3.util.Decoupled
 import chisel3.util.Valid
 
 class BtbOutIO extends MycpuBundle {
-  val instType = BpuType()
+  val instType = BranchType()
   val target   = UInt(vaddrWidth.W)
 }
 
@@ -18,6 +18,7 @@ class BpuUpdateIO extends MycpuBundle {
 }
 
 /**
+  * not connect by pipeline
   * out.pcVal = regEnable(preIFOutIO.npc, fire)
   *
   * out.bpuOut give predict result after fire posedge

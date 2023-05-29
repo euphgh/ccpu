@@ -10,6 +10,9 @@ object fuType extends Enumeration {
   val Alu, Lsu, Mdu = Value
 }
 
+object BranchType extends ChiselEnum {
+  val jcall, jret, jmp, jr, b, non = Value
+}
 trait MycpuParam {
   // General Parameter for mycpu
 

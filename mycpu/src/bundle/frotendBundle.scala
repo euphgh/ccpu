@@ -49,9 +49,9 @@ class ExceptionRedirectBundle extends MycpuBundle {
 }
 
 class PredictResultBundle extends MycpuBundle {
-  val taken    = Output(Bool())
-  val instType = Output(BpuType())
-  val target   = Output(UInt(vaddrWidth.W))
+  val taken  = Output(Bool())
+  val brType = Output(BranchType())
+  val target = Output(UInt(vaddrWidth.W))
 }
 class BasicInstInfoBundle extends MycpuBundle {
   val instr = Output(UInt(instrWidth.W))
@@ -90,8 +90,8 @@ class RobToFuBundle extends MycpuBundle {
 }
 
 class WbRobBundle extends MycpuBundle {
-  val robIndex  = Output(UInt(robIndexWidth.W))
-  val exception = new ExceptionInfoBundle
+  val robIndex     = Output(UInt(robIndexWidth.W))
+  val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
   val memReqVaddr  = Output(UInt(vaddrWidth.W))
 }
@@ -105,27 +105,23 @@ class RetireBundle extends MycpuBundle {
 //------------------------------------------------------------------------------------------------------
 /* 各流水级的OUT接口，这些接口不带valid-rdy */
 
-object BpuType extends ChiselEnum {
-  val jcall, jret, jmp, jr, b, non = Value
-}
-
 //all the insts must take its predict result with it
 //takenMask will be used to gen npc in preIF,and to gen validNum in IF2
 class BpuOutIO() extends MycpuBundle {
   val predictTarget = Output(Vec(predictNum, UInt(vaddrWidth.W)))
   val takenMask     = Output(UInt(predictNum.W))
-  val instType      = Output(BpuType())
+  val brType        = Output(BranchType())
 }
 class PreIfOutIO extends MycpuBundle {
   val npc   = Output(UInt(vaddrWidth.W))
-  val flush = Bool()
+  val flush = Output(Bool())
 }
 class IfStage1OutIO extends MycpuBundle {
   val pcVal          = Output(UInt(vaddrWidth.W))
   val bpuOut         = new BpuOutIO
   val alignMask      = Output(UInt(fetchNum.W))
   val tagOfInstGroup = Output(UInt(paddrTagWidth.W))
-  val excpt          = Output(new ExceptionInfoBundle)
+  val exception      = new ExceptionInfoBundle
 }
 
 //TODO:may declare a bundle for basic/predictres/exception (name what?)
@@ -147,7 +143,7 @@ class DecodeStageOutIO extends MycpuBundle {
     decoded is needed until exeStage：uOps
     use psrc in RoStage,use pdest in wbStage
     Exception：needed until wbStage: detect in  exeStage,write in rob in wbStage
-      FIXME: no exception in mdu
+      no exception in mdu
       alu-算出溢出例外
       lsu-读数据地址错
 
@@ -197,60 +193,6 @@ class StoreQueueOutIO extends MycpuBundle {
 
 //------------------------------------------------------------------------------------------------------
 /* 将各流水级的OUT接口实例化在流水级接口里，此时带decoupled和flipped */
-
-//两个输入端口TODO:无需valid-rdy？
-// not need valid because always valid
-// not need ready becasue input will not change when ready is 0
-// but need flash when redirect happen
-// or fromBackend connect to stage 1
-// and out is a wire signal for bpu
-// stage 1 need use reg to save it
-// redirect should be merge to one
-// bpu modify signal should be to bpu not to preIO
-//out:npc
-class PreIfIO extends MycpuBundle {
-
-  val in = new Bundle {
-    //val fromBackend = Flipped(new RedirectBundle)
-    val fromBpu    = Flipped(new BpuOutIO)
-    val allignMask = Input(UInt(fetchNum.W))
-  }
-  val out = new PreIfOutIO
-}
-
-/* instantiate iTLB in "Frontend"
-TODO:a port for tlbRead
-use pc to get paddr of inst in this cycle from TLB */
-//take the predictResult/pcVal/alignmask with insts
-//take the tag of paddr to IF2 since we will connect it to cache in IF2
-// should not connect by pipeline
-//
-class IfStage1IO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new PreIfOutIO))
-  val out = Decoupled(new IfStage1OutIO)
-}
-
-//use in_npc to read BTB/PHT/...
-//get the predict Result in next cycle
-// need add modify bpu signal
-// bpu output is always delay one cycle, not need Decouple
-class BpuIO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new PreIfOutIO))
-  val out = Decoupled(new BpuOutIO)
-}
-
-//TODO:cache
-//instantiate cache in frotend,connect the signal between "main pipeline" and "cache pipeline"
-//do not take the META/DATA in "main pipeline"
-//take then in "cache pipeline"
-
-//pre-decode in this stage?TODO:
-//connect paddrTag to cache in "Frontend",cache will resp a "hit or miss" signal
-//in this stage,we gen "validNum",and use it to move headPtr of instBuffer at next cycle
-class IfStage2IO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new IfStage1OutIO))
-  val out = Decoupled(new IfStage2OutIO)
-}
 
 //instantiate "inst Buffer" in this stage!(unless the "Ibf" is decoupled from "ID" )
 //write fetchNum insts in instBuffer at one cycle

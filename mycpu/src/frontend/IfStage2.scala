@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util.Decoupled
 
 /**
-  * out.predictResult := stage1.out.bpuOut
+  * out.predictResult := stage1.out.bpuOut(bpuOut.takenMask become a "taken" bit)
   *
   * out.basicInstInfo := Instructs from I-Cache
   *
@@ -16,7 +16,9 @@ import chisel3.util.Decoupled
   * pass abort signal to cacheStage2 in this stage
   * if tlb is miss or pc is not aligned
   *
-  * pay attention: cahce must keep data until instBuffer has space
+  * pay attention: cache must keep data until instBuffer has space
+  *
+  * when miss,use DramReadIO to connect Dram
   */
 class IfStage2 extends MycpuModule {
   val io = IO(new Bundle {

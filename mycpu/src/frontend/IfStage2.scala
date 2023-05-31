@@ -11,12 +11,14 @@ import chisel3.util.Decoupled
   *
   * out.validNum := func(alignMask, bpuOut.takenMask)
   *
-  * out.exception :=
+  * out.exception := in.exception
   *
   * pass abort signal to cacheStage2 in this stage
   * if tlb is miss or pc is not aligned
   *
-  * pay attention: cache must keep data until instBuffer has space
+  * pay attention
+  * 1. cache must keep data until instBuffer has space
+  * 2. ready can not be set from in.iCache.cacheInst.valid to cache redirect
   *
   * when miss,use DramReadIO to connect Dram
   */

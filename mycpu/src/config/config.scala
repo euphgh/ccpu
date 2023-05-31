@@ -50,9 +50,9 @@ trait MycpuParam {
 
   val aluExternBypassNum = 1
 
-  def Word = UInt(vaddrWidth.W)
-  def Byte = UInt(8.W)
-  def Half = UInt(16.W)
+  def UWord = UInt(vaddrWidth.W)
+  def UByte = UInt(8.W)
+  def UHalf = UInt(16.W)
 }
 
 abstract class MycpuBundle extends Bundle with MycpuParam

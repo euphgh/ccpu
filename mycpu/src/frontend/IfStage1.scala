@@ -11,7 +11,7 @@ class BtbOutIO extends MycpuBundle {
 }
 
 class BpuUpdateIO extends MycpuBundle {
-  val pc       = Output(Word)
+  val pc       = Output(UWord)
   val btb      = Valid(new BtbOutIO)
   val pht      = Valid(UInt(2.W))
   val moreData = Output(UInt(1.W)) //TODO:not make sure

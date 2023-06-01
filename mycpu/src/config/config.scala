@@ -24,14 +24,15 @@ trait MycpuParam {
   val instrWidth      = 32
   val dataWidth       = 32
 
-  val predictNum = 4
-  val fetchNum   = 4
-  val decodeNum  = 2
-  val renameNum  = 2
-  val wBNum      = 3
-  val issueNum   = 2 //should be 4
-  val srcDataNum = 2
-  val retireNum  = 2 //should be 4
+  val predictNum  = 4
+  val fetchNum    = 4
+  val decodeNum   = 2
+  val renameNum   = 2
+  val dispatchNum = 2
+  val wBNum       = 3
+  val issueNum    = 2 //should be 4
+  val srcDataNum  = 2
+  val retireNum   = 2 //should be 4
 
   val aRegNum       = 32
   val aRegAddrWidth = log2Up(aRegNum)
@@ -48,7 +49,7 @@ trait MycpuParam {
   val forMdu = 1
   val forLsu = 2
 
-  val aluExternBypassNum = 1
+  val aluBypassNum = 2
 
   def Word = UInt(vaddrWidth.W)
   def Byte = UInt(8.W)

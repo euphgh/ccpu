@@ -85,9 +85,6 @@ class WPrfBundle extends MycpuBundle {
   val result   = Output(UInt(dataWidth.W))
   val destAddr = Output(UInt(pRegAddrWidth.W))
 }
-class RobToFuBundle extends MycpuBundle {
-  val robIndex = Output(UInt(robIndexWidth.W))
-}
 
 class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
@@ -97,7 +94,8 @@ class WbRobBundle extends MycpuBundle {
 }
 
 class RetireBundle extends MycpuBundle {
-  val exception        = new ExceptionRedirectBundle
+  val exception        = new ExceptionInfoBundle
+  val nextTarget       = Output(UInt(vaddrWidth.W))
   val flushBackend     = Output(Bool())
   val prevDestPregAddr = Output(UInt(pRegAddrWidth.W)) //to freeList
 }
@@ -138,18 +136,6 @@ class DecodeStageOutIO extends MycpuBundle {
   val exception     = new ExceptionInfoBundle
 }
 
-/*
-  rsOut:not OK
-    decoded is needed until exeStage：uOps
-    use psrc in RoStage,use pdest in wbStage
-    Exception：needed until wbStage: detect in  exeStage,write in rob in wbStage
-      no exception in mdu
-      alu-算出溢出例外
-      lsu-读数据地址错
-
-    predictResult：only aluRs need in exeStage
-    basicTODO:no need to take it into FU
- */
 class RsOutIO(kind: Int) extends MycpuBundle {
   val predictResult = if (kind == fuType.Alu.id) Some(new PredictResultBundle) else None
   val exception     = new ExceptionInfoBundle
@@ -157,6 +143,8 @@ class RsOutIO(kind: Int) extends MycpuBundle {
 
   val srcPregs     = Vec(srcDataNum, new SrcPregsBundle)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
+
+  val robIndex = Output(UInt(robIndexWidth.W))
 }
 
 class FunctionUnitOutIO extends MycpuBundle {
@@ -208,7 +196,6 @@ class DecodeStageIO extends MycpuBundle {
 //pop from freelist:dest
 //read from s-rat :2 srcs,1 prevDest
 //pay attention to WAW/RAW in a instGroup!
-//TODO:use addSink to gen wenPRF,instead of declare a port here!
 //listen to wenPRF...
 
 /*
@@ -237,148 +224,50 @@ class RenameStageIO extends MycpuBundle {
   )
 }
 
-//next cycle：write s-rat/RS/ROB
-//instantiate 3 RS 1 ROB in "backend"
+/**
+  *    <dispatch decoupled IO>
+  *
+  * renameStage out.valid
+  *   its in.valid &
+  *   !block condition:put the logic here instead of in "rs.in.valid" and "rob.in.valid"
+  *        mispredict happen->mispredict retire |
+  *        blocked insts:read cp0 -> wait until rob empty   TODO:other
+  *
+  * rs in.valid:
+  *   renameStage out valid
+  *   correspondent rob slot empty
+  *     each rs allow 1(FIXME:aluRs allow 2?)inst to dispatch in
+  *   !in(0).valid -> !in(1).valid  ...
+  * rs in.ready:
+  *   has empty slot
+  *
+  * rob in.valid:
+  *   renameStage out valid
+  *   correspondent rs slot empty
+  *   !in(0).valid -> !in(1).valid  ...
+  * rob.in.ready:
+  *   has empty slot
+  */
 
-/*
-select from (Rdy & HasPriority)：the selected insts will goto "ReadOpStage"
-Rdy?
- 1.already rdy in renameStage
- 2.listen to wenPRF...next cycle the rdy bit will ↑
- 3.wake-up：the selected insts broadCast its destPregAddr    TODO:just compare in the module
-   inte：
-     load -> otherRS (MemStage1)<2 bubble>
-     alu -> otherRS (ReadOp)<1 bubble>
-   intra：
-     aluRS -> aluRS (when "selected")<no bubble,need bypass>
-HasPriority："priorityMask" is actually a record of age
- LSU/MDU：not any older insts(in-order)
- ALU：not any rdy&older insts(ooo)
- */
+/**
+  *               <FU in and out IO>
+  *  we have 4 function Units:
+  *    each RS connect its function Unit (ALURS to 2)
+  *  FU In：just RoStage IO
+  *    we read prf in "Backend"
+  *    Bypass:no need to decouple,connect in "backend" (wprf->dataFromBypass)
+  *      intra_FU：connect wire in FU module from exeStage.out to ReadOpstage
+  *      inter_FU：connect wire between FU modules
+  *  FU Out:exeStageIo mem2StageIO
+  *    the wb width is 3,now we dicide to block mdu_out if other 3 all produce
+  *  LSU:
+  *    connect wires to cache in FU module
+  */
 
-/*
-rsEntry
-  srcPregs
-  destPregAddr
-  predictResult
-  exception
-  decoded
- */
-class RsIO(rsKind: Int) extends MycpuBundle {
-  val in = new Bundle {
-    val fromRenameStage = Flipped(Decoupled(new Bundle {
-      val srcPregs     = Vec(srcDataNum, new SrcPregsBundle)
-      val destPregAddr = Output(UInt(pRegAddrWidth.W))
-
-      val predictResult = if (rsKind == forAlu) Some(new PredictResultBundle) else None
-      val exception     = new ExceptionInfoBundle
-      val decoded       = new DecodeInstInfoBundle
-    }))
-    val wPrf = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
-
-  }
-  val out =
-    if (rsKind == forAlu) Vec(aluFuNum, Decoupled(new RsOutIO(kind = rsKind)))
-    else Decoupled(new RsOutIO(kind = rsKind))
-}
-
-/*
-robEntry:
-  valid
-
-  pc?(renameIn)
-  instr?(renameIn)
-  prevDestPregAddr(renameIn)
-
-  memReqVaddr(wbIn)---fu produce
-  exception(wbIn)---fu produce
-  isMispredict-Boll(wbIn)---fu produce
- */
-//RobToFuBundle is just rob index
-class RobIO extends MycpuBundle {
-  val in = new Bundle {
-    val fromRenameStage = Flipped(Decoupled(new Bundle {
-      val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
-      val basic            = new BasicInstInfoBundle
-    }))
-    val wbRob = Vec(wBNum, Flipped(Decoupled(new WbRobBundle)))
-  }
-  val out = new Bundle {
-    val toFunctionUnit = Vec(issueNum, Decoupled(new RobToFuBundle))
-    val toRetire       = Vec(retireNum, Decoupled(new RetireBundle))
-    val storeCommit    = Output(Bool())
-  }
-}
-
-//rs.out ---- readPorts.addr  -----prf
-//prf ------- readPorts.datas -----FU
-class PrfIO extends MycpuBundle {
-  val readPorts = Vec(
-    prfReadPortNum,
-    new Bundle {
-      val addr  = Input(UInt(pRegAddrWidth.W))
-      val datas = Vec(srcDataNum, Output(UInt(dataWidth.W)))
-    }
-  )
-  val writePorts = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
-}
-
-/*
-  IN AND OUT OF FUNCTION UNITS
-  we have 4 function Units:
-    each RS connect its function Unit (ALURS to 2 )
-    ROB TODO:discuss should change to 4 ou ports!!!
-    we read prf in "Backend",and connect it to FU(readOpstage)
-  ALU-MDU-LSU has different PipeLine:
-    instantiate stage in funcUnit PipeLine use ↓ these stageIO
-  the wb width is 3,now we dicide to block mdu_out if other 3 all produce
-  Bypass:
-    intra_FU：connect wire in FU module from exeStage.out to ReadOpstage
-    inter_FU：connect wire between FU modules
-  LSU:
-    connect wires to cache in FU module
- */
-
-class FunctionUnitIO(fuKind: Int) extends MycpuBundle {
-  val in = new Bundle {
-    val fromRs       = Flipped(Decoupled(new RsOutIO(kind = fuKind)))
-    val fromRob      = Flipped(Decoupled(new RobToFuBundle))
-    val datasFromPrf = Flipped(Decoupled(Vec(srcDataNum, Output(UInt(dataWidth.W)))))
-    val datasFromBypass =
-      if (fuKind == forAlu) Some(Vec(aluExternBypassNum, Flipped(Decoupled(new WPrfBundle)))) else None
-  }
-  val out = Decoupled(new FunctionUnitOutIO)
-}
-
-//TODO:  use addsource for load index?
-//select src in this stage
-//since we only care about the rob num in the bypass,we do not need to name bypass
-class ReadOpStageIO(fuKind: Int) extends MycpuBundle {
-
-  val in = new Bundle {
-    val fromRs       = Flipped(Decoupled(new RsOutIO(kind = fuKind)))
-    val fromRob      = Flipped(Decoupled(new RobToFuBundle))
-    val datasFromPrf = Flipped(Decoupled(Vec(srcDataNum, Output(UInt(dataWidth.W)))))
-    val datasFromBypass =
-      if (fuKind == forAlu) Some(Vec(aluExternBypassNum, Flipped(Decoupled(new WPrfBundle)))) else None
-  }
-  val out = Decoupled(new ReadOpStageOutIO(kind = fuKind))
-}
-
-//bypass use wprfBundle
-class exeStageIO(fuKind: Int) extends MycpuBundle {
+//just use to instantiate exeStageIO in alu/mdu
+class ExeStageIO(fuKind: Int) extends MycpuBundle {
   val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuKind)))
   val out = Decoupled(new FunctionUnitOutIO)
-}
-
-/* instantiate dTLB in "Backend"
-TODO:a port for tlbRead */
-// cal 32bit Vaddr here
-//rise storeQEnq signal if the inst is store
-//TODO: load inst wake up :use addsink?
-class MemStage1IO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuType.Lsu.id)))
-  val out = Decoupled(new MemStage1OutIO)
 }
 
 //TODO:cache

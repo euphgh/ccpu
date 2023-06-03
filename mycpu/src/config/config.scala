@@ -13,6 +13,10 @@ object BranchType extends ChiselEnum {
   val jcall, jret, jmp, jr, b, non = Value
 }
 
+object ChiselFuType extends ChiselEnum {
+  val MainALU, ALU, LSU, MDU = Value
+}
+
 // I-Cahce stage1 should decode MemType and addr to LoadSel
 object LoadSel extends ChiselEnum {
   val LW, LB, LBU, LH, LHU, LWL0, LWL1, LWL2, LWR1, LWR2, LWR3 = Value

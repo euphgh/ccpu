@@ -12,8 +12,8 @@ class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
 }
 
 class CacheStage1OutIO(roads: Int, isDcache: Boolean) extends MycpuBundle {
-  val data = Output(Vec(roads, if (isDcache) UWord else Vec(4, UWord)))
-  val meta = Output(Vec(roads, new CacheMeta(isDcache)))
+   val data =Vec(roads,Output(if (isDcache) UWord else Vec(4,UWord)))
+  val meta = Vec(roads, Output(new CacheMeta(isDcache)))
   // only Dcache have
   if (isDcache) {
     val size    = Output(UInt(3.W))
@@ -64,7 +64,7 @@ class CacheStage1(
   roads:     Int     = 4,
   lineBytes: Int     = 8,
   isDcache:  Boolean = false)
-    extends MycpuBundle {
+    extends MycpuModule {
   val in = Decoupled(new Bundle {
     val index  = UInt(cacheIndexWidth.W)
     val offset = UInt(cacheOffsetWidth.W)
@@ -115,7 +115,7 @@ class CacheStage2[T <: Data](
   isDcache:  Boolean = false,
   userGen:   T
 )(trans:     (UInt => T))
-    extends MycpuBundle {
+    extends MycpuModule {
   val in = Decoupled(new Bundle {
     val ptag        = UInt(tagWidth.W)
     val isUncache   = Bool()
@@ -128,7 +128,8 @@ class CacheStage2[T <: Data](
   })
   if (enableCacheInst) {
     val cacheInst = new Bundle {
-      val finish   = Bool()
+      val finish   = Output(Bool())
+      val redirect = Input(Bool())
       val redirect = Bool()
     }
   }

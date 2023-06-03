@@ -12,7 +12,7 @@ class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
 }
 
 class CacheStage1OutIO(roads: Int, isDcache: Boolean) extends MycpuBundle {
-   val data =Vec(roads,Output(if (isDcache) UWord else Vec(4,UWord)))
+  val data = Vec(roads, Output(if (isDcache) UWord else Vec(4, UWord)))
   val meta = Vec(roads, Output(new CacheMeta(isDcache)))
   // only Dcache have
   if (isDcache) {
@@ -130,7 +130,6 @@ class CacheStage2[T <: Data](
     val cacheInst = new Bundle {
       val finish   = Output(Bool())
       val redirect = Input(Bool())
-      val redirect = Bool()
     }
   }
 }

@@ -20,8 +20,8 @@ class MemStage1 extends MycpuModule {
     val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuType.Lsu.id)))
     val out = Decoupled(new MemStage1OutIO)
     val tlb = new Bundle {
-      val req  = Output(Word)
-      val back = Input(Word)
+      val req  = Output(UWord)
+      val back = Input(UWord)
     }
   })
 }

@@ -99,6 +99,8 @@ class RetireBundle extends MycpuBundle {
   val nextTarget       = Output(UInt(vaddrWidth.W))
   val flushBackend     = Output(Bool())
   val prevDestPregAddr = Output(UInt(pRegAddrWidth.W)) //to freeList
+  val destAregAddr     = Output(UInt(aRegAddrWidth.W)) //to a-rat
+  val destPregAddr     = Output(UInt(pRegAddrWidth.W)) //to a-rat
 }
 
 //------------------------------------------------------------------------------------------------------

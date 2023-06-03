@@ -20,6 +20,8 @@ class RobEntry extends MycpuBundle {
   val valid = Bool()
 
   val basic            = new BasicInstInfoBundle
+  val destAregAddr     = Output(UInt(aRegAddrWidth.W))
+  val destPregAddr     = Output(UInt(pRegAddrWidth.W))
   val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
 
   val exception    = new ExceptionInfoBundle
@@ -49,7 +51,8 @@ class RobEntry extends MycpuBundle {
   * the oldest insts should retire from rob
   *     1.normally
   *       just use <prevDestPregAddr> to push freelist
-  *       change the a-rat
+  *       change the a-rat:
+  *            use destPregAddr/destAregAddr
   *       TODO:give cp0 wen!!!
   *     2.special(exception|mispredict)
   *       exception
@@ -69,6 +72,8 @@ class ROB extends MycpuModule {
         dispatchNum,
         Flipped(Decoupled(new Bundle {
           val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
+          val destAregAddr     = Output(UInt(aRegAddrWidth.W))
+          val destPregAddr     = Output(UInt(pRegAddrWidth.W))
           val basic            = new BasicInstInfoBundle
         }))
       )

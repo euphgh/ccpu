@@ -62,6 +62,7 @@ class BasicInstInfoBundle extends MycpuBundle {
 //note:if not need a src data, just set aRegAddr as 0
 class DecodeInstInfoBundle extends MycpuBundle {
   val srcAregAddrs = Vec(srcDataNum, Output(UInt(aRegAddrWidth.W)))
+  val destAregAddr = Output(UInt(aRegAddrWidth.W))
 }
 
 //we care about "Rdy" of srcs
@@ -147,9 +148,23 @@ class RsOutIO(kind: Int) extends MycpuBundle {
   val robIndex = Output(UInt(robIndexWidth.W))
 }
 
+/**
+  * to rob
+  *  robIndex
+  *  exception
+  *  isMispredict
+  *  memReqVaddr
+  * to prf
+  *   dest
+  *   wen
+  *   data
+  * to srat
+  *   destAregAddr
+  */
 class FunctionUnitOutIO extends MycpuBundle {
-  val wbRob = new WbRobBundle
-  val wPrf  = new WPrfBundle
+  val wbRob        = new WbRobBundle
+  val wPrf         = new WPrfBundle
+  val destAregAddr = Output(UInt(aRegAddrWidth.W))
 }
 
 /*

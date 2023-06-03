@@ -71,6 +71,7 @@ class IfStage1 extends MycpuModule {
       val back = Input(UWord)
     }
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
+    val delaySlotOK = Output(Bool()) // only to PreIf
     if (enableCacheInst) {
       val IcacheInst = Flipped(Valid(new Bundle {
         val op    = CacheOp()

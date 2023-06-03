@@ -113,8 +113,9 @@ class BpuOutIO() extends MycpuBundle {
   val brType        = Output(BranchType())
 }
 class PreIfOutIO extends MycpuBundle {
-  val npc   = Output(UInt(vaddrWidth.W))
-  val flush = Output(Bool())
+  val npc         = Output(UInt(vaddrWidth.W))
+  val isDelaySlot = Output(Bool())
+  val flush       = Output(Bool())
 }
 class IfStage1OutIO extends MycpuBundle {
   val pcVal          = Output(UInt(vaddrWidth.W))
@@ -129,6 +130,7 @@ class IfStage1OutIO extends MycpuBundle {
 class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
+  val validMask     = Vec(fetchNum, Bool())
   val validNum      = Output(UInt(log2Up(fetchNum).W))
   val exception     = Output(FrontExcCode())
 }
@@ -137,6 +139,17 @@ class DecodeStageOutIO extends MycpuBundle {
   val basic         = new BasicInstInfoBundle
   val decoded       = new DecodeInstInfoBundle
   val exception     = new ExceptionInfoBundle
+}
+
+class InstARegsIdxIO extends MycpuBundle {
+  val (src0, src1, dest) = (ARegIdx, ARegIdx, ARegIdx)
+}
+class InstBufferOutIO extends MycpuBundle {
+  val predictResult = new PredictResultBundle
+  val basic         = new BasicInstInfoBundle
+  val whichFu       = Output(ChiselFuType())
+  val aRegsIdx      = Output(new InstARegsIdxIO)
+  val exception     = Output(FrontExcCode())
 }
 
 /*
@@ -194,52 +207,6 @@ class StoreQueueOutIO extends MycpuBundle {
 
 //------------------------------------------------------------------------------------------------------
 /* 将各流水级的OUT接口实例化在流水级接口里，此时带decoupled和flipped */
-
-//instantiate "inst Buffer" in this stage!(unless the "Ibf" is decoupled from "ID" )
-//write fetchNum insts in instBuffer at one cycle
-//move the headPtr according to the "validNum"
-//decode the dequeue insts(combination logic) at current cycle
-//TODO:or we can decode them in next cycle,then the "Ibf" is decoupled from "ID"
-class DecodeStageIO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new IfStage2OutIO))
-  val out = Vec(decodeNum, Decoupled(new DecodeStageOutIO))
-}
-
-//instantiate "sRAT" in this stage!
-//pop from freelist:dest
-//read from s-rat :2 srcs,1 prevDest
-//pay attention to WAW/RAW in a instGroup!
-//TODO:use addSink to gen wenPRF,instead of declare a port here!
-//listen to wenPRF...
-
-/*
-predictResult->RS
-decoded->RS
-exception->RS
-renamed
-  src,dest->RS
-  prevDest->ROB
-basic->ROB
- */
-class RenameStageIO extends MycpuBundle {
-  val in = new Bundle {
-    val fromDecodeStage = Vec(decodeNum, Flipped(Decoupled(new DecodeStageOutIO)))
-    val wPrf            = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
-  }
-  val out = Vec(
-    renameNum,
-    Decoupled(new Bundle {
-      val predictResult = new PredictResultBundle
-      val basic         = new BasicInstInfoBundle
-      val decoded       = new DecodeInstInfoBundle
-      val exception     = new ExceptionInfoBundle
-      val renamed       = new RenameInfoBundle
-    })
-  )
-}
-
-//next cycle：write s-rat/RS/ROB
-//instantiate 3 RS 1 ROB in "backend"
 
 /*
 select from (Rdy & HasPriority)：the selected insts will goto "ReadOpStage"

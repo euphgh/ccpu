@@ -118,8 +118,9 @@ class IfStage1OutIO extends MycpuBundle {
   val pcVal          = Output(UInt(vaddrWidth.W))
   val bpuOut         = new BpuOutIO
   val alignMask      = Output(UInt(fetchNum.W))
-  val tagOfInstGroup = Output(UInt(paddrTagWidth.W))
-  val exception      = new ExceptionInfoBundle
+  val tagOfInstGroup = Output(UInt(tagWidth.W))
+  val exception      = Output(FrontExcCode())
+  val iCache         = Output(new CacheStage1OutIO(IcachRoads, false))
 }
 
 //TODO:may declare a bundle for basic/predictres/exception (name what?)
@@ -127,7 +128,7 @@ class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
   val validNum      = Output(UInt(log2Up(fetchNum).W))
-  val exception     = new ExceptionInfoBundle
+  val exception     = Output(FrontExcCode())
 }
 class DecodeStageOutIO extends MycpuBundle {
   val predictResult = new PredictResultBundle
@@ -172,7 +173,7 @@ class MemStage1OutIO extends MycpuBundle {
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
 
   val decoded          = new DecodeInstInfoBundle
-  val tagOfMemReqPaddr = Output(UInt(paddrTagWidth.W))
+  val tagOfMemReqPaddr = Output(UInt(tagWidth.W))
 }
 
 class StoreQueueOutIO extends MycpuBundle {

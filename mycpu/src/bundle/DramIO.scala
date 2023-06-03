@@ -13,7 +13,7 @@ object BurstType extends ChiselEnum {
 
 class ARChannel(var idLen: Int = 4) extends MycpuBundle {
   val id    = UInt(idLen.W)
-  val addr  = Word
+  val addr  = UWord
   val len   = UInt(8.W) // burst number
   val size  = UInt(3.W) // bytes number - 1
   val burst = BurstType()
@@ -21,13 +21,13 @@ class ARChannel(var idLen: Int = 4) extends MycpuBundle {
 
 class RChannel(var idLen: Int = 4) extends MycpuBundle {
   val id   = UInt(idLen.W)
-  val data = Word
+  val data = UWord
   val last = Bool()
 }
 
 class AWChannel(var idLen: Int = 4) extends MycpuBundle {
   val id    = UInt(idLen.W)
-  val addr  = Word
+  val addr  = UWord
   val len   = UInt(8.W) // burst number
   val size  = UInt(3.W) // bytes number - 1
   val burst = BurstType()
@@ -36,7 +36,7 @@ class AWChannel(var idLen: Int = 4) extends MycpuBundle {
 
 class WChannel(var idLen: Int = 4) extends MycpuBundle {
   val id   = UInt(idLen.W)
-  val data = Word
+  val data = UWord
   val strb = UInt((vaddrWidth / 8).W)
   val last = Bool()
 }

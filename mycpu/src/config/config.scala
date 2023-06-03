@@ -87,6 +87,10 @@ trait MycpuParam {
   val robNum        = 32
   val robIndexWidth = log2Up(robNum)
 
+  def ARegIdx = UInt(aRegAddrWidth.W)
+  def PRegIdx = UInt(pRegAddrWidth.W)
+  val ROBIdx  = UInt(robIndexWidth.W)
+
   val prfReadPortNum = srcDataNum * issueNum
 
   val aluFuNum = 2

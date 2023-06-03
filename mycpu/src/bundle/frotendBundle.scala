@@ -114,8 +114,9 @@ class BpuOutIO() extends MycpuBundle {
   val brType        = Output(BranchType())
 }
 class PreIfOutIO extends MycpuBundle {
-  val npc   = Output(UInt(vaddrWidth.W))
-  val flush = Output(Bool())
+  val npc         = Output(UInt(vaddrWidth.W))
+  val isDelaySlot = Output(Bool())
+  val flush       = Output(Bool())
 }
 class IfStage1OutIO extends MycpuBundle {
   val pcVal          = Output(UInt(vaddrWidth.W))
@@ -130,6 +131,7 @@ class IfStage1OutIO extends MycpuBundle {
 class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
+  val validMask     = Vec(fetchNum, Bool())
   val validNum      = Output(UInt(log2Up(fetchNum).W))
   val exception     = Output(FrontExcCode())
 }
@@ -138,6 +140,17 @@ class DecodeStageOutIO extends MycpuBundle {
   val basic         = new BasicInstInfoBundle
   val decoded       = new DecodeInstInfoBundle
   val exception     = new ExceptionInfoBundle
+}
+
+class InstARegsIdxIO extends MycpuBundle {
+  val (src0, src1, dest) = (ARegIdx, ARegIdx, ARegIdx)
+}
+class InstBufferOutIO extends MycpuBundle {
+  val predictResult = new PredictResultBundle
+  val basic         = new BasicInstInfoBundle
+  val whichFu       = Output(ChiselFuType())
+  val aRegsIdx      = Output(new InstARegsIdxIO)
+  val exception     = Output(FrontExcCode())
 }
 
 class RsOutIO(kind: Int) extends MycpuBundle {
@@ -199,7 +212,6 @@ class StoreQueueOutIO extends MycpuBundle {
 
 //------------------------------------------------------------------------------------------------------
 /* 将各流水级的OUT接口实例化在流水级接口里，此时带decoupled和flipped */
-
 //instantiate "inst Buffer" in this stage!(unless the "Ibf" is decoupled from "ID" )
 //write fetchNum insts in instBuffer at one cycle
 //move the headPtr according to the "validNum"
@@ -214,6 +226,7 @@ class DecodeStageIO extends MycpuBundle {
 //pop from freelist:dest
 //read from s-rat :2 srcs,1 prevDest
 //pay attention to WAW/RAW in a instGroup!
+//TODO:use addSink to gen wenPRF,instead of declare a port here!
 //listen to wenPRF...
 
 /*
@@ -242,30 +255,24 @@ class RenameStageIO extends MycpuBundle {
   )
 }
 
-/**
-  *    <dispatch decoupled IO>
-  *
-  * renameStage out.valid
-  *   its in.valid &
-  *   !block condition:put the logic here instead of in "rs.in.valid" and "rob.in.valid"
-  *        mispredict happen->mispredict retire |
-  *        blocked insts:read cp0 -> wait until rob empty   TODO:other
-  *
-  * rs in.valid:
-  *   renameStage out valid
-  *   correspondent rob slot empty
-  *     each rs allow 1(FIXME:aluRs allow 2?)inst to dispatch in
-  *   !in(0).valid -> !in(1).valid  ...
-  * rs in.ready:
-  *   has empty slot
-  *
-  * rob in.valid:
-  *   renameStage out valid
-  *   correspondent rs slot empty
-  *   !in(0).valid -> !in(1).valid  ...
-  * rob.in.ready:
-  *   has empty slot
-  */
+//next cycle：write s-rat/RS/ROB
+//instantiate 3 RS 1 ROB in "backend"
+
+/*
+select from (Rdy & HasPriority)：the selected insts will goto "ReadOpStage"
+Rdy?
+ 1.already rdy in renameStage
+ 2.listen to wenPRF...next cycle the rdy bit will ↑
+ 3.wake-up：the selected insts broadCast its destPregAddr    TODO:just compare in the module
+   inte：
+     load -> otherRS (MemStage1)<2 bubble>
+     alu -> otherRS (ReadOp)<1 bubble>
+   intra：
+     aluRS -> aluRS (when "selected")<no bubble,need bypass>
+HasPriority："priorityMask" is actually a record of age
+ LSU/MDU：not any older insts(in-order)
+ ALU：not any rdy&older insts(ooo)
+ */
 
 /**
   *               <FU in and out IO>

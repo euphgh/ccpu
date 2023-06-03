@@ -16,23 +16,24 @@ class FrontRedirctIO extends MycpuBundle {
   * else out.bits = bpu predict target
   * not need Decouple. becasue valid = 1
   * ready not change select logic
+  *
+  * not need valid because always valid
+  * not need ready becasue input will not change when ready is 0
+  * but need flush when redirect happen
+  *
+  * need a automat in it to save bpu result when only valid
+  * branch or jump but not valid delay branch
+  * change automat status when first branch valid is "10"
+  * and when delaySlotOK is set
   */
 
-// not need valid because always valid
-// not need ready becasue input will not change when ready is 0
-// but need flash when redirect happen
-// or fromBackend connect to stage 1
-// and out is a wire signal for bpu
-// stage 1 need use reg to save it
-// redirect should be merge to one
-// bpu modify signal should be to bpu not to preIO
-//out:npc
 class PreIf extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val redirect  = Flipped(new FrontRedirctIO)
-      val fromBpu   = Flipped(new BpuOutIO)
-      val alignMask = Input(UInt(fetchNum.W))
+      val redirect    = Flipped(new FrontRedirctIO)
+      val fromBpu     = Flipped(new BpuOutIO)
+      val alignMask   = Input(UInt(fetchNum.W))
+      val delaySlotOK = Bool()
     }
     val out = new PreIfOutIO
   })

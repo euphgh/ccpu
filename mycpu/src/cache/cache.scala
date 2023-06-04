@@ -68,12 +68,14 @@ class CacheStage1(
   val in = Decoupled(new Bundle {
     val index  = UInt(cacheIndexWidth.W)
     val offset = UInt(cacheOffsetWidth.W)
+
     if (enableCacheInst) {
       val cacheInst = Valid(new Bundle {
         val op    = CacheOp()
         val taglo = UWord
       })
     }
+
     if (isDcache) {
       val size    = Output(UInt(3.W))
       val wWord   = Output(UWord)

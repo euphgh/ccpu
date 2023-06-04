@@ -5,15 +5,18 @@ import config._
 import chisel3._
 import chisel3.util._
 class Lsu extends MycpuModule {
+  //TODO:dtlb port
 
+  //in "Backend" ,directly connect to Lsu.roStage
   val roStage = new RoStage(fuKind = fuType.Alu.id)
   //for now,no inside bypass
 
-  //TODO:pipeline connect roStage.io<>memStage1
-  //TODO:where to instantiate dtlb
-  //TODO:storeQueue
-  //TODO:dCache
+  //instantiate storeQ
+  //memStage1<pp>Mux(roStageOut storeQout)
+  //roStage.io.out.ready:=
   val memStage1 = new MemStage1
-  //TODO:just a memStage1IO? write mem1 logic here?(signal too many-troubleSome)
-  //TODO:just a memStage2IO? like mdu and alu?
+  //memStage1<pp>memStage2
+  val memStage2 = new MemStage2
+  //in "Bakcend" ,directly use memStage2.io
+
 }

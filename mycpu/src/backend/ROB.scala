@@ -23,6 +23,7 @@ class RobEntry extends MycpuBundle {
   val destAregAddr     = Output(UInt(aRegAddrWidth.W))
   val destPregAddr     = Output(UInt(pRegAddrWidth.W))
   val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
+  //val fromDispatcher = new DispatchInRobBundle
 
   val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
@@ -68,14 +69,9 @@ class RobEntry extends MycpuBundle {
 class ROB extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromRenameStage = Vec(
+      val fromDispatcher = Vec(
         dispatchNum,
-        Flipped(Decoupled(new Bundle {
-          val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
-          val destAregAddr     = Output(UInt(aRegAddrWidth.W))
-          val destPregAddr     = Output(UInt(pRegAddrWidth.W))
-          val basic            = new BasicInstInfoBundle
-        }))
+        Flipped(Decoupled(new DispatchToRobBundle))
       )
       val wbRob = Vec(wBNum, Flipped(Decoupled(new WbRobBundle)))
     }

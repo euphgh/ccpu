@@ -7,10 +7,8 @@ import chisel3.util._
 //FIXME:for alu rs ,use 2 in ports?
 //or just instantiate 2 alu rs?
 
-class RsEntry(rsEntryKind: Int) extends MycpuBundle {
-  val valid = Bool()
-
-  val recodedInfo = new RsOutIO(kind = rsEntryKind)
+class RsEntry(rsEntryKind: Int) extends RsOutIO(kind = rsEntryKind) {
+  val valid = Output(Bool())
 }
 
 /**
@@ -47,18 +45,18 @@ class RsEntry(rsEntryKind: Int) extends MycpuBundle {
   *
   * out
   *     RS keep the info that the insts will use in the FU
-  *     decoded：srcAreg used in RO,uOps used in EXE
+  *     decoded：srcAreg used in RO,uOps used in EXE,destAreg for s-rat update
   *     exception：record exception happended in FU,need write to ROB
   *     predictRes：br need it to detect mispredict in EXE
   *
-  *     use pSrc in RO,use pDest in WB
+  *     use sEntry(psrc+valid) in RO,use pDest in WB
   *     use robIndex in WB
   */
 class RS(rsKind: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromRenameStage = Flipped(Decoupled(new RsOutIO(kind = rsKind)))
-      val wPrf            = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
+      val fromDispatcher = Flipped(Decoupled(new RsOutIO(kind = rsKind)))
+      val wPrf           = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
     }
     val out =
       if (rsKind == forAlu) Vec(aluFuNum, Decoupled(new RsOutIO(kind = rsKind)))

@@ -140,18 +140,40 @@ class DecodeStageOutIO extends MycpuBundle {
   val exception     = new ExceptionInfoBundle
 }
 
-class RsOutIO(kind: Int) extends MycpuBundle {
-  val predictResult = if (kind == fuType.Alu.id) Some(new PredictResultBundle) else None
-  val exception     = new ExceptionInfoBundle
-  val decoded       = new DecodeInstInfoBundle
+class DispatchToRobBundle extends MycpuBundle {
+  val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))
+  val destAregAddr     = Output(UInt(aRegAddrWidth.W))
+  val destPregAddr     = Output(UInt(pRegAddrWidth.W))
+  val basic            = new BasicInstInfoBundle
+}
 
-  val srcPregs     = Vec(srcDataNum, new SrcPregsBundle)
+/**
+  * rsBasicEntry < rsOutIO(also use as InIO,may with pre) < rsEntry(with Valid)
+  * dispatcher.io.toRs = rsBasicEntry + pre
+  *
+  * in "Backend" , match 3 dispatcher.io.toRs to different Rs.in
+  *   according to inst type
+  *   take care of predictRes
+  */
+class RsBasicEntry extends MycpuBundle {
+  val exception = new ExceptionInfoBundle
+  val decoded   = new DecodeInstInfoBundle
+
+  val srcPregs     = Vec(srcDataNum, new SrcPregsBundle) //TODO:change to sratEntry
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
 
   val robIndex = Output(UInt(robIndexWidth.W))
 }
+class RsOutIO(kind: Int) extends RsBasicEntry {
+  //val predictResult = if (kind == fuType.Alu.id) Some(new PredictResultBundle) else None
+  if (kind == fuType.Alu.id) {
+    val predictResult = new PredictResultBundle
+  }
+}
 
 /**
+  * use as alu/mdu exeStage.OutIO and mdu memStage2.OutIO!!!!
+  *
   * to rob
   *  robIndex
   *  exception
@@ -160,9 +182,11 @@ class RsOutIO(kind: Int) extends MycpuBundle {
   * to prf
   *   dest
   *   wen
-  *   data
+  *   data(alu/mdu:cal load:load store:DontCare)
   * to srat
   *   destAregAddr
+  *   destPregAddr
+  *   TODO:combine destAregAddr and wPrf.dest as wbSrat Bundle in "Backend"
   */
 class FunctionUnitOutIO extends MycpuBundle {
   val wbRob        = new WbRobBundle
@@ -170,27 +194,43 @@ class FunctionUnitOutIO extends MycpuBundle {
   val destAregAddr = Output(UInt(aRegAddrWidth.W))
 }
 
-/*
-TODO:
-  for mem readOpstage,we can use roStage.io.out.srcDatas to cal a 12 bit index in Backend */
+/**
+  * TODO:put lsu inst.offset in decoded
+  * srcDatas means data read from pReg
+  *
+  * wbRob not change
+  * destPregAddr is for Wprf
+  *
+  * the index and offset is for lsu
+  */
 class ReadOpStageOutIO(kind: Int) extends MycpuBundle {
   val wbRob        = new WbRobBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
+  val decoded      = new DecodeInstInfoBundle
 
-  val decoded  = new DecodeInstInfoBundle
-  val srcDatas = Vec(2, Output(UInt(dataWidth.W)))
+  val srcDatas    = Vec(2, Output(UInt(dataWidth.W)))
+  val cacheIndex  = if (kind == fuType.Lsu.id) Some(Output(UInt(cacheIndexWidth.W))) else None
+  val cacheOffset = if (kind == fuType.Lsu.id) Some(Output(UInt(cacheOffsetWidth.W))) else None
 }
 
-//decoded is for mem2:deal with loadData
-//memReqVaddr is for exception(merged into wbRob)
-//tagOfMemReqPaddr is for mem2:hitOrMiss detect
-//store inst get into storeQ after mem1,so no need to take storeData in the FU pipeline
-class MemStage1OutIO extends MycpuBundle {
-  val wbRob        = new WbRobBundle
-  val destPregAddr = Output(UInt(pRegAddrWidth.W))
+/**
+  * decoded is for mem2:deal with loadData
+  *
+  * wbRob change:exception and memReqVaddr
+  * tagOfMemReqPaddr is for mem2:hitOrMiss detect
+  *
+  * take cache data/meta with us
+  * TODO:storeData not need to take?cause after mem1,store inst get into storeQ
+  */
 
-  val decoded          = new DecodeInstInfoBundle
+class MemStage1OutIO extends MycpuBundle {
+  val destPregAddr = Output(UInt(pRegAddrWidth.W))
+  val decoded      = new DecodeInstInfoBundle
+
+  val wbRob            = new WbRobBundle
   val tagOfMemReqPaddr = Output(UInt(tagWidth.W))
+
+  val dCache = Output(new CacheStage1OutIO(DcachRoads, true))
 }
 
 class StoreQueueOutIO extends MycpuBundle {
@@ -285,16 +325,5 @@ class RenameStageIO extends MycpuBundle {
 //just use to instantiate exeStageIO in alu/mdu
 class ExeStageIO(fuKind: Int) extends MycpuBundle {
   val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuKind)))
-  val out = Decoupled(new FunctionUnitOutIO)
-}
-
-//TODO:cache
-//instantiate dcache in backend,connect the signal between "main pipeline" and "cache pipeline"
-//do not take the META/DATA in "main pipeline"
-//take them in "cache pipeline"
-
-//connect paddrTag to cache in "Backend",cache will resp a "hit or miss" signal
-class MemStage2IO extends MycpuBundle {
-  val in  = Flipped(Decoupled(new MemStage1OutIO))
   val out = Decoupled(new FunctionUnitOutIO)
 }

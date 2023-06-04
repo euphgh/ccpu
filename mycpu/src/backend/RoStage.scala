@@ -8,13 +8,12 @@ import chisel3.util._
 /**
   * instantiate stage in alu/mdu/lsu
   *
-  * TODO:use addsource for load index to cache?
-  *
   * select src in this stage
-  *
   * since we only care about the rob num in the bypass,we do not need to name bypass:
   *        (0) is for extern
   *        (1) is for inside
+  *
+  * cal 12 bit index+offset for lsu(dcache1.io.in)
   */
 
 class RoStage(fuKind: Int) extends MycpuModule {

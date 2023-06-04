@@ -5,15 +5,6 @@ import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
 
-/**
-  * not solve WAW/RAW conflict
-  * only read/write data by index
-  */
-class SRATEntry extends MycpuBundle {
-  val pIdx  = PRegIdx
-  val inPrf = Bool
-}
-
 class SRATWriteBackIO extends MycpuBundle {
   val wbADest = ARegIdx
   val wbPDest = PRegIdx
@@ -23,9 +14,11 @@ class SRATWriteBackIO extends MycpuBundle {
   * wb is used to update inPrf bit
   * need check SRAT(wbADest).pIdx === wbPDest
   * if same, write inPrf := true in next cycle, else not change.
-  * if same, and at this cycle src read this AReg,
+  * if same, and at this cycle src(of a renaming inst) = this AReg,
   * SRAT should return inPrf === true
-  * if same, and at this cycle dest write this AReg,
+  *
+  * //Q:not need condition "if same?"
+  * if same, and at this cycle dest(of a renaming inst) = this AReg,
   * next cycle inPrf := false
   * in total,  src < wb < dest
   */
@@ -34,51 +27,35 @@ class SRAT extends MycpuModule {
     val src = List(
       renameNum,
       new Bundle {
-        val in  = Output(Vec(srcDataNum, ARegIdx))
+        val in  = Input(Vec(srcDataNum, ARegIdx))
         val out = Output(Vec(srcDataNum, new SRATEntry))
       }
     )
     val dest = Vec(
       renameNum,
       Valid(new Bundle {
-        val currADest = Input(ARegIdx)
-        val currPDest = Input(PRegIdx)
-        val out       = Output(new SRATEntry)
+        val currADest = Input(ARegIdx) //to get prev
+        val currPDest = Input(PRegIdx) //to write in
+        val out       = Output(new SRATEntry) //prev
+        //Q:prevDest need inPrf info?
       })
     )
     val wb = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
   })
-  def read(channel: Int, aRegsIdx: Seq[InstARegsIdxIO]) = {
+  def read(channel: Int, aRegsIdx: Seq[InstARegsIdxBundle]) = {
     require(aRegsIdx.size == renameNum)
   }
 }
 
-class DecodeOutIO extends MycpuBundle {}
+//combination logic decode
 class Decoder extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val inst      = UWord
       val exception = FrontExcCode()
     }
-    val out = new DecodeOutIO
+    val out = new DecodeInstInfoBundle
   })
-}
-
-class RSDispatchInput extends MycpuBundle {
-  val pc            = UWord
-  val srcs          = Vec(srcDataNum, new SRATEntry)
-  val pDest         = PRegIdx // use when write prf
-  val aDest         = ARegIdx // use when write prf and update SRAT
-  val decode        = new DecodeOutIO
-  val renamed       = new RenameInfoBundle
-  val exception     = new ExceptionInfoBundle
-  val predictResult = new PredictResultBundle
-}
-class RobDispatchInput extends MycpuBundle {
-  val pc          = UWord // difftest check execution flow
-  val prevPRegIdx = PRegIdx // free when retire
-  val currPRegIdx = PRegIdx // updata A-RAT when retire
-  val currARegIdx = ARegIdx // updata A-RAT when retire
 }
 
 /**
@@ -104,15 +81,15 @@ class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val fromInstBuffer  = Vec(decodeNum, Flipped(Decoupled(new InstBufferOutIO)))
-      val fromRSwriteback = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
+      val fromFuWriteBack = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
+      val robIndex        = Vec(renameNum, Flipped(Decoupled(Output(ROBIdx))))
     }
-    val out = Vec(renameNum, Decoupled(new RSDispatchInput))
-    val rob = Vec(
-      renameNum,
-      Decoupled(new Bundle {
-        val out = new RobDispatchInput
-        val in  = ROBIdx
-      })
-    )
+    val out = new Bundle {
+      //rs.in is just rs.out
+      val toAluRs = Vec(aluRsInPorts, Decoupled(new RsOutIO(kind = FuType.Alu.id)))
+      val toMduRs = Decoupled(new RsOutIO(kind = FuType.Mdu.id))
+      val toLsuRs = Decoupled(new RsOutIO(kind = FuType.Lsu.id))
+      val toRob   = Vec(dispatchNum, Decoupled(new DispatchToRobBundle))
+    }
   })
 }

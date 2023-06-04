@@ -9,6 +9,8 @@ import chisel3.util._
   *
   * connect by pipeline
   * in = Mux (RoStage.out and StoreQ.out)
+  *   use port<Flipped RoStageOut>as MemStage1.in
+  *   if the in is storeQ.out,should fill some DontCare signal
   *
   * use in.decoded.offset and in.srcData1 to cal 32bit vaddr
   * tlb.req:=vaddr
@@ -28,36 +30,14 @@ import chisel3.util._
 
 class MemStage1 extends MycpuModule {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new Bundle {
-      val wbRob        = new WbRobBundle
-      val destPregAddr = Output(UInt(pRegAddrWidth.W))
-      val decoded      = new DecodeInstInfoBundle
-
-      val srcDatas = Vec(2, Output(UInt(dataWidth.W)))
-
-      val cacheIndex  = Output(UInt(cacheIndexWidth.W))
-      val cacheOffset = Output(UInt(cacheOffsetWidth.W))
-
-      //this 4 may merge into decode?
-      val size    = Output(UInt(3.W))
-      val wWord   = Output(UWord)
-      val wStrb   = Output(UInt(4.W))
-      val memType = Output(MemType())
-    }))
+    val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = FuType.Lsu.id)))
     val out = Decoupled(new MemStage1OutIO)
     val tlb = new Bundle {
       val req  = Output(UWord)
       val back = Input(UWord)
     }
-
-    if (enableCacheInst) {
-      val IcacheInst = Flipped(Valid(new Bundle {
-        val op    = CacheOp()
-        val taglo = UWord
-        val index = UInt(cacheIndexWidth.W)
-        // only need index and tag but offset in cache inst
-      }))
-    }
-
+    val storeQueueEnq = Output(Bool())
+    val dCacheInst =
+      if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None
   })
 }

@@ -9,10 +9,10 @@ class Lsu extends MycpuModule {
   //TODO:dtlb port
 
   //in "Backend" ,directly connect to Lsu.roStage
-  val roStage = new RoStage(fuKind = FuType.Lsu.id)
+  val roStage = Module(new RoStage(fuKind = FuType.Lsu.id))
   //for now,no inside bypass
 
-  val storeQueue   = new StoreQueue
+  val storeQueue   = Module(new StoreQueue)
   val storeQueueIn = storeQueue.io.in.bits
   val storeInstReq = memStage1.io.out.bits.dCache.dCacheReq.get
 
@@ -26,9 +26,9 @@ class Lsu extends MycpuModule {
   storeQueueIn.tagOfMemReqPaddr := memStage1.io.out.bits.tagOfMemReqPaddr
 
   //memStage1<pp>Mux(roStageOut storeQout)
-  val memStage1 = new MemStage1
+  val memStage1 = Module(new MemStage1)
   //memStage1<pp>memStage2
-  val memStage2 = new MemStage2
+  val memStage2 = Module(new MemStage2)
   //in "Bakcend" ,directly use memStage2.io
 
 }

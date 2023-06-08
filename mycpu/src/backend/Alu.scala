@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util._
 class Alu extends MycpuModule {
 
-  val roStage = new RoStage(fuKind = FuType.Alu.id)
+  val roStage = Module(new RoStage(fuKind = FuType.Alu.id))
   //inside bypass
   roStage.io.datasFromBypass.get(1) := exeStageIO.out.bits.wPrf
 

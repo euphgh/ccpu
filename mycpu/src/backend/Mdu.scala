@@ -7,7 +7,7 @@ import chisel3.util._
 
 class Mdu extends MycpuModule {
 
-  val roStage = new RoStage(fuKind = FuType.Mdu.id)
+  val roStage = Module(new RoStage(fuKind = FuType.Mdu.id))
   //for now,no inside bypass
 
   //TODO:pipeline connect roStage.io<>exeStageIO

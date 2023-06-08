@@ -33,15 +33,13 @@ class RobEntry extends MycpuBundle {
 /**
   * robIndex is actually the headPtr
   *   change logic:fire()
-  *   connect to RS in Backend Module,use one port:
-  *     inst(0).index:=rob.out.robIndex  inst(1).index:=rob.out.index+1
-  *     not need to decoupled index,cause this logic is dealt in io.in.ready
+  *   connect to Dispatcher in Backend Module,use 3 ports
+  *     need to decoupled,Dispatcher use it to gen "Dispatch.valid"
   *
   * after rename stage
   *   rob use "robindex" to write port <fromRenameStage> into the slot
-  *     basic:TODO:may delete instr?
-  *       PC/instr
-  *     prevDestPregAddr
+  *     pc---for difftest
+  *     prevDestPregAddr---for freelist
   *   rs write "robindex" into its slot
   *
   * after exeStage(Mem2Stage),write port <wbRob> into ROB:
@@ -76,9 +74,9 @@ class ROB extends MycpuModule {
       val wbRob = Vec(wBNum, Flipped(Decoupled(new WbRobBundle)))
     }
     val out = new Bundle {
-      val robIndex    = Output(UInt(robIndexWidth.W))
+      val robIndex    = Vec(renameNum, Decoupled(Output(ROBIdx)))
       val toRetire    = Vec(retireNum, Decoupled(new RetireBundle))
-      val storeCommit = Output(Bool())
+      val storeCommit = Decoupled(Output(Bool()))
     }
   })
 }

@@ -3,7 +3,7 @@ package config
 import chisel3._
 import chisel3.util._
 
-object fuType extends Enumeration {
+object FuType extends Enumeration {
 
   // 自动赋值枚举成员
   val Alu, Lsu, Mdu = Value
@@ -76,9 +76,9 @@ trait MycpuParam {
 
   val predictNum  = 4
   val fetchNum    = 4
-  val decodeNum   = 2
-  val renameNum   = 2
-  val dispatchNum = 2
+  val decodeNum   = 3
+  val renameNum   = 3
+  val dispatchNum = 3
   val wBNum       = 3
   val issueNum    = 2 //should be 4
   val srcDataNum  = 2
@@ -97,11 +97,8 @@ trait MycpuParam {
 
   val prfReadPortNum = srcDataNum * issueNum
 
-  val aluFuNum = 2
-
-  val forAlu = 0
-  val forMdu = 1
-  val forLsu = 2
+  val aluFuNum     = 2
+  val aluRsInPorts = 2
 
   val aluBypassNum = 2
 

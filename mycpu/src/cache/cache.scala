@@ -1,33 +1,57 @@
-package config
+package config //why?
 
 import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
 import org.apache.commons.lang3.text.WordUtils
 
+//for cache stage1 in and out
+class CacheInstBundle extends MycpuBundle {
+  val op    = Output(CacheOp())
+  val taglo = Output(UWord)
+}
+class CacheBasicReq extends MycpuBundle {
+  val index  = Output(UInt(cacheIndexWidth.W))
+  val offset = Output(UInt(cacheOffsetWidth.W))
+}
+//for dCache interface IO
+class DcacheReq(toCacheStage: Int) extends CacheBasicReq {
+  val size  = Output(UInt(3.W))
+  val wWord = Output(UWord)
+  val wStrb = Output(UInt(4.W))
+
+  val memType = if (toCacheStage == 1) Some(Output(MemType())) else None
+  val isWrite = if (toCacheStage == 2) Some(Output(Bool())) else None
+  val loadSel = if (toCacheStage == 2) Some(Output(LoadSel())) else None
+}
+
 class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
-  val tag   = UInt(tagWidth.W)
-  val dirty = if (hasDirty) Some(Bool()) else None
-  val valid = Bool()
+  val tag   = Output(UInt(tagWidth.W))
+  val dirty = if (hasDirty) Some(Output(Bool())) else None
+  val valid = Output(Bool())
 }
 
 class CacheStage1OutIO(roads: Int, isDcache: Boolean) extends MycpuBundle {
   val data = Vec(roads, Output(if (isDcache) UWord else Vec(4, UWord)))
-  val meta = Vec(roads, Output(new CacheMeta(isDcache)))
-  // only Dcache have
-  if (isDcache) {
-    val size    = Output(UInt(3.W))
-    val wWord   = Output(UWord)
-    val wStrb   = Output(UInt(4.W))
-    val isWrite = Bool()
-    val loadSel = Output(LoadSel())
-  }
-  if (enableCacheInst) {
-    val cacheInst = Valid(new Bundle {
-      val op    = CacheOp()
-      val taglo = UWord
-    })
-  }
+  val meta = Vec(roads, new CacheMeta(isDcache))
+
+  //TODO:not for sure:
+  //index和offset应该也要带到CacheStage2?
+  //这里的写法可能也得改一改
+  val dCacheReq = if (isDcache) Some(new DcacheReq(toCacheStage = 2)) else None
+  val iCacheReq = if (!isDcache) Some(new CacheBasicReq) else None
+  val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
+
+  /**
+    * TODO: 这样写找不到成员
+    * if (isDcache) {
+    *    val forDache = new DcacheExtraReq(toCacheStage = 2)
+    *  }
+    *  if (enableCacheInst) {
+    *    val cacheInst = Valid(new CacheInstBundle)
+    *  }
+    */
+
 }
 
 /**
@@ -65,24 +89,10 @@ class CacheStage1(
   lineBytes: Int     = 8,
   isDcache:  Boolean = false)
     extends MycpuModule {
-  val in = Decoupled(new Bundle {
-    val index  = UInt(cacheIndexWidth.W)
-    val offset = UInt(cacheOffsetWidth.W)
-
-    if (enableCacheInst) {
-      val cacheInst = Valid(new Bundle {
-        val op    = CacheOp()
-        val taglo = UWord
-      })
-    }
-
-    if (isDcache) {
-      val size    = Output(UInt(3.W))
-      val wWord   = Output(UWord)
-      val wStrb   = Output(UInt(4.W))
-      val memType = Output(MemType())
-    }
-  })
+  val in = Flipped(Decoupled(new Bundle {
+    val req       = if (isDcache) new DcacheReq(toCacheStage = 1) else new CacheBasicReq
+    val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
+  }))
   val out = new CacheStage1OutIO(roads, isDcache)
 }
 
@@ -118,20 +128,22 @@ class CacheStage2[T <: Data](
   userGen:   T
 )(trans:     (UInt => T))
     extends MycpuModule {
-  val in = Decoupled(new Bundle {
-    val ptag        = UInt(tagWidth.W)
-    val isUncache   = Bool()
-    val fromStage1  = new CacheStage1OutIO(roads, isDcache)
-    val isException = Bool()
-  })
-  val out = Decoupled(new Bundle {
-    val toUser = userGen
-    val data   = Output(if (isDcache) UWord else Vec(fetchNum, UWord))
-  })
-  if (enableCacheInst) {
+  val io = IO(new Bundle {
+    val in = Flipped(Decoupled(new Bundle {
+      val ptag        = Output(UInt(tagWidth.W))
+      val isUncache   = Output(Bool())
+      val fromStage1  = new CacheStage1OutIO(roads, isDcache)
+      val isException = Output(Bool())
+    }))
+
+    val out = Decoupled(new Bundle {
+      val toUser = Output(userGen)
+      val data   = Output(if (isDcache) UWord else Vec(fetchNum, UWord))
+    })
+
     val cacheInst = new Bundle {
-      val finish   = Output(Bool())
-      val redirect = Input(Bool())
+      val finish   = if (enableCacheInst) Some(Output(Bool())) else None
+      val redirect = if (enableCacheInst) Some(Input(Bool())) else None
     }
-  }
+  })
 }

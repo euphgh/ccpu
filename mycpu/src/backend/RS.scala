@@ -4,9 +4,7 @@ import config._
 import chisel3._
 import chisel3.util._
 
-//FIXME:for alu rs ,use 2 in ports?
-//or just instantiate 2 alu rs?
-
+//TODO:here the entry is type output,change to simple signal is easy
 class RsEntry(rsEntryKind: Int) extends RsOutIO(kind = rsEntryKind) {
   val valid = Output(Bool())
 }
@@ -55,11 +53,13 @@ class RsEntry(rsEntryKind: Int) extends RsOutIO(kind = rsEntryKind) {
 class RS(rsKind: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromDispatcher = Flipped(Decoupled(new RsOutIO(kind = rsKind)))
-      val wPrf           = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
+      val fromDispatcher =
+        if (rsKind == FuType.Alu.id) Vec(aluRsInPorts, Flipped(Decoupled(new RsOutIO(kind = rsKind))))
+        else Flipped(Decoupled(new RsOutIO(kind = rsKind)))
+      val wPrf = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
     }
     val out =
-      if (rsKind == forAlu) Vec(aluFuNum, Decoupled(new RsOutIO(kind = rsKind)))
+      if (rsKind == FuType.Alu.id) Vec(aluFuNum, Decoupled(new RsOutIO(kind = rsKind)))
       else Decoupled(new RsOutIO(kind = rsKind))
   })
   //TODO:rsSize

@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.util._
 
 /**
+  * prfData is read in "Backend",connect to io.in
   * instantiate stage in alu/mdu/lsu
   *
   * select src in this stage
@@ -23,7 +24,8 @@ class RoStage(fuKind: Int) extends MycpuModule {
       val datasFromPrf = Vec(srcDataNum, Output(UInt(dataWidth.W)))
     }))
     val datasFromBypass =
-      if (fuKind == forAlu) Some(Vec(aluBypassNum, Flipped(new WPrfBundle))) else None
+      if (fuKind == FuType.Alu.id) Some(Vec(aluBypassNum, Flipped(new WPrfBundle))) else None
     val out = Decoupled(new ReadOpStageOutIO(kind = fuKind))
   })
+
 }

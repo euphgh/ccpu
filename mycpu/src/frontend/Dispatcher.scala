@@ -86,10 +86,11 @@ class Dispatcher extends MycpuModule {
     }
     val out = new Bundle {
       //rs.in is just rs.out
-      val toAluRs = Vec(aluRsInPorts, Decoupled(new RsOutIO(kind = FuType.Alu.id)))
-      val toMduRs = Decoupled(new RsOutIO(kind = FuType.Mdu.id))
-      val toLsuRs = Decoupled(new RsOutIO(kind = FuType.Lsu.id))
-      val toRob   = Vec(dispatchNum, Decoupled(new DispatchToRobBundle))
+      val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
+      val toSubAluRs  = Decoupled(new RsOutIO(kind = FuType.SubAlu))
+      val toMduRs     = Decoupled(new RsOutIO(kind = FuType.Mdu))
+      val toLsuRs     = Decoupled(new RsOutIO(kind = FuType.Lsu))
+      val toRob       = Vec(dispatchNum, Decoupled(new DispatchToRobBundle))
     }
   })
 }

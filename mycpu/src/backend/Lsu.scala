@@ -2,15 +2,13 @@ package backend
 
 import bundle._
 import config._
+import backend._
 import chisel3._
 import chisel3.util._
 
-class Lsu extends MycpuModule {
-  //TODO:dtlb port
-
-  //in "Backend" ,directly connect to Lsu.roStage
-  val roStage = Module(new RoStage(fuKind = FuType.Lsu.id))
-  //for now,no inside bypass
+class Lsu extends FuncUnit(FuType.Lsu) {
+  val tlb  = IO(new TLBSearchIO)
+  val dram = IO(new DramIO)
 
   val storeQueue   = Module(new StoreQueue)
   val storeQueueIn = storeQueue.io.in.bits

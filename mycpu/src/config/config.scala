@@ -4,9 +4,9 @@ import chisel3._
 import chisel3.util._
 
 object FuType extends Enumeration {
-
+  type t = Value
   // 自动赋值枚举成员
-  val Alu, Lsu, Mdu = Value
+  val MainAlu, SubAlu, Lsu, Mdu = Value
 }
 
 object BranchType extends ChiselEnum {
@@ -94,6 +94,9 @@ trait MycpuParam {
   def ARegIdx = UInt(aRegAddrWidth.W)
   def PRegIdx = UInt(pRegAddrWidth.W)
   val ROBIdx  = UInt(robIndexWidth.W)
+
+  val tlbIndexWidth = 3
+  val TLBIdx        = UInt(tlbIndexWidth.W)
 
   val prfReadPortNum = srcDataNum * issueNum
 

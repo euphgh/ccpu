@@ -19,7 +19,7 @@ import chisel3.util._
 class RobEntry extends MycpuBundle {
   val valid = Bool()
 
-  val basic            = new BasicInstInfoBundle
+  val pc               = UWord
   val destAregAddr     = Output(UInt(aRegAddrWidth.W))
   val destPregAddr     = Output(UInt(pRegAddrWidth.W))
   val prevDestPregAddr = Output(UInt(pRegAddrWidth.W))

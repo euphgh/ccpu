@@ -27,12 +27,7 @@ class Divider extends MycpuModule {
   //automachine
 }
 
-class Mdu extends MycpuModule {
-  val roStage = Module(new RoStage(fuKind = FuType.Mdu.id))
-  //for now,no inside bypass
-
-  //TODO:pipeline connect roStage.io<>exeStageIO
-  val exeStageIO = new ExeStageIO(fuKind = FuType.Alu.id)
+class Mdu extends FuncUnit(FuType.Mdu) {
   val mul        = Module(new Multiplier)
   val div        = Module(new Divider)
 

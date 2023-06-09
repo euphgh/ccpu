@@ -64,24 +64,20 @@ class BpuUpdateIO extends MycpuBundle {
   */
 class IfStage1 extends MycpuModule {
   val io = IO(new Bundle {
-    val in = Flipped(new PreIfOutIO)
-
+    val in  = Flipped(new PreIfOutIO)
     val out = Decoupled(new IfStage1OutIO)
-
-    val tlb = new Bundle {
-      val req  = Output(UWord)
-      val back = Input(UWord)
-    }
+    val tlb = new TLBSearchIO
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
     val delaySlotOK = Output(Bool()) // only to PreIf
-    val IcacheInst = if (enableCacheInst) Some(Flipped(Valid(new Bundle {
-      val op    = CacheOp()
-      val taglo = UWord
-      val index = UInt(cacheIndexWidth.W)
-      // only need index and tag but offset in cache inst
-    })))
-    else None
+    val IcacheInst =
+      if (enableCacheInst) Some(Flipped(Valid(new Bundle {
+        val op    = CacheOp()
+        val taglo = UWord
+        val index = UInt(cacheIndexWidth.W)
+        // only need index and tag but offset in cache inst
+      })))
+      else None
 
   })
 }

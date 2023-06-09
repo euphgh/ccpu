@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util._
 
 //TODO:here the entry is type output,change to simple signal is easy
-class RsEntry(rsEntryKind: Int) extends RsOutIO(kind = rsEntryKind) {
+class RsEntry(rsEntryKind: FuType.t) extends RsOutIO(kind = rsEntryKind) {
   val valid = Output(Bool())
 }
 
@@ -50,18 +50,14 @@ class RsEntry(rsEntryKind: Int) extends RsOutIO(kind = rsEntryKind) {
   *     use sEntry(psrc+valid) in RO,use pDest in WB
   *     use robIndex in WB
   */
-class RS(rsKind: Int) extends MycpuModule {
+class RS(rsKind: FuType.t) extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromDispatcher =
-        if (rsKind == FuType.Alu.id) Vec(aluRsInPorts, Flipped(Decoupled(new RsOutIO(kind = rsKind))))
-        else Flipped(Decoupled(new RsOutIO(kind = rsKind)))
-      val wPrf = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
+      val fromDispatcher = Flipped(Decoupled(new RsOutIO(rsKind)))
+      val wPrf           = Vec(wBNum, Flipped(Decoupled(new WPrfBundle)))
     }
-    val out =
-      if (rsKind == FuType.Alu.id) Vec(aluFuNum, Decoupled(new RsOutIO(kind = rsKind)))
-      else Decoupled(new RsOutIO(kind = rsKind))
+    val out = Decoupled(new RsOutIO(kind = rsKind))
   })
   //TODO:rsSize
-  val rsEntries = RegInit(VecInit(Seq.fill(2)(0.U.asTypeOf(new RsEntry(rsEntryKind = rsKind)))))
+  val rsEntries = RegInit(VecInit(Seq.fill(2)(0.U.asTypeOf(new RsEntry(rsKind)))))
 }

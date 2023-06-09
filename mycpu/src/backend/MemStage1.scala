@@ -30,12 +30,9 @@ import chisel3.util._
 
 class MemStage1 extends MycpuModule {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = FuType.Lsu.id)))
-    val out = Decoupled(new MemStage1OutIO)
-    val tlb = new Bundle {
-      val req  = Output(UWord)
-      val back = Input(UWord)
-    }
+    val in            = Flipped(Decoupled(new ReadOpStageOutIO(kind = FuType.Lsu)))
+    val out           = Decoupled(new MemStage1OutIO)
+    val tlb           = new TLBSearchIO
     val storeQueueEnq = Output(Bool())
     val dCacheInst =
       if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None

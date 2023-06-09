@@ -45,12 +45,12 @@ class BChannel(var idLen: Int = 4) extends MycpuBundle {
   val id = UInt(idLen.W)
 }
 
-class DramReadIO {
+class DramReadIO extends MycpuBundle {
   val ar = Decoupled(new ARChannel)
   val r  = Flipped(Decoupled(new ARChannel))
 }
 
-class DramIO {
+class DramIO extends MycpuBundle {
   val ar = Decoupled(new ARChannel)
   val r  = Flipped(Decoupled(new ARChannel))
   val aw = Decoupled(new AWChannel)

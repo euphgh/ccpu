@@ -183,7 +183,7 @@ class DispatchToRobBundle extends MycpuBundle {
 class FunctionUnitOutIO extends MycpuBundle {
   val wbRob        = new WbRobBundle
   val wPrf         = new WPrfBundle
-  val destAregAddr = Output(UInt(aRegAddrWidth.W))
+  val destAregAddr = Output(ARegIdx)
 }
 
 /**

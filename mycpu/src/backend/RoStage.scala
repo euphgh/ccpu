@@ -17,15 +17,15 @@ import chisel3.util._
   * cal 12 bit index+offset for lsu(dcache1.io.in)
   */
 
-class RoStage(fuKind: Int) extends MycpuModule {
+class RoStage(fuKind: FuType.t) extends MycpuModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
-      val fromRs       = new RsOutIO(kind = fuKind)
+      val fromRs       = new RsOutIO(fuKind)
       val datasFromPrf = Vec(srcDataNum, Output(UInt(dataWidth.W)))
     }))
     val datasFromBypass =
-      if (fuKind == FuType.Alu.id) Some(Vec(aluBypassNum, Flipped(new WPrfBundle))) else None
-    val out = Decoupled(new ReadOpStageOutIO(kind = fuKind))
+      if (fuKind == FuType.MainAlu) Some(Vec(aluBypassNum, Flipped(new WPrfBundle))) else None
+    val out = Decoupled(new ReadOpStageOutIO(fuKind))
   })
 
 }

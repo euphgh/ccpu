@@ -153,8 +153,8 @@ class RsBasicEntry extends MycpuBundle {
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
 }
-class RsOutIO(kind: Int) extends RsBasicEntry {
-  val predictResult = if (kind == FuType.Alu.id) Some(new PredictResultBundle) else None
+class RsOutIO(kind: FuType.t) extends RsBasicEntry {
+  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
   val pc          = UWord // difftest check execution flow
@@ -200,7 +200,7 @@ class FunctionUnitOutIO extends MycpuBundle {
   *   wWord:load dont care/store read src
   *   wStrb:load dont care/actually store dont care at this stage
   */
-class ReadOpStageOutIO(kind: Int) extends MycpuBundle {
+class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val wbRob        = new WbRobBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val decoded      = new DecodeInstInfoBundle
@@ -244,7 +244,7 @@ class StoreQueueOutIO extends CacheBasicReq {
 //------------------------------------------------------------------------------------------------------
 
 //just use to instantiate exeStageIO in alu/mdu
-class ExeStageIO(fuKind: Int) extends MycpuBundle {
+class ExeStageIO(fuKind: FuType.t) extends MycpuBundle {
   val in  = Flipped(Decoupled(new ReadOpStageOutIO(kind = fuKind)))
   val out = Decoupled(new FunctionUnitOutIO)
 }

@@ -22,24 +22,20 @@ class CP0 extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val exception = new Bundle {
-        val happen   = Input(Bool())
-        val isBd     = Input(Bool())
-        val excCode  = Input(ExcCode())
-        val badVaddr = Input(UWord)
-        val badPc    = Input(UWord)
+        val basic    = Flipped(new ExceptionInfoBundle)
+        val badVaddr = Input(UWord) // from mem stage1
       }
-      val eretFlush = Input(Bool())
-      val extIntIn  = Input(UInt(6.W)) //硬件中断输入引脚
-      val c0Inst = new Bundle {
-        val wen   = Input(Bool()) //mfc0
-        val wdata = Input(UWord) //mfc0
-        val addr  = Input(UInt(8.W)) //mfc0、mtc0
+      val eret = Input(Bool())
+      val mtc0 = new Bundle {
+        val wen   = Input(Bool())
+        val wdata = Input(UWord)
+        val addr  = Input(CP0Idx)
       }
+      val mfc0 = Input(CP0Idx)
     }
     val out = new Bundle {
-      val c0InstRdata = Output(UWord)
-      val c0Epc       = Output(UWord) //for eret_flush inst
-      val isAsyInt    = Output(Bool()) //是否发生硬件中断
+      val mfc0Data = Output(UWord) // wire logic of mfc0
+      val redirect = new ExceptionRedirectBundle
     }
   })
 }

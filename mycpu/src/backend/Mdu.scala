@@ -26,11 +26,17 @@ class Divider extends MycpuModule {
   val io = IO(new MulDivIO)
   //automachine
 }
+class CountLeadZeor extends MycpuModule {
+  val src = Decoupled(UWord)
+  val out = DecoupledIO(UWord)
+}
 
 class Mdu extends FuncUnit(FuType.Mdu) {
-  val mul        = Module(new Multiplier)
-  val div        = Module(new Divider)
+// automat for status change when madd and msub
+  val mul = Module(new Multiplier)
+  val div = Module(new Divider)
+  val clz = Module(new CountLeadZeor)
 
-  val hiReg = Mem(1, UWord)
-  val loReg = Mem(1, UWord)
+  val hiReg = RegInit(UWord, 0.U)
+  val loReg = RegInit(UWord, 0.U)
 }

@@ -24,7 +24,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val datasFromPrf = Vec(srcDataNum, Output(UInt(dataWidth.W)))
     }))
     val datasFromBypass =
-      if (fuKind == FuType.MainAlu) Some(Vec(aluBypassNum, Flipped(new WPrfBundle))) else None
+      if (FuType.needByPass(fuKind)) Some(Vec(aluBypassNum, Flipped(new WPrfBundle))) else None
     val out = Decoupled(new ReadOpStageOutIO(fuKind))
   })
 

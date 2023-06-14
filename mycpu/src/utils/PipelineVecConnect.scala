@@ -45,11 +45,11 @@ object PipelineVecConnect {
     //rightOutFireNum = first notFire slot's index
     List.tabulate(size)(i => {
       when(i.U < stayNum) {
-        right(i).bits  := RegNext(right(i.U + rightOutFireNum).bits)
-        right(i).valid := RegNext(right(i.U + rightOutFireNum).valid)
+        right(i).bits  := right(i.U + rightOutFireNum).bits
+        right(i).valid := right(i.U + rightOutFireNum).valid
       }.otherwise {
-        right(i).bits  := RegNext(left(i.U -& stayNum).bits)
-        right(i).valid := RegNext(left(i.U -& stayNum).valid)
+        right(i).bits  := left(i.U - stayNum).bits
+        right(i).valid := left(i.U - stayNum).valid
       }
     })
 

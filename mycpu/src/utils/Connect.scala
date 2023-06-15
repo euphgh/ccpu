@@ -9,6 +9,28 @@ import chisel3.util.RegEnable
 import os.makeDir
 
 /**
+  * 4 kinds of connect:
+  *    normal pipeline:single issue(preIF-IF1-IF2)(RS-RO-EXE/MEM)
+  *    ibf to dper
+  *    write into buffer:(IF2-IBF)(DPER-ROB/RS)treat as wen
+  *    WB rob/prf:TODO:arbiter
+  */
+
+//preIF-IF1-IF2
+object PipelineConnect {
+  def apply[T <: Data](left: DecoupledIO[T], right: DecoupledIO[T], rightOutFire: Bool, isFlush: Bool) = {
+    val valid = RegInit(false.B)
+    when(rightOutFire) { valid := false.B }
+    when(right.ready) { valid := left.valid }
+    when(isFlush) { valid := false.B }
+
+    left.ready  := right.ready
+    right.bits  := RegEnable(left.bits, left.valid && right.ready)
+    right.valid := valid //attention:here right.valid means "pipex_valid"
+  }
+}
+
+/**
   * dad:left.out
   * bro:right(older).in
   *
@@ -20,8 +42,8 @@ import os.makeDir
   *
   * allowLeftNum由right产生：用于生成left.out.rdy
   */
-
-object PipelineVecConnect {
+//TODO:flush
+object IbfConnectDper {
   def apply[T <: Data](
     gen:             T,
     left:            Vec[DecoupledIO[T]],

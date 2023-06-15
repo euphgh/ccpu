@@ -7,17 +7,20 @@ import mill.scalalib.TestModule.Utest
 import mill.bsp._
 
 object mycpu extends ScalaModule with ScalafmtModule { m =>
-  override def scalaVersion = "2.13.8"
+  override def scalaVersion = "2.13.10"
   override def scalacOptions = Seq(
+    "-unchecked",
     "-language:reflectiveCalls",
     "-deprecation",
     "-feature",
     "-Xcheckinit",
-    "-P:chiselplugin:genBundleElements"
+    "-Xfatal-warnings"
+    // "-Ywarn-dead-code",
+    // "-Ywarn-unused",
+    // "-Ymacro-annotations"
   )
   override def ivyDeps = Agg(
-    ivy"edu.berkeley.cs::chisel3:3.6.0",
-    ivy"com.sifive::chisel-circt:0.6.0"
+    ivy"edu.berkeley.cs::chisel3:3.6.0"
   )
   override def scalacPluginIvyDeps = Agg(
     ivy"edu.berkeley.cs:::chisel3-plugin:3.6.0"

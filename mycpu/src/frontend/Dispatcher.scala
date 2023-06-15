@@ -4,6 +4,9 @@ import bundle._
 import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
+import chisel3.util.log2Up
+import utils.MultiQueue
+import chisel3.util.RegEnable
 
 class SRATWriteBackIO extends MycpuBundle {
   val wbADest = ARegIdx
@@ -58,6 +61,19 @@ class Decoder extends MycpuModule {
   })
 }
 
+class dispatchSlot extends MycpuBundle {
+  val inst  = new InstBufferOutIO
+  val valid = Output(Bool())
+
+  //这三个互相阻塞
+  val freeListPopValid = Output(Bool()) //freeList pop valid
+  val robReady         = Output(Bool()) //rob是否有相应的空闲槽位，此处无需设置“leadingRobReady”
+  val rsReady          = Output(Bool()) //指令对应的rs是否"对其"ready(注意同类型指令只有第一条才会“得到”Rdy)
+
+  val readyGo = Output(Bool())
+
+}
+
 /**
   * 1. instantiate MultiQueue as freeList in Dispatcher
   * 2. instantiate 3 Decoder
@@ -80,12 +96,15 @@ class Decoder extends MycpuModule {
 class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromInstBuffer  = Vec(decodeNum, Flipped(Decoupled(new InstBufferOutIO)))
+      val fromInstBuffer  = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
       val fromFuWriteBack = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
-      val robIndex        = Vec(renameNum, Flipped(Decoupled(Output(ROBIdx))))
+      val robIndex        = Input(ROBIdx)
     }
+    val outFireNum = Output(UInt())
+
     val out = new Bundle {
-      //rs.in is just rs.out
+      //Rs decoupled is not "pipeline decoupled"
+      //can treat fire() as wen
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
       val toSubAluRs  = Decoupled(new RsOutIO(kind = FuType.SubAlu))
       val toMduRs     = Decoupled(new RsOutIO(kind = FuType.Mdu))
@@ -93,4 +112,59 @@ class Dispatcher extends MycpuModule {
       val toRob       = Vec(dispatchNum, Decoupled(new DispatchToRobBundle))
     }
   })
+
+  val freeList = Module(new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx))
+
+  //TODO:some inst can go to main/sub alurs;some can only goto sub alurs
+  val noInst = (dispatchNum).U
+  def getSlot(rsType: UInt): UInt = Mux(
+    (slots(0).inst.whichFu === ChiselFuType(rsType)),
+    0.U,
+    Mux(
+      slots(1).inst.whichFu === ChiselFuType(rsType),
+      1.U,
+      Mux(slots(2).inst.whichFu === ChiselFuType(rsType), 2.U, noInst)
+    )
+  )
+
+  val slots = Wire(Vec(dispatchNum, new dispatchSlot))
+
+  //just connect(combinational logic)
+  List.tabulate(dispatchNum)(i => {
+    slots(i).inst             := io.in.fromInstBuffer(i).bits
+    slots(i).valid            := io.in.fromInstBuffer(i).valid
+    slots(i).robReady         := io.out.toRob(i).ready
+    slots(i).freeListPopValid := freeList.io.pop(i).valid
+    slots(i).rsReady          := false.B //default
+  })
+
+  val mainAluSlot = getSlot(ChiselFuType.MainALU.asUInt)
+  val subAluSlot  = getSlot(ChiselFuType.ALU.asUInt)
+  val lsuSlot     = getSlot(ChiselFuType.LSU.asUInt)
+  val mduSlot     = getSlot(ChiselFuType.MDU.asUInt)
+  //indirect index
+  val rsSlotSel = List(mainAluSlot, subAluSlot, lsuSlot, mduSlot)
+  val toRs      = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
+  List.tabulate(rsSlotSel.length)(i => {
+    when(rsSlotSel(i) =/= noInst) {
+      slots(rsSlotSel(i)).rsReady := toRs(i).ready
+    }
+  })
+
+  slots(0).readyGo := slots(0).robReady & slots(0).freeListPopValid & slots(0).rsReady
+  List.tabulate(dispatchNum)(i => {
+    if (i != 0) {
+      slots(i).readyGo := slots(i).robReady & slots(i).rsReady & slots(i).freeListPopValid & slots(i - 1).readyGo
+    }
+  })
+
+  //io.out.toRob(i).fire indicate that the inst can certainly out at next cycle
+  io.outFireNum := List.tabulate(dispatchNum)(i => { io.out.toRob(i).fire }).foldRight(0.U)((sum, i) => sum.asUInt +& i)
+
+  List.tabulate(dispatchNum)(i => {
+    io.out.toRob(i).valid    := slots(i).valid & slots(i).readyGo
+    toRs(i).valid            := slots(i).valid & slots(i).readyGo
+    freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
+  })
+
 }

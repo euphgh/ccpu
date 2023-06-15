@@ -47,7 +47,7 @@ object IbfConnectDper {
   def apply[T <: Data](
     gen:             T,
     left:            Vec[DecoupledIO[T]],
-    right:           Vec[DecoupledIO[T]],
+    right:           Vec[Valid[T]],
     rightOutFireNum: UInt
   ): Unit = {
 
@@ -57,8 +57,8 @@ object IbfConnectDper {
     val validNum = List.tabulate(size)(i => { right(i).valid }).foldRight(0.U)((sum, i) => sum.asUInt +& i)
     //下拍  right中原先valid  inst会留下（指还在slots中，但是所在槽可能会变）的数目
     val stayNum = validNum -& rightOutFireNum
-    //下拍  给left的rdy数     =size-stayNum(其实right的接口并不需要提供ready
-    val allowLeftNum = List.tabulate(size)(i => { right(i).ready }).foldRight(0.U)((sum, i) => sum.asUInt +& i)
+    //下拍  给left的rdy数
+    val allowLeftNum = size.U -& stayNum
     //situation: 1cango 2cantgo 3empty(rdy not rdy)
     List.tabulate(size)(i => {
       left(i).ready := (i.U < allowLeftNum)
@@ -67,13 +67,12 @@ object IbfConnectDper {
     //rightOutFireNum = first notFire slot's index
     List.tabulate(size)(i => {
       when(i.U < stayNum) {
-        right(i).bits  := right(i.U + rightOutFireNum).bits
-        right(i).valid := right(i.U + rightOutFireNum).valid
+        right(i).bits  := RegNext(right(i.U + rightOutFireNum).bits)
+        right(i).valid := RegNext(right(i.U + rightOutFireNum).valid)
       }.otherwise {
-        right(i).bits  := left(i.U - stayNum).bits
-        right(i).valid := left(i.U - stayNum).valid
+        right(i).bits  := RegNext(left(i.U - stayNum).bits)
+        right(i).valid := RegNext(left(i.U - stayNum).valid)
       }
     })
-
   }
 }

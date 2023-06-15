@@ -70,12 +70,8 @@ class dispatchSlot extends MycpuBundle {
   val robReady         = Output(Bool()) //rob是否有相应的空闲槽位，此处无需设置“leadingRobReady”
   val rsReady          = Output(Bool()) //指令对应的rs是否"对其"ready(注意同类型指令只有第一条才会“得到”Rdy)
 
-  val leadingRsReady = Output(Bool()) // andR: (0 to x).rsReady
+  val readyGo = Output(Bool())
 
-  //这3个等价，但是想保证一套握手信号valid-rdy相互独立
-  val readyGoFlPop = Output(Bool()) //(0 to i-1)flOK(省略)   (0 to i)rsRdy     (0 to i)robRdy(i)
-  val readyGoRs    = Output(Bool()) //(0 to i)flOK(i)       (0 to i-1)rsRdy   (0 to i)robRdy(i)
-  val readyGoRob   = Output(Bool()) //(0 to i)flOK(i)       (0 to i)rsRdy     (0 to i-1)robRdy(省略)
 }
 
 /**
@@ -100,7 +96,7 @@ class dispatchSlot extends MycpuBundle {
 class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromInstBuffer  = Vec(decodeNum, Flipped(Decoupled(new InstBufferOutIO)))
+      val fromInstBuffer  = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
       val fromFuWriteBack = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
       val robIndex        = Input(ROBIdx)
     }
@@ -155,27 +151,20 @@ class Dispatcher extends MycpuModule {
     }
   })
 
-  slots(0).leadingRsReady := slots(0).rsReady
-  slots(0).readyGoRs      := slots(0).robReady & slots(0).freeListPopValid
+  slots(0).readyGo := slots(0).robReady & slots(0).freeListPopValid & slots(0).rsReady
   List.tabulate(dispatchNum)(i => {
     if (i != 0) {
-      slots(i).leadingRsReady := slots(i - 1).leadingRsReady & slots(i).rsReady
-      slots(i).readyGoRs      := slots(i).robReady & slots(i - 1).leadingRsReady & slots(i).freeListPopValid
+      slots(i).readyGo := slots(i).robReady & slots(i).rsReady & slots(i).freeListPopValid & slots(i - 1).readyGo
     }
-    slots(i).readyGoRob   := slots(i).leadingRsReady & slots(i).freeListPopValid
-    slots(i).readyGoFlPop := slots(i).leadingRsReady & slots(i).robReady
   })
 
   //io.out.toRob(i).fire indicate that the inst can certainly out at next cycle
   io.outFireNum := List.tabulate(dispatchNum)(i => { io.out.toRob(i).fire }).foldRight(0.U)((sum, i) => sum.asUInt +& i)
 
   List.tabulate(dispatchNum)(i => {
-    //situation: 1cango 2cantgo 3empty(rdy not rdy),so need to gen real rdy in pipeConnect
-    io.in.fromInstBuffer(i).ready := !slots(i).valid || io.out.toRob(i).fire
-
-    io.out.toRob(i).valid    := slots(i).valid & slots(i).readyGoRob
-    toRs(i).valid            := slots(i).valid & slots(i).readyGoRs
-    freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGoFlPop
+    io.out.toRob(i).valid    := slots(i).valid & slots(i).readyGo
+    toRs(i).valid            := slots(i).valid & slots(i).readyGo
+    freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
   })
 
 }

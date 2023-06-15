@@ -2,8 +2,7 @@ package utils
 import config._
 import bundle._
 import chisel3._
-import chisel3.util.Decoupled
-import chisel3.util.log2Up
+import chisel3.util._
 
 /**
   * all the port should at least be fmt "1..0.."
@@ -27,33 +26,50 @@ import chisel3.util.log2Up
   * @param deqNum enqueue number in one cycle
   * @param gen data type
   * @param size Queue size
+  * @param allIn True:   if MultiQueue dont't have space accepts all enq elements, it will not assert any enq.ready
+  *              false:  it will assert some enq.ready
   */
 
 //TODO:ROB need an out index
-class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int) extends MycpuModule {
+class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int, allIn: Boolean) extends MycpuModule {
   val io = IO(new Bundle {
     val push = Vec(enqNum, Flipped(Decoupled(gen)))
     val pop  = Vec(deqNum, Decoupled(gen))
   })
+  require(isPow2(size))
+
+  val counterWidth = log2Up(size)
+  val ptrWidth     = counterWidth + 1
 
   //ring means "+"
-  val ringBuffer     = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
-  val ringBufferHead = RegInit(0.U(log2Up(size).W))
-  val ringBufferTail = RegInit(0.U(log2Up(size).W))
+  val ringBuffer = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
+  val headPtr    = RegInit(0.U, UInt(ptrWidth.W))
+  val tailPtr    = RegInit(0.U, UInt(ptrWidth.W))
+  val deqFireNum = PopCount(io.pop.map(_.fire))
+  def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth + 1) //must look ahead a cycle
+  def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth + 1) //only considerate current
 
-  //push
-  val allowIn = (1 to enqNum).map(i => (ringBufferHead + i.U =/= ringBufferTail)).reduce(_ & _)
-  (0 until enqNum).map(i => (io.push(i).ready := allowIn))
-  val enqFireNum = (0 to enqNum).map(i => io.push(i).fire.asUInt).reduce(_ +& _)
+  //assume input is 1..0..
+  if (allIn) {
+    val enqValidNum = PopCount(io.push.map(_.valid))
+    (0 to enqNum).foreach(i => io.push(i).ready := !(overflow(enqValidNum)))
+  } else {
+    (0 to enqNum).foreach(i => io.push(i).ready := !(overflow(i.U)))
+  }
+  val enqFireNum = PopCount(io.push.map(_.fire))
   List.tabulate(enqNum)(i => {
     when(io.push(i).fire) {
-      ringBuffer(ringBufferHead + i.U) := io.push(i).bits
+      ringBuffer(headPtr + i.U) := io.push(i).bits
     }
   })
-  ringBufferHead := ringBufferHead + enqFireNum
+  headPtr := headPtr + enqFireNum
 
   //pop
-  (0 to enqNum).map(i => (io.pop(i).valid := (ringBufferTail + i.U =/= ringBufferHead)))
-  val deqFireNum = (0 to deqNum).map(i => io.pop(i).fire.asUInt).reduce(_ +& _)
-  ringBufferTail := ringBufferTail + deqFireNum
+  (0 to enqNum).foreach(i => (io.pop(i).valid := !underflow(i.U)))
+  tailPtr := tailPtr + deqFireNum
+  List.tabulate(deqNum)(i => {
+    when(io.pop(i).fire) {
+      io.pop(i) := ringBuffer(tailPtr + i.U)
+    }
+  })
 }

@@ -7,6 +7,7 @@ object FuType extends Enumeration {
   type t = Value
   // 自动赋值枚举成员
   val MainAlu, SubAlu, Lsu, Mdu = Value
+  def needByPass(input: Value) = input == MainAlu || input == SubAlu
 }
 
 object BranchType extends ChiselEnum {
@@ -108,6 +109,14 @@ trait MycpuParam {
   def UWord = UInt(vaddrWidth.W)
   def UByte = UInt(8.W)
   def UHalf = UInt(16.W)
+
+  val CP0IdxWidth = 8
+  def CP0Idx      = UInt(CP0IdxWidth.W)
+  def CP0Idx(sel: UInt, rd: UInt) = {
+    require(sel.getWidth == 3)
+    require(rd.getWidth == 5)
+    Cat(rd, sel)
+  }
 }
 
 abstract class MycpuBundle extends Bundle with MycpuParam

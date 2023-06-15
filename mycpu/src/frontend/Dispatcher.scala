@@ -27,7 +27,8 @@ class SRATWriteBackIO extends MycpuBundle {
   */
 class SRAT extends MycpuModule {
   val io = IO(new Bundle {
-    val src = List(
+
+    val src = Vec(
       renameNum,
       new Bundle {
         val in  = Input(Vec(srcDataNum, ARegIdx))
@@ -36,17 +37,31 @@ class SRAT extends MycpuModule {
     )
     val dest = Vec(
       renameNum,
-      Valid(new Bundle {
+      new Bundle {
         val currADest = Input(ARegIdx) //to get prev
-        val currPDest = Input(PRegIdx) //to write in
-        val out       = Output(new SRATEntry) //prev
-        //Q:prevDest need inPrf info?
-      })
+        val prevPDest = Output(PRegIdx) //prev
+        val currPDest = Valid(Input(PRegIdx)) //to write in
+      }
     )
     val wb = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
   })
-  def read(channel: Int, aRegsIdx: Seq[InstARegsIdxBundle]) = {
-    require(aRegsIdx.size == renameNum)
+
+  //TODO:change init value
+  val sratEntries = RegInit(VecInit(Seq.fill(32)(0.U.asTypeOf(new SRATEntry))))
+  List.tabulate(renameNum)(i => {
+    List.tabulate(srcDataNum)(j => (io.src(i).out(j) := sratEntries(io.src(i).in(j))))
+    io.dest(i).prevPDest := sratEntries(io.dest(i).currADest).pIdx
+
+  })
+
+  def read(aRegsIdx: Vec[InstARegsIdxBundle]) = {
+    require(aRegsIdx.length == renameNum)
+    List.tabulate(renameNum)(i => {
+      this.io.src(i).in(0)           := aRegsIdx(i).src0
+      this.io.src(i).in(1)           := aRegsIdx(i).src1
+      this.io.dest(i).bits.currADest := aRegsIdx(i).dest
+    })
+    List.tabulate(renameNum)(i => {})
   }
 }
 
@@ -57,7 +72,10 @@ class Decoder extends MycpuModule {
       val inst      = UWord
       val exception = FrontExcCode()
     }
-    val out = new DecodeInstInfoBundle
+    val out = new Bundle {
+      val decoded   = new DecodeInstInfoBundle
+      val exception = new ExceptionInfoBundle
+    }
   })
 }
 
@@ -72,6 +90,13 @@ class dispatchSlot extends MycpuBundle {
 
   val readyGo = Output(Bool())
 
+  val toRsBasic = new RsBasicEntry
+  //  exception decoder-Rs
+  //  decoded   decoder-Rs
+  //  destPregAddr freelist-Rs&Rob
+  //  srcPregs     srat-Rs
+  //  robIndex     Rs
+  val prevPRegIdx = PRegIdx //srat-Rob
 }
 
 /**
@@ -133,9 +158,11 @@ class Dispatcher extends MycpuModule {
   List.tabulate(dispatchNum)(i => {
     slots(i).inst             := io.in.fromInstBuffer(i).bits
     slots(i).valid            := io.in.fromInstBuffer(i).valid
+    slots(i).rsReady          := false.B //default
     slots(i).robReady         := io.out.toRob(i).ready
     slots(i).freeListPopValid := freeList.io.pop(i).valid
-    slots(i).rsReady          := false.B //default
+
+    slots(i).toRsBasic.destPregAddr := freeList.io.pop(i).bits
   })
 
   val mainAluSlot = getSlot(ChiselFuType.MainALU.asUInt)
@@ -163,8 +190,27 @@ class Dispatcher extends MycpuModule {
 
   List.tabulate(dispatchNum)(i => {
     io.out.toRob(i).valid    := slots(i).valid & slots(i).readyGo
-    toRs(i).valid            := slots(i).valid & slots(i).readyGo
     freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
+  })
+
+  val decoder = List(Module(new Decoder), Module(new Decoder), Module(new Decoder))
+  List.tabulate(dispatchNum)(i => {
+    decoder(i).io.in           := slots(i).inst.basic.instr
+    decoder(i).io.in.exception := slots(i).inst.exception
+
+    slots(i).toRsBasic.decoded   := decoder(i).io.out.decoded
+    slots(i).toRsBasic.exception := decoder(i).io.out.exception
+  })
+
+  List.tabulate(toRs.length)(i => {
+    when(rsSlotSel(i) === noInst) {
+      toRs(i).valid := false.B
+      toRs(i).bits  := DontCare
+    }.otherwise {
+      toRs(i).valid      := slots(rsSlotSel(i)).valid & slots(rsSlotSel(i)).readyGo
+      toRs(i).bits.basic := slots(rsSlotSel(i)).toRsBasic
+    }
+
   })
 
 }

@@ -59,9 +59,9 @@ class BasicInstInfoBundle extends MycpuBundle {
 //TODO:need more control bits here
 //note:if not need a src data, just set aRegAddr as 0
 class DecodeInstInfoBundle extends MycpuBundle {
-  val srcAregAddrs = Vec(srcDataNum, Output(ARegIdx))
-  val destAregAddr = Output(ARegIdx)
-  val exception    = new (ExceptionInfoBundle)
+  //val srcAregAddrs = Vec(srcDataNum, Output(ARegIdx))
+  //val destAregAddr = Output(ARegIdx)
+  //val exception    = new (ExceptionInfoBundle)
 }
 
 //no need to declare a readBundle here
@@ -153,7 +153,8 @@ class RsBasicEntry extends MycpuBundle {
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
 }
-class RsOutIO(kind: FuType.t) extends RsBasicEntry {
+class RsOutIO(kind: FuType.t) extends MycpuBundle {
+  val basic         = new RsBasicEntry
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {

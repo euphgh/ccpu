@@ -53,9 +53,9 @@ class ExceptionRedirectBundle extends MycpuBundle {
   * bpu info for per inst
   */
 class PredictResultBundle extends MycpuBundle {
-  val taken  = Output(Bool())
-  val brType = Output(BranchType())
-  val target = Output(UInt(vaddrWidth.W))
+  val counter = UInt(2.W)
+  val brType  = BranchType()
+  val target  = UInt(vaddrWidth.W)
 }
 class BasicInstInfoBundle extends MycpuBundle {
   val instr = Output(UInt(instrWidth.W))
@@ -96,13 +96,6 @@ class RetireBundle extends MycpuBundle {
 //------------------------------------------------------------------------------------------------------
 /* 各流水级的OUT接口，这些接口不带valid-rdy */
 
-//all the insts must take its predict result with it
-//takenMask will be used to gen npc in preIF,and to gen validNum in IF2
-class BpuOutIO() extends MycpuBundle {
-  val predictTarget = Output(Vec(predictNum, UInt(vaddrWidth.W)))
-  val takenMask     = Output(UInt(predictNum.W))
-  val brType        = Output(Vec(predictNum, BranchType()))
-}
 class PreIfOutIO extends MycpuBundle {
   val npc         = Output(UInt(vaddrWidth.W))
   val isDelaySlot = Output(Bool()) // tell stage1 alignMask should be b1000
@@ -110,7 +103,7 @@ class PreIfOutIO extends MycpuBundle {
 }
 class IfStage1OutIO extends MycpuBundle {
   val pcVal          = Output(UInt(vaddrWidth.W))
-  val bpuOut         = new BpuOutIO
+  val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
   val alignMask      = Output(UInt(fetchNum.W))
   val fire           = Output(new Bool)
   val tagOfInstGroup = Output(UInt(tagWidth.W))
@@ -134,7 +127,7 @@ class InstARegsIdxBundle extends MycpuBundle {
 }
 class InstBufferOutIO extends MycpuBundle {
   val basic         = new BasicInstInfoBundle
-  val predictResult = new PredictResultBundle
+  val predictResult = Output(new PredictResultBundle)
   val exception     = Output(FrontExcCode())
   val whichFu       = Output(ChiselFuType())
   val aRegsIdx      = Output(new InstARegsIdxBundle)
@@ -161,7 +154,7 @@ class RsBasicEntry extends MycpuBundle {
   val robIndex     = Output(ROBIdx)
 }
 class RsOutIO(kind: FuType.t) extends RsBasicEntry {
-  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
+  val predictResult = if (kind == FuType.MainAlu) Some(Output(new PredictResultBundle)) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
   val pc          = UWord // difftest check execution flow

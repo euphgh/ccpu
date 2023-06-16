@@ -8,11 +8,6 @@ class BtbOutIO extends MycpuBundle {
   val instType = BranchType()
   val target   = UWord
 }
-class PhtOutIO extends MycpuBundle {
-  val hisLen   = 2
-  val his      = UInt(hisLen.W)
-  val counters = Vec(math.pow(2, hisLen).toInt, UInt(2.W))
-}
 
 /**
   * single write port and single read port
@@ -65,7 +60,7 @@ class BranchTargetBuffer extends MycpuModule {
 class PatternHistoryTable extends MycpuModule {
   val update = IO(new Bundle {
     val pc   = Input(UWord)
-    val data = Flipped(Valid(new PhtOutIO))
+    val data = Flipped(Valid(UInt(2.W)))
   })
   val phtIdxWidth = 10
   val phtTagWidth = 32 - phtIdxWidth - 2
@@ -73,7 +68,7 @@ class PatternHistoryTable extends MycpuModule {
   class phtEntry extends MycpuBundle {
     val valid = Bool()
     val tag   = UInt(phtTagWidth.W)
-    val data  = new PhtOutIO()
+    val data  = UInt(2.W)
   }
   val ram = SyncReadMem(math.pow(2, phtIdxWidth).toInt, new phtEntry)
 
@@ -91,12 +86,11 @@ class PatternHistoryTable extends MycpuModule {
   // read ========================================
   def access(address: UInt) = {
     val entry = ram.read(hash(address))
-    val res   = Wire(new PhtOutIO)
+    val res   = Wire(UInt(2.W))
     when(entry.valid && (entry.tag === getphtTag(address))) {
       res := entry.data
     }.otherwise {
-      res.his      := 0.U
-      res.counters := 0.U
+      res := 0.U
     }
     res
   }
@@ -105,7 +99,7 @@ class PatternHistoryTable extends MycpuModule {
 class BpuUpdateIO extends MycpuBundle {
   val pc       = Output(UWord)
   val btb      = Valid(new BtbOutIO)
-  val pht      = Valid(new PhtOutIO)
+  val pht      = Valid(UInt(2.W))
   val moreData = Output(UInt(1.W)) //TODO:not make sure
 }
 
@@ -167,8 +161,7 @@ class IfStage1 extends MycpuModule {
   icache1.in.bits.cacheInst.get.bits.taglo := io.IcacheInst.get.bits.taglo
   io.out.bits.iCache <> icache1.out
   // >> bpu ===============================================
-  val bpuOut = Wire(new BpuOutIO)
-  val PCs    = (0 to 3).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
+  val PCs = (0 to 3).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
   // >> >> module ============================================
   val btb = Module(new BranchTargetBuffer())
   val pht = Module(new PatternHistoryTable())
@@ -180,10 +173,10 @@ class IfStage1 extends MycpuModule {
   // >> >> >> read =========================================
   (0 to 3).foreach(i => {
     val btbout = btb.access(PCs(i))
-    bpuOut.brType(i)        := btbout.instType
-    bpuOut.predictTarget(i) := btbout.target
     val phtout = pht.access(PCs(i))
-    bpuOut.takenMask(i) := phtout.counters(phtout.his) > "b01".U
+    io.out.bits.predictResult(i).brType  := btbout.instType
+    io.out.bits.predictResult(i).target  := btbout.target
+    io.out.bits.predictResult(i).counter := phtout
   })
 
   // use regs in, only combinatorial logic ================

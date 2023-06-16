@@ -113,7 +113,7 @@ class Dispatcher extends MycpuModule {
     }
   })
 
-  // val freeList = Module(new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx))
+  val freeList = Module(new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx))
 
   //TODO:some inst can go to main/sub alurs;some can only goto sub alurs
   val noInst = (dispatchNum).U

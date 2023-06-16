@@ -32,28 +32,30 @@ class PreIf extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val redirect  = Flipped(new FrontRedirctIO)
-      val fromBpu   = Flipped(new BpuOutIO)
+      val fromBpu   = Input(Vec(fetchNum, new PredictResultBundle))
       val alignMask = Input(UInt(fetchNum.W))
       val fire      = Input(Bool())
       val pcVal     = Input(UWord)
     }
     val out = new PreIfOutIO
   })
-  val validBranch = UInt(4.W)
-  (0 to 3).map(i => {
-    // is branch inst and pht predict take
-    val isTakeBr = io.in.fromBpu.takenMask(i) && io.in.fromBpu.brType(i) === BranchType.b
-    // predict take branch or jump is valid branch
-    validBranch(i) := (isTakeBr || BranchType.isJump(io.in.fromBpu.brType(i))) && io.in.alignMask(i)
+  val validBranch = Wire(UInt(fetchNum.W))
+  val bpuInfo     = Vec(fetchNum, new PredictResultBundle)
+  val takeMask    = Wire(UInt(fetchNum.W))
+  (0 to 3).foreach(i => {
+    bpuInfo(i)  := io.in.fromBpu(i)
+    takeMask(i) := bpuInfo(i).counter > 1.U
+    val isTakeBr = takeMask(i) && bpuInfo(i).brType === BranchType.b
+    validBranch(i) := (isTakeBr || BranchType.isJump(bpuInfo(i).brType)) && io.in.alignMask(i)
   })
   val preDest = Wire(UWord)
   val takeDs  = Wire(Bool())
   (preDest, takeDs) := PriorityMux(
     Seq(
-      validBranch(0) -> (io.in.fromBpu.predictTarget(0), io.in.fromBpu.takenMask(1)),
-      validBranch(1) -> (io.in.fromBpu.predictTarget(1), io.in.fromBpu.takenMask(2)),
-      validBranch(2) -> (io.in.fromBpu.predictTarget(2), io.in.fromBpu.takenMask(3)),
-      validBranch(3) -> (io.in.fromBpu.predictTarget(3), false.B)
+      validBranch(0) -> (bpuInfo(0).target, takeMask(1)),
+      validBranch(1) -> (bpuInfo(1).target, takeMask(2)),
+      validBranch(2) -> (bpuInfo(2).target, takeMask(3)),
+      validBranch(3) -> (bpuInfo(3).target, false.B)
     )
   )
   val hasValidBranch = validBranch.orR

@@ -4,13 +4,11 @@ import bundle._
 import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
-import chisel3.util.log2Up
 import utils.MultiQueue
-import chisel3.util.RegEnable
 
 class SRATWriteBackIO extends MycpuBundle {
-  val wbADest = ARegIdx
-  val wbPDest = PRegIdx
+  val aDest = ARegIdx
+  val pDest = PRegIdx
 }
 
 /**
@@ -25,14 +23,30 @@ class SRATWriteBackIO extends MycpuBundle {
   * next cycle inPrf := false
   * in total,  src < wb < dest
   */
+
+/**
+  * WAW
+  *  wb change inprf to true if(wb.p = srat(wb.a).p)
+  *  dest change inprf to false,change pIdx(younger has higher priority)
+  *
+  * RAW
+  *   (wb.a = someInst.a) & (wb.p = srat(wb.a).p) -> change in prf
+  *   dest.a = younger.a  -> change inprf and pdest and prev(younger higher priority)
+  *
+  * about InstARegsIdxBundle:(src0, src1, dest)
+  *      dest is 0 if !wen,else = destAreg
+  *      src is 0 if !needSrcAreg,else = srcAregs
+  *
+  * wb.valid is pipex_valid
+  * currPDest.valid is dper.slot fire
+  */
 class SRAT extends MycpuModule {
   val io = IO(new Bundle {
-
     val src = Vec(
       renameNum,
       new Bundle {
-        val in  = Input(Vec(srcDataNum, ARegIdx))
-        val out = Output(Vec(srcDataNum, new SRATEntry))
+        val in  = Input(Vec(srcDataNum, ARegIdx)) //to get srcs p
+        val out = Output(Vec(srcDataNum, new SRATEntry)) //srcs p
       }
     )
     val dest = Vec(
@@ -40,28 +54,71 @@ class SRAT extends MycpuModule {
       new Bundle {
         val currADest = Input(ARegIdx) //to get prev
         val prevPDest = Output(PRegIdx) //prev
-        val currPDest = Valid(Input(PRegIdx)) //to write in
+        val currPDest = Flipped(Valid(PRegIdx)) //to write in
       }
     )
     val wb = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
   })
 
-  //TODO:change init value
-  val sratEntries = RegInit(VecInit(Seq.fill(32)(0.U.asTypeOf(new SRATEntry))))
-  List.tabulate(renameNum)(i => {
-    List.tabulate(srcDataNum)(j => (io.src(i).out(j) := sratEntries(io.src(i).in(j))))
-    io.dest(i).prevPDest := sratEntries(io.dest(i).currADest).pIdx
+  //areg0 -> (0,true)
+  val pIdxMap = RegInit(VecInit((0 until aRegNum).map(i => i.U)))
+  val inPrf   = RegInit(VecInit(Seq.fill(aRegNum)(true.B)))
 
+  //read from srat:lowest priority
+  //num0 areg will get preg=0,inprf=1
+  List.tabulate(renameNum)(i => {
+    List.tabulate(srcDataNum)(j => {
+      io.src(i).out(j).inPrf := inPrf(io.src(i).in(j))
+      io.src(i).out(j).pIdx  := pIdxMap(io.src(i).in(j))
+    })
+    io.dest(i).prevPDest := pIdxMap(io.dest(i).currADest)
+  })
+
+  //wb change inprf:middle priority
+  //io.wb.valid is pipex_valid(whether has valid inst)
+  //aDest=0 actually not change anything
+  List.tabulate(retireNum)(i =>
+    when(io.wb(i).valid & (pIdxMap(io.wb(i).bits.aDest) === io.wb(i).bits.pDest)) {
+      inPrf(io.wb(i).bits.aDest) := true.B
+      List.tabulate(renameNum)(i => {
+        List.tabulate(srcDataNum)(j =>
+          when(io.wb(i).bits.aDest === io.src(i).in(j)) { io.src(i).out(j).inPrf := true.B }
+        )
+      })
+    }
+  )
+
+  //dest change inprf:higest priority
+  //io.dest.currPDest.valid = dper.slot.out.fire
+  //if io.dest.currADest===0 ,means !wen
+  //WAW(only last pDest write in)
+  List.tabulate(renameNum)(i => {
+    when(io.dest(i).currPDest.valid & io.dest(i).currADest =/= 0.U) {
+      pIdxMap(io.dest(i).currADest) := io.dest(i).currPDest.bits
+      inPrf(io.dest(i).currADest)   := false.B
+
+      ((i + 1) until renameNum).map(j => {
+        List.tabulate(srcDataNum)(k => {
+          when(io.dest(i).currADest === io.src(j).in(k)) {
+            io.src(j).out(k).inPrf := false.B
+            io.src(j).out(k).pIdx  := io.dest(i).currPDest.bits
+          }
+          when(io.dest(i).currADest === io.dest(j).currADest) {
+            io.dest(j).prevPDest := io.dest(i).currPDest
+          }
+        })
+      })
+    }
   })
 
   def read(aRegsIdx: Vec[InstARegsIdxBundle]) = {
     require(aRegsIdx.length == renameNum)
     List.tabulate(renameNum)(i => {
-      this.io.src(i).in(0)           := aRegsIdx(i).src0
-      this.io.src(i).in(1)           := aRegsIdx(i).src1
-      this.io.dest(i).bits.currADest := aRegsIdx(i).dest
+      this.io.src(i).in(0)      := aRegsIdx(i).src0
+      this.io.src(i).in(1)      := aRegsIdx(i).src1
+      this.io.dest(i).currADest := aRegsIdx(i).dest
     })
-    List.tabulate(renameNum)(i => {})
+    (0 until renameNum).map(i => (this.io.src(i).out, this.io.dest(i).prevPDest))
   }
 }
 
@@ -83,20 +140,20 @@ class dispatchSlot extends MycpuBundle {
   val inst  = new InstBufferOutIO
   val valid = Output(Bool())
 
-  //这三个互相阻塞
   val freeListPopValid = Output(Bool()) //freeList pop valid
   val robReady         = Output(Bool()) //rob是否有相应的空闲槽位，此处无需设置“leadingRobReady”
   val rsReady          = Output(Bool()) //指令对应的rs是否"对其"ready(注意同类型指令只有第一条才会“得到”Rdy)
 
   val readyGo = Output(Bool())
 
-  val toRsBasic = new RsBasicEntry
   //  exception decoder-Rs
   //  decoded   decoder-Rs
   //  destPregAddr freelist-Rs&Rob
   //  srcPregs     srat-Rs
   //  robIndex     Rs
-  val prevPRegIdx = PRegIdx //srat-Rob
+  val toRsBasic = new RsBasicEntry
+  //srat-Rob
+  val prevPDest = PRegIdx
 }
 
 /**
@@ -110,13 +167,8 @@ class dispatchSlot extends MycpuBundle {
   * 1. rob not enough
   * 2. freelist not enough
   * 3. rs conflict
-  * 4. cache inst, cp0 read inst
-  * if 3 inst can not be rename and dispatch, ready for InstBuffer is set false
-  * until 3 inst are dispatched, InstBuffer can pop 3 insts in next cycle
-  *
-  * Dispatcher should maintain a automat to distingush how many insts left
-  * inst must be dispatched in order, so automat only have 4 state(3, 2, 1, 0)
-  * rename WAW/RAW conflict should take automat state into account
+  * 4. cache inst, cp0 read inst<block inst>
+  * 5. mispredict
   */
 class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
@@ -127,9 +179,10 @@ class Dispatcher extends MycpuModule {
     }
     val outFireNum = Output(UInt())
 
+    val robEmpty     = Input(Bool())
+    val isMispredict = Input(Bool())
+
     val out = new Bundle {
-      //Rs decoupled is not "pipeline decoupled"
-      //can treat fire() as wen
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
       val toSubAluRs  = Decoupled(new RsOutIO(kind = FuType.SubAlu))
       val toMduRs     = Decoupled(new RsOutIO(kind = FuType.Mdu))
@@ -137,8 +190,6 @@ class Dispatcher extends MycpuModule {
       val toRob       = Vec(dispatchNum, Decoupled(new DispatchToRobBundle))
     }
   })
-
-  val freeList = Module(new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx))
 
   //TODO:some inst can go to main/sub alurs;some can only goto sub alurs
   val noInst = (dispatchNum).U
@@ -152,56 +203,96 @@ class Dispatcher extends MycpuModule {
     )
   )
 
-  val slots = Wire(Vec(dispatchNum, new dispatchSlot))
+  val freeListSize = 32
+  val freeList = Module(
+    new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx, size = freeListSize, allIn = false)
+  )
+  val decoder = List(Module(new Decoder), Module(new Decoder), Module(new Decoder))
+  val srat    = Module(new SRAT)
+  val slots   = Wire(Vec(dispatchNum, new dispatchSlot))
 
   //just connect(combinational logic)
+  //input:ibf/rob/fl
   List.tabulate(dispatchNum)(i => {
-    slots(i).inst             := io.in.fromInstBuffer(i).bits
-    slots(i).valid            := io.in.fromInstBuffer(i).valid
-    slots(i).rsReady          := false.B //default
-    slots(i).robReady         := io.out.toRob(i).ready
-    slots(i).freeListPopValid := freeList.io.pop(i).valid
+    slots(i).inst  := io.in.fromInstBuffer(i).bits
+    slots(i).valid := io.in.fromInstBuffer(i).valid
 
+    slots(i).toRsBasic.robIndex     := io.in.robIndex + i.U
+    slots(i).robReady               := io.out.toRob(i).ready
+    slots(i).freeListPopValid       := freeList.io.pop(i).valid
     slots(i).toRsBasic.destPregAddr := freeList.io.pop(i).bits
+
+    slots(i).rsReady := false.B //default
   })
 
+  //deal with rsReady
   val mainAluSlot = getSlot(ChiselFuType.MainALU.asUInt)
   val subAluSlot  = getSlot(ChiselFuType.ALU.asUInt)
   val lsuSlot     = getSlot(ChiselFuType.LSU.asUInt)
   val mduSlot     = getSlot(ChiselFuType.MDU.asUInt)
-  //indirect index
-  val rsSlotSel = List(mainAluSlot, subAluSlot, lsuSlot, mduSlot)
-  val toRs      = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
+  val rsSlotSel   = List(mainAluSlot, subAluSlot, lsuSlot, mduSlot)
+  val toRs        = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
   List.tabulate(rsSlotSel.length)(i => {
     when(rsSlotSel(i) =/= noInst) {
       slots(rsSlotSel(i)).rsReady := toRs(i).ready
     }
   })
 
-  slots(0).readyGo := slots(0).robReady & slots(0).freeListPopValid & slots(0).rsReady
+  //blockReg,be aware of priority
+  val blockReg = RegInit(false.B)
+  when(slots(0).valid && decoder(0).io.out.decoded.isBlockInst) { blockReg := true.B }
+  when(io.isMispredict) { blockReg := true.B }
+  when(io.robEmpty) { blockReg := false.B }
+
+  //deal with readyGo
+  slots(0).readyGo :=
+    slots(0).robReady && slots(0).freeListPopValid && slots(0).rsReady &&
+      !(decoder(0).io.out.decoded.isBlockInst && !io.robEmpty) && !io.isMispredict &&
+      !(blockReg && !io.robEmpty)
   List.tabulate(dispatchNum)(i => {
     if (i != 0) {
-      slots(i).readyGo := slots(i).robReady & slots(i).rsReady & slots(i).freeListPopValid & slots(i - 1).readyGo
+      slots(i).readyGo :=
+        slots(i).robReady && slots(i).rsReady && slots(i).freeListPopValid &&
+        slots(i - 1).readyGo &&
+        (!decoder(0).io.out.decoded.isBlockInst) && !io.isMispredict && !(blockReg && !io.robEmpty)
     }
   })
 
-  //io.out.toRob(i).fire indicate that the inst can certainly out at next cycle
+  //io.out.toRob(i).fire === slots(i).out.fire
   io.outFireNum := List.tabulate(dispatchNum)(i => { io.out.toRob(i).fire }).foldRight(0.U)((sum, i) => sum.asUInt +& i)
 
+  //decoder
   List.tabulate(dispatchNum)(i => {
-    io.out.toRob(i).valid    := slots(i).valid & slots(i).readyGo
-    freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
-  })
-
-  val decoder = List(Module(new Decoder), Module(new Decoder), Module(new Decoder))
-  List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in           := slots(i).inst.basic.instr
-    decoder(i).io.in.exception := slots(i).inst.exception
-
+    decoder(i).io.in             := slots(i).inst.basic.instr
+    decoder(i).io.in.exception   := slots(i).inst.exception
     slots(i).toRsBasic.decoded   := decoder(i).io.out.decoded
     slots(i).toRsBasic.exception := decoder(i).io.out.exception
   })
 
+  //srat rename
+  srat.io.wb <> io.in.fromFuWriteBack
+  val slotsAregsIdx = WireInit(VecInit((0 until dispatchNum).map(i => slots(i).inst.aRegsIdx)))
+  val slotsRenamed  = srat.read(aRegsIdx = slotsAregsIdx)
+  List.tabulate(dispatchNum)(i => {
+    srat.io.dest(i).currPDest.bits  := slots(i).toRsBasic.destPregAddr
+    srat.io.dest(i).currPDest.valid := io.out.toRob(i).fire //toRob.fire==slot(i).fire
+    slots(i).toRsBasic.srcPregs     := slotsRenamed(i)._1
+    slots(i).prevPDest              := slotsRenamed(i)._2
+  })
+
+  //to rob/freelist
+  List.tabulate(dispatchNum)(i => {
+    freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
+
+    io.out.toRob(i).valid          := slots(i).valid & slots(i).readyGo
+    io.out.toRob(i).bits.pc        := slots(i).inst.basic.pcVal
+    io.out.toRob(i).bits.prevPDest := slots(i).prevPDest
+    io.out.toRob(i).bits.currADest := slots(i).inst.aRegsIdx.dest
+    io.out.toRob(i).bits.currPDest := slots(i).toRsBasic.destPregAddr
+  })
+
+  //to rs
+  //rs is special
   List.tabulate(toRs.length)(i => {
     when(rsSlotSel(i) === noInst) {
       toRs(i).valid := false.B
@@ -210,7 +301,10 @@ class Dispatcher extends MycpuModule {
       toRs(i).valid      := slots(rsSlotSel(i)).valid & slots(rsSlotSel(i)).readyGo
       toRs(i).bits.basic := slots(rsSlotSel(i)).toRsBasic
     }
-
   })
+  //已经考虑===noInst的情况 =DontCare
+  when(mainAluSlot =/= noInst) {
+    io.out.toMainAluRs.bits.predictResult.get := slots(mainAluSlot).inst.predictResult
+  }
 
 }

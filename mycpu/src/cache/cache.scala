@@ -3,7 +3,6 @@ package config //why?
 import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
-import org.apache.commons.lang3.text.WordUtils
 
 //for cache stage1 in and out
 class CacheInstBundle extends MycpuBundle {

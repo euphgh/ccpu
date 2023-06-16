@@ -2,7 +2,6 @@ package backend
 import bundle._
 import config._
 import chisel3._
-import chisel3.util._
 
 /**
   * no need decoupled,always rdy

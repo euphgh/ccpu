@@ -4,7 +4,6 @@ import bundle._
 import config._
 import backend._
 import chisel3._
-import chisel3.util._
 
 class Lsu extends FuncUnit(FuType.Lsu) {
   val tlb  = IO(new TLBSearchIO)

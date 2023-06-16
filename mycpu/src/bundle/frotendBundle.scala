@@ -63,6 +63,7 @@ class DecodeInstInfoBundle extends MycpuBundle {
   //val srcAregAddrs = Vec(srcDataNum, Output(ARegIdx))
   //val destAregAddr = Output(ARegIdx)
   //val exception    = new (ExceptionInfoBundle)
+  val isBlockInst = Output(Bool())
 }
 
 //no need to declare a readBundle here
@@ -81,8 +82,8 @@ class WbRobBundle extends MycpuBundle {
 }
 
 class RetireBundle extends MycpuBundle {
-  val exception        = new ExceptionInfoBundle
-  val flushBackend     = Output(Bool())
+  val exception        = new ExceptionInfoBundle //exception flush all
+  val flushBackend     = Output(Bool()) //mispredict only flushBackend
   val destAregAddr     = Output(ARegIdx) //to a-rat
   val prevDestPregAddr = Output(PRegIdx) //to freeList
   val destPregAddr     = Output(PRegIdx) //to a-rat
@@ -121,7 +122,6 @@ class IfStage2OutIO extends MycpuBundle {
   val exception     = Output(FrontExcCode())
 }
 
-//Q:need Output?
 class InstARegsIdxBundle extends MycpuBundle {
   val (src0, src1, dest) = (ARegIdx, ARegIdx, ARegIdx)
 }
@@ -158,10 +158,10 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
-  val pc          = UWord // difftest check execution flow
-  val prevPRegIdx = PRegIdx // free when retire
-  val currPRegIdx = PRegIdx // updata A-RAT when retire
-  val currARegIdx = ARegIdx // updata A-RAT when retire
+  val pc        = UWord // difftest check execution flow
+  val prevPDest = PRegIdx // free when retire
+  val currPDest = PRegIdx // updata A-RAT when retire
+  val currADest = ARegIdx // updata A-RAT when retire
 }
 
 /**

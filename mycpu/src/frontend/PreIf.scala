@@ -2,7 +2,6 @@ package frontend
 import chisel3._
 import bundle._
 import config._
-import chisel3.util.Decoupled
 
 class FrontRedirctIO extends MycpuBundle {
   val target = Output(UInt(vaddrWidth.W))

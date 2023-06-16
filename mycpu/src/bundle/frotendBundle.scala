@@ -64,6 +64,7 @@ class DecodeInstInfoBundle extends MycpuBundle {
   //val destAregAddr = Output(ARegIdx)
   //val exception    = new (ExceptionInfoBundle)
   val isBlockInst = Output(Bool())
+  val isBr        = Output(Bool())
 }
 
 //no need to declare a readBundle here

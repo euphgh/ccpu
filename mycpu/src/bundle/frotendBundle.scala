@@ -3,6 +3,7 @@ package bundle
 import chisel3._
 import chisel3.util._
 import config._
+import org.apache.commons.lang3.ObjectUtils
 
 /* 一些基本的bundle，尽量做到解耦 */
 
@@ -22,6 +23,7 @@ class ExceptionInfoBundle extends MycpuBundle {
   val isBd    = Output(Bool())
   val excCode = Output(UInt(excCodeWidth.W))
   val pc      = Output(UWord)
+  val refill  = Output(Bool())
 }
 
 /*
@@ -47,6 +49,9 @@ class ExceptionRedirectBundle extends MycpuBundle {
   val valid      = Output(Bool())
 }
 
+/**
+  * bpu info for per inst
+  */
 class PredictResultBundle extends MycpuBundle {
   val taken  = Output(Bool())
   val brType = Output(BranchType())
@@ -96,18 +101,20 @@ class RetireBundle extends MycpuBundle {
 class BpuOutIO() extends MycpuBundle {
   val predictTarget = Output(Vec(predictNum, UInt(vaddrWidth.W)))
   val takenMask     = Output(UInt(predictNum.W))
-  val brType        = Output(BranchType())
+  val brType        = Output(Vec(predictNum, BranchType()))
 }
 class PreIfOutIO extends MycpuBundle {
   val npc         = Output(UInt(vaddrWidth.W))
-  val isDelaySlot = Output(Bool())
+  val isDelaySlot = Output(Bool()) // tell stage1 alignMask should be b1000
   val flush       = Output(Bool())
 }
 class IfStage1OutIO extends MycpuBundle {
   val pcVal          = Output(UInt(vaddrWidth.W))
   val bpuOut         = new BpuOutIO
   val alignMask      = Output(UInt(fetchNum.W))
+  val fire           = Output(new Bool)
   val tagOfInstGroup = Output(UInt(tagWidth.W))
+  val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
   val iCache         = new CacheStage1OutIO(IcachRoads, false)
 }

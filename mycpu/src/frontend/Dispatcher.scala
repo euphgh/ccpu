@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
 import utils.MultiQueue
+import chisel3.util.log2Up
 
 class SRATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
@@ -140,9 +141,9 @@ class dispatchSlot extends MycpuBundle {
   val inst  = new InstBufferOutIO
   val valid = Output(Bool())
 
-  val freeListPopValid = Output(Bool()) //freeList pop valid
-  val robReady         = Output(Bool()) //rob是否有相应的空闲槽位，此处无需设置“leadingRobReady”
-  val rsReady          = Output(Bool()) //指令对应的rs是否"对其"ready(注意同类型指令只有第一条才会“得到”Rdy)
+  val pDestOk  = Output(Bool()) // not need pdest/related fl slot pop valid
+  val robReady = Output(Bool()) //rob是否有相应的空闲槽位，此处无需设置“leadingRobReady”
+  val rsReady  = Output(Bool()) //指令对应的rs是否"对其"ready(注意同类型指令只有第一条才会“得到”Rdy)
 
   val readyGo = Output(Bool())
 
@@ -193,7 +194,7 @@ class Dispatcher extends MycpuModule {
 
   //TODO:some inst can go to main/sub alurs;some can only goto sub alurs
   val noInst = (dispatchNum).U
-  def getSlot(rsType: UInt): UInt = Mux(
+  def getRsSlot(rsType: UInt): UInt = Mux(
     (slots(0).inst.whichFu === ChiselFuType(rsType)),
     0.U,
     Mux(
@@ -217,19 +218,19 @@ class Dispatcher extends MycpuModule {
     slots(i).inst  := io.in.fromInstBuffer(i).bits
     slots(i).valid := io.in.fromInstBuffer(i).valid
 
-    slots(i).toRsBasic.robIndex     := io.in.robIndex + i.U
-    slots(i).robReady               := io.out.toRob(i).ready
-    slots(i).freeListPopValid       := freeList.io.pop(i).valid
     slots(i).toRsBasic.destPregAddr := freeList.io.pop(i).bits
+    slots(i).toRsBasic.robIndex     := io.in.robIndex + i.U
 
-    slots(i).rsReady := false.B //default
+    slots(i).robReady := io.out.toRob(i).ready
+    slots(i).pDestOk  := (slots(i).inst.aRegsIdx.dest === 0.U) //default
+    slots(i).rsReady  := false.B //default
   })
 
   //deal with rsReady
-  val mainAluSlot = getSlot(ChiselFuType.MainALU.asUInt)
-  val subAluSlot  = getSlot(ChiselFuType.ALU.asUInt)
-  val lsuSlot     = getSlot(ChiselFuType.LSU.asUInt)
-  val mduSlot     = getSlot(ChiselFuType.MDU.asUInt)
+  val mainAluSlot = getRsSlot(ChiselFuType.MainALU.asUInt)
+  val subAluSlot  = getRsSlot(ChiselFuType.ALU.asUInt)
+  val lsuSlot     = getRsSlot(ChiselFuType.LSU.asUInt)
+  val mduSlot     = getRsSlot(ChiselFuType.MDU.asUInt)
   val rsSlotSel   = List(mainAluSlot, subAluSlot, lsuSlot, mduSlot)
   val toRs        = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
   List.tabulate(rsSlotSel.length)(i => {
@@ -238,24 +239,28 @@ class Dispatcher extends MycpuModule {
     }
   })
 
+  //deal with pDestOk
+  val needPdest    = WireInit(VecInit((0 until dispatchNum).map(i => (slots(i).inst.aRegsIdx.dest =/= 0.U))))
+  val cntNeedPdest = Wire(Vec(dispatchNum, UInt(log2Up(dispatchNum).W)))
+  cntNeedPdest(0) := 0.U
+  (1 to dispatchNum).map(i => { cntNeedPdest(i) := cntNeedPdest(i - 1) +& needPdest(i - 1).asUInt }) //cntNeedPdest是总数
+  (0 until dispatchNum).map(i => when(needPdest(i)) { slots(i).pDestOk := freeList.io.pop(cntNeedPdest(i)).valid })
+
   //blockReg,be aware of priority
   val blockReg = RegInit(false.B)
-  when(slots(0).valid && decoder(0).io.out.decoded.isBlockInst) { blockReg := true.B }
   when(io.isMispredict) { blockReg := true.B }
   when(io.robEmpty) { blockReg := false.B }
 
   //deal with readyGo
   slots(0).readyGo :=
-    slots(0).robReady && slots(0).freeListPopValid && slots(0).rsReady &&
+    slots(0).robReady && slots(0).pDestOk && slots(0).rsReady &&
       !(decoder(0).io.out.decoded.isBlockInst && !io.robEmpty) && !io.isMispredict &&
       !(blockReg && !io.robEmpty)
-  List.tabulate(dispatchNum)(i => {
-    if (i != 0) {
-      slots(i).readyGo :=
-        slots(i).robReady && slots(i).rsReady && slots(i).freeListPopValid &&
+  (1 until dispatchNum).map(i => {
+    slots(i).readyGo :=
+      slots(i).robReady && slots(i).rsReady && slots(i).pDestOk &&
         slots(i - 1).readyGo &&
-        (!decoder(0).io.out.decoded.isBlockInst) && !io.isMispredict && !(blockReg && !io.robEmpty)
-    }
+        (!decoder(i).io.out.decoded.isBlockInst) && !io.isMispredict && !(blockReg && !io.robEmpty)
   })
 
   //io.out.toRob(i).fire === slots(i).out.fire
@@ -280,15 +285,20 @@ class Dispatcher extends MycpuModule {
     slots(i).prevPDest              := slotsRenamed(i)._2
   })
 
-  //to rob/freelist
+  //to rob
   List.tabulate(dispatchNum)(i => {
-    freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
-
     io.out.toRob(i).valid          := slots(i).valid & slots(i).readyGo
     io.out.toRob(i).bits.pc        := slots(i).inst.basic.pcVal
     io.out.toRob(i).bits.prevPDest := slots(i).prevPDest
     io.out.toRob(i).bits.currADest := slots(i).inst.aRegsIdx.dest
     io.out.toRob(i).bits.currPDest := slots(i).toRsBasic.destPregAddr
+  })
+
+  //to fl
+  val allowFlPopNum =
+    (0 until dispatchNum).map(i => needPdest(i) & io.out.toRob(i).fire).foldRight(0.U)((sum, i) => sum.asUInt +& i)
+  List.tabulate(dispatchNum)(i => {
+    freeList.io.pop(i).ready := (i.U < allowFlPopNum)
   })
 
   //to rs

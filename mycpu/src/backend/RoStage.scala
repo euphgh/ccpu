@@ -45,6 +45,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   asg(io.out.bits.destPregAddr, io.in.bits.basic.destPregAddr)
   asg(io.out.bits.exception, io.in.bits.basic.exception)
   asg(io.out.bits.robIndex, io.in.bits.basic.robIndex)
+  if (fuKind == FuType.MainAlu) { asg(io.out.bits.predictResult.get, io.in.bits.predictResult.get) }
 
   //select srcData
   val pSrcs = io.in.bits.basic.srcPregs
@@ -60,4 +61,16 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     )
   }
 
+  //wake up
+  val wakeUpSource = Valid(PRegIdx)
+  asg(wakeUpSource.bits, io.out.bits.destPregAddr)
+  asg(wakeUpSource.valid, io.out.fire)
+  if (fuKind == FuType.MainAlu) {
+    BoringUtils.addSource(wakeUpSource, "mAluRoWakeUp")
+  }
+  if (fuKind == FuType.SubAlu) {
+    BoringUtils.addSource(wakeUpSource, "sAluRoWakeUp")
+  }
+
+  //lsu rostage need
 }

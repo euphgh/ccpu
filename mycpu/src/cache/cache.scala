@@ -131,7 +131,7 @@ class CacheStage2[T <: Data](
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
       val ptag        = Output(UInt(tagWidth.W))
-      val isUncache   = Output(Bool())
+      val isUncached  = Output(Bool())
       val fromStage1  = new CacheStage1OutIO(roads, isDcache)
       val isException = Output(Bool())
     }))

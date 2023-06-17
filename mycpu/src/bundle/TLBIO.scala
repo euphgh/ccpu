@@ -1,9 +1,8 @@
 package bundle
 
-import config.MycpuBundle
-import chisel3.util.Decoupled
-import chisel3.util.Valid
+import chisel3.util._
 import chisel3._
+import config._
 
 class TLBEntry extends MycpuBundle {
   val g    = Bool
@@ -19,9 +18,17 @@ class TLBEntry extends MycpuBundle {
   val asid = UInt(8.W)
 }
 
+class TLBSearchRes extends MycpuBundle {
+  val pTag    = UInt(tagWidth.W)
+  val noFound = Bool() // not match or match invalid
+  val dirty   = Bool() // dirty bits
+  val refill  = Bool() // match but not valid
+  val ccAttr  = CCAttr()
+}
+
 class TLBSearchIO extends MycpuBundle {
   val req = Output(UWord)
-  val res = Input(UWord)
+  val res = Input(new TLBSearchRes)
 }
 
 class TLBReadIO extends MycpuBundle {

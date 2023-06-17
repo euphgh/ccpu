@@ -2,8 +2,7 @@ package frontend
 import bundle._
 import config._
 import chisel3._
-import chisel3.util.Decoupled
-import chisel3.util.Valid
+import chisel3.util._
 
 class BtbOutIO extends MycpuBundle {
   val instType = BranchType()
@@ -18,18 +17,83 @@ class BtbOutIO extends MycpuBundle {
   * out should keep out until posedge that in.search.valid is true
   */
 class BranchTargetBuffer extends MycpuModule {
-  val in = new Bundle {
-    val search = Valid(UWord)
-    val update = Valid(new BtbOutIO)
+  val update = IO(new Bundle {
+    val pc   = Input(UWord)
+    val data = Flipped(Valid(new BtbOutIO))
+  })
+  val btbIdxWidth = 10
+  val btbTagWidth = 32 - btbIdxWidth - 2
+  def getBTBTag(address: UInt) = address(31, btbIdxWidth + 2)
+  class BTBEntry extends MycpuBundle {
+    val valid = Bool()
+    val tag   = UInt(btbTagWidth.W)
+    val data  = new BtbOutIO()
   }
-  val out = Output(new BtbOutIO)
+  val ram = SyncReadMem(math.pow(2, btbIdxWidth).toInt, new BTBEntry)
+
+  // can be change for better design
+  def hash(address: UInt) = address(btbIdxWidth + 2 - 1, 2)
+
+  // write ========================================
+  when(update.data.valid) {
+    val wdata = Wire(new BTBEntry)
+    wdata.data  := update.data
+    wdata.valid := true.B
+    wdata.tag   := getBTBTag(update.pc)
+    ram.write(hash(update.pc), wdata)
+  }
+
+  // read ========================================
+  def access(address: UInt) = {
+    val entry = ram.read(hash(address))
+    val res   = Wire(new BtbOutIO)
+    when(entry.valid && (entry.tag === getBTBTag(address))) {
+      res := entry.data
+    }.otherwise {
+      res.target   := address
+      res.instType := BranchType.non
+    }
+    res
+  }
+
 }
 class PatternHistoryTable extends MycpuModule {
-  val in = new Bundle {
-    val search = Valid(UWord)
-    val update = Valid(UInt(2.W))
+  val update = IO(new Bundle {
+    val pc   = Input(UWord)
+    val data = Flipped(Valid(UInt(2.W)))
+  })
+  val phtIdxWidth = 10
+  val phtTagWidth = 32 - phtIdxWidth - 2
+  def getphtTag(address: UInt) = address(31, phtIdxWidth + 2)
+  class phtEntry extends MycpuBundle {
+    val valid = Bool()
+    val tag   = UInt(phtTagWidth.W)
+    val data  = UInt(2.W)
   }
-  val out = Output(UInt(2.W))
+  val ram = SyncReadMem(math.pow(2, phtIdxWidth).toInt, new phtEntry)
+
+  // can be change for better design
+  def hash(address: UInt) = address(phtIdxWidth + 2 - 1, 2)
+
+  // write ========================================
+  when(update.data.valid) {
+    val wdata = Wire(new phtEntry)
+    wdata.valid := true.B
+    wdata.tag   := getphtTag(update.pc)
+    ram.write(hash(update.pc), wdata)
+  }
+
+  // read ========================================
+  def access(address: UInt) = {
+    val entry = ram.read(hash(address))
+    val res   = Wire(UInt(2.W))
+    when(entry.valid && (entry.tag === getphtTag(address))) {
+      res := entry.data
+    }.otherwise {
+      res := 0.U
+    }
+    res
+  }
 }
 
 class BpuUpdateIO extends MycpuBundle {
@@ -63,6 +127,11 @@ class BpuUpdateIO extends MycpuBundle {
   * instantiate BPU in this module, let out.bpuout = bpu.out
   */
 class IfStage1 extends MycpuModule {
+  class ICacheInstIO extends MycpuBundle {
+    val op    = CacheOp()
+    val taglo = UWord
+    val index = UInt(cacheIndexWidth.W)
+  }
   val io = IO(new Bundle {
     val in  = Flipped(new PreIfOutIO)
     val out = Decoupled(new IfStage1OutIO)
@@ -70,14 +139,78 @@ class IfStage1 extends MycpuModule {
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
     val delaySlotOK = Output(Bool()) // only to PreIf
-    val IcacheInst =
-      if (enableCacheInst) Some(Flipped(Valid(new Bundle {
-        val op    = CacheOp()
-        val taglo = UWord
-        val index = UInt(cacheIndexWidth.W)
-        // only need index and tag but offset in cache inst
-      })))
+    val icacheInst =
+      if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
       else None
-
   })
+  // stage regs ==========================================
+  val fakeCacheInst = Flipped(Valid(new ICacheInstIO))
+  fakeCacheInst.valid := false.B
+  val usableCacheInst = io.icacheInst.getOrElse(fakeCacheInst)
+  val isCacheInst     = usableCacheInst.valid
+  val update          = io.in.flush || isCacheInst || io.out.ready
+  val pc              = RegEnable(io.in.npc, "hbfc00000".U, update)
+  val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
+  io.out.fire := io.out.ready
+
+  // use wire io.in direct ================================
+  // >> cache =============================================
+  val icache1 = Module(new CacheStage1())
+  icache1.in.valid                         := update
+  icache1.in.bits.req.index                := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
+  icache1.in.bits.req.offset               := getOffset(io.in.npc)
+  icache1.in.bits.cacheInst.get.valid      := isCacheInst
+  icache1.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
+  icache1.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
+  io.out.bits.iCache <> icache1.out
+  // >> bpu ===============================================
+  val PCs = (0 to 3).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
+  // >> >> module ============================================
+  val btb = Module(new BranchTargetBuffer())
+  val pht = Module(new PatternHistoryTable())
+  // >> >> >> write =======================================
+  btb.update.pc := io.bpuUpdateIn.pc
+  btb.update.data <> io.bpuUpdateIn.btb
+  pht.update.pc := io.bpuUpdateIn.pc
+  pht.update.data <> io.bpuUpdateIn.pht
+  // >> >> >> read =========================================
+  (0 to 3).foreach(i => {
+    val btbout = btb.access(PCs(i))
+    val phtout = pht.access(PCs(i))
+    io.out.bits.predictResult(i).brType  := btbout.instType
+    io.out.bits.predictResult(i).target  := btbout.target
+    io.out.bits.predictResult(i).counter := phtout
+  })
+
+  // use regs in, only combinatorial logic ================
+  // >> output ================
+  val inst4to2  = pc(3, 2)
+  val addrError = pc(1, 0).orR
+  io.out.bits.pcVal := pc
+  import chisel3.util.experimental.decode._
+  val alignMask = decoder(
+    inst4to2,
+    TruthTable(
+      Seq(
+        BitPat("b?00") -> BitPat("b1111"),
+        BitPat("b100") -> BitPat("b1111"),
+        BitPat("b101") -> BitPat("b1110"),
+        BitPat("b110") -> BitPat("b1100"),
+        BitPat("b111") -> BitPat("b1000")
+      ),
+      BitPat("b0000")
+    )
+  )
+  io.out.bits.alignMask := Mux(isDelaySlot, "b1000".U, alignMask)
+  // >> tlb ================
+  io.tlb.req                 := pc
+  io.out.bits.tagOfInstGroup := io.tlb.res.pTag
+  io.out.bits.exception := MuxCase(
+    FrontExcCode.NONE,
+    Seq(
+      addrError -> FrontExcCode.AdEL,
+      io.tlb.res.noFound -> Mux(io.tlb.res.refill, FrontExcCode.RefillTLBL, FrontExcCode.InvalidTLBL)
+    )
+  )
+  io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
 }

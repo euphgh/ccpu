@@ -52,14 +52,14 @@ class PreIf extends MycpuModule {
   val takeDs  = Wire(Bool())
   (preDest, takeDs) := PriorityMux(
     Seq(
-      validBranch(0) -> (bpuInfo(0).target, takeMask(1)),
-      validBranch(1) -> (bpuInfo(1).target, takeMask(2)),
-      validBranch(2) -> (bpuInfo(2).target, takeMask(3)),
+      validBranch(0) -> (bpuInfo(0).target, io.in.alignMask(1)),
+      validBranch(1) -> (bpuInfo(1).target, io.in.alignMask(2)),
+      validBranch(2) -> (bpuInfo(2).target, io.in.alignMask(3)),
       validBranch(3) -> (bpuInfo(3).target, false.B)
     )
   )
   val hasValidBranch = validBranch.orR
-  val alignPC        = Cat(io.in.pcVal(31, 2) + 1.U, "b00".U)
+  val alignPC        = Cat(io.in.pcVal(31, 4) + 1.U, "b0000".U)
   object PreIfState extends ChiselEnum {
     val normal, keepDest = Value
   }

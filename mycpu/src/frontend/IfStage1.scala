@@ -127,6 +127,11 @@ class BpuUpdateIO extends MycpuBundle {
   * instantiate BPU in this module, let out.bpuout = bpu.out
   */
 class IfStage1 extends MycpuModule {
+  class ICacheInstIO extends MycpuBundle {
+    val op    = CacheOp()
+    val taglo = UWord
+    val index = UInt(cacheIndexWidth.W)
+  }
   val io = IO(new Bundle {
     val in  = Flipped(new PreIfOutIO)
     val out = Decoupled(new IfStage1OutIO)
@@ -134,31 +139,29 @@ class IfStage1 extends MycpuModule {
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
     val delaySlotOK = Output(Bool()) // only to PreIf
-    val IcacheInst =
-      if (enableCacheInst) Some(Flipped(Valid(new Bundle {
-        val op    = CacheOp()
-        val taglo = UWord
-        val index = UInt(cacheIndexWidth.W)
-        // only need index and tag but offset in cache inst
-      })))
+    val icacheInst =
+      if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
       else None
   })
   // stage regs ==========================================
-  val isCacheInst = io.IcacheInst.get.valid
-  val update      = io.in.flush || isCacheInst || io.out.ready
-  val pc          = RegEnable(io.in.npc, "hbfc00000".U, update)
-  val isDelaySlot = RegEnable(io.in.isDelaySlot, false.B, update)
+  val fakeCacheInst = Flipped(Valid(new ICacheInstIO))
+  fakeCacheInst.valid := false.B
+  val usableCacheInst = io.icacheInst.getOrElse(fakeCacheInst)
+  val isCacheInst     = usableCacheInst.valid
+  val update          = io.in.flush || isCacheInst || io.out.ready
+  val pc              = RegEnable(io.in.npc, "hbfc00000".U, update)
+  val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
   io.out.fire := io.out.ready
 
   // use wire io.in direct ================================
   // >> cache =============================================
   val icache1 = Module(new CacheStage1())
   icache1.in.valid                         := update
-  icache1.in.bits.req.index                := Mux(isCacheInst, io.IcacheInst.get.bits.index, getAddrIdx(io.in.npc))
+  icache1.in.bits.req.index                := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
   icache1.in.bits.req.offset               := getOffset(io.in.npc)
   icache1.in.bits.cacheInst.get.valid      := isCacheInst
-  icache1.in.bits.cacheInst.get.bits.op    := io.IcacheInst.get.bits.op
-  icache1.in.bits.cacheInst.get.bits.taglo := io.IcacheInst.get.bits.taglo
+  icache1.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
+  icache1.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
   io.out.bits.iCache <> icache1.out
   // >> bpu ===============================================
   val PCs = (0 to 3).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
@@ -181,15 +184,21 @@ class IfStage1 extends MycpuModule {
 
   // use regs in, only combinatorial logic ================
   // >> output ================
-  val instL2sb  = pc(3, 2)
+  val inst4to2  = pc(3, 2)
   val addrError = pc(1, 0).orR
   io.out.bits.pcVal := pc
-  val alignMask = MuxLookup(instL2sb, "b1111".U)(
-    Seq(
-      "b00".U -> "b1111".U,
-      "b01".U -> "b1110".U,
-      "b10".U -> "b1100".U,
-      "b11".U -> "b1000".U
+  import chisel3.util.experimental.decode._
+  val alignMask = decoder(
+    inst4to2,
+    TruthTable(
+      Seq(
+        BitPat("b?00") -> BitPat("b1111"),
+        BitPat("b100") -> BitPat("b1111"),
+        BitPat("b101") -> BitPat("b1110"),
+        BitPat("b110") -> BitPat("b1100"),
+        BitPat("b111") -> BitPat("b1000")
+      ),
+      BitPat("b0000")
     )
   )
   io.out.bits.alignMask := Mux(isDelaySlot, "b1000".U, alignMask)

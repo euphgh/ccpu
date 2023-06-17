@@ -60,20 +60,17 @@ class BasicInstInfoBundle extends MycpuBundle {
 //TODO:need more control bits here
 //note:if not need a src data, just set aRegAddr as 0
 class DecodeInstInfoBundle extends MycpuBundle {
-  //val srcAregAddrs = Vec(srcDataNum, Output(ARegIdx))
-  //val destAregAddr = Output(ARegIdx)
-  //val exception    = new (ExceptionInfoBundle)
+
   val isBlockInst = Output(Bool())
   val isBr        = Output(Bool())
   val memType     = MemType()
+  val mduType     = MduType()
 }
 
-//no need to declare a readBundle here
-//TODO:no need a wen?use addr 0 to unable wen
+//no need a wen,pDest===0 means !wen
 class WPrfBundle extends MycpuBundle {
-  val wen      = Output(Bool())
-  val result   = Output(UInt(dataWidth.W))
-  val destAddr = Output(UInt(pRegAddrWidth.W))
+  val pDest  = PRegIdx
+  val result = UWord
 }
 
 class WbRobBundle extends MycpuBundle {
@@ -151,6 +148,7 @@ class SRATEntry extends MycpuBundle {
 class RsBasicEntry extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
   val decoded      = new DecodeInstInfoBundle
+  val destAregAddr = Output(ARegIdx)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
@@ -191,23 +189,27 @@ class FunctionUnitOutIO extends MycpuBundle {
 }
 
 /**
-  * srcDatas:=mux(pregData,Bypass)
-  *
   * exception for wbRob
   * robIndex for wbRob
-  * destPregAddr is for Wprf
+  * destPregAddr is for Wprf/srat
+  * destAregAddr is for srat
+  *
+  * srcDatas:=mux(pregData,Bypass)
   *
   * the dcachereq is for lsu
   *   index/offset:12 bit cal
-  *   size/memType:gen in Ro Stage(decoupled from decode)
-  *
+  *   memType:take from decode
   *   wWord:load dont care/store read src
+  *
+  *   size:gen in Rostage
   *   wStrb:load dont care/actually store dont care at this stage
   */
 class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
-  val robIndex     = Output(UInt(robIndexWidth.W))
-  val exception    = new ExceptionInfoBundle
+  val robIndex  = Output(UInt(robIndexWidth.W))
+  val exception = new ExceptionInfoBundle
+
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
+  val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
 
   val srcData       = Vec(2, Output(UInt(dataWidth.W)))
@@ -216,28 +218,32 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
 }
 
 /**
+  * wbRob
+  *       change:exception and memReqVaddr
+  *       robIndex keep
+  *       isMispredict=DontCare
+  *
+  * destPregAddr is for Wprf/srat
+  * destAregAddr is for srat
+  *
   * decoded is for mem2:deal with loadData
   *
-  * wbRob change:exception and memReqVaddr
   * tagOfMemReqPaddr is for mem2:hitOrMiss detect
   *
-  * take cache data/meta with us
-  * TODO:storeData not need to take?cause after mem1,store inst get into storeQ
+  * take dCacheReq to dcache2
   */
-
 class MemStage1OutIO extends MycpuBundle {
-  val destPregAddr = Output(UInt(pRegAddrWidth.W))
+  val wbRob = new WbRobBundle
+
+  val destPregAddr = Output(PRegIdx)
+  val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
 
-  val wbRob            = new WbRobBundle
   val tagOfMemReqPaddr = Output(UInt(tagWidth.W))
-
-  val dCache = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
-
+  val dCache           = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
 }
 
 class StoreQueueOutIO extends CacheBasicReq {
-
   // already has index/offset
   val tagOfMemReqPaddr = Output(UInt(tagWidth.W)) //get in mem1
 

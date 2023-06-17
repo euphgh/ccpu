@@ -4,18 +4,6 @@ import config._
 import chisel3._
 import chisel3.util._
 
-/**
-  * robEntry:
-  *  valid
-  *
-  *  pc?(basic)
-  *  instr?(basic)
-  *  prevDestPregAddr
-  *
-  *  memReqVaddr(wbIn)---fu produce
-  *  exception(wbIn)---fu produce
-  *  isMispredict-Boll(wbIn)---fu produce
-  */
 class RobEntry extends MycpuBundle {
   val valid = Bool()
 

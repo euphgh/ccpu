@@ -8,11 +8,6 @@ import chisel3.util.experimental.BoringUtils
 import utils.asg
 import utils.vassert
 
-class bypassBundle extends MycpuBundle {
-  val pDest  = PRegIdx
-  val result = UWord
-}
-
 /**
   * prfData is read in "Backend",connect to io.in
   * instantiate stage in alu/mdu/lsu
@@ -33,15 +28,18 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val datasFromPrf = Vec(srcDataNum, Input(UInt(dataWidth.W)))
     //valid is pipex_valid
     val datasFromBypass =
-      if (FuType.needByPass(fuKind)) Some(Vec(aluBypassNum, Flipped(Valid(new bypassBundle)))) else None
+      if (FuType.needByPassIn(fuKind)) Some(Vec(aluBypassNum, Flipped(Valid(new WPrfBundle)))) else None
   })
+
   //注意，这里的io.in.valid已经代表着pipex_valid
-  io.out.valid := io.in.valid
-  io.in.ready  := !io.in.valid || io.out.fire
+  val readyGo = true.B
+  io.out.valid := io.in.valid && readyGo
+  io.in.ready  := !io.in.valid || io.out.ready && readyGo
 
   //unchange signal
   asg(io.out.bits.decoded, io.in.bits.basic.decoded)
   asg(io.out.bits.destPregAddr, io.in.bits.basic.destPregAddr)
+  asg(io.out.bits.destAregAddr, io.in.bits.basic.destAregAddr)
   asg(io.out.bits.exception, io.in.bits.basic.exception)
   asg(io.out.bits.robIndex, io.in.bits.basic.robIndex)
   if (fuKind == FuType.MainAlu) { asg(io.out.bits.predictResult.get, io.in.bits.predictResult.get) }
@@ -82,5 +80,6 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     asg(dCacheReq.memType.get, io.in.bits.basic.decoded.memType)
     //TODO:size/wstrb
     //use memType get size,use size and memReqVaddr12(1, 0) to get wstrb
+    // wStrb:load dont care/actually store dont care at this stage
   }
 }

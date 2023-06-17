@@ -7,7 +7,8 @@ object FuType extends Enumeration {
   type t = Value
   // 自动赋值枚举成员
   val MainAlu, SubAlu, Lsu, Mdu = Value
-  def needByPass(input: Value) = input == MainAlu || input == SubAlu
+  def needByPassIn(input:  Value) = input == MainAlu || input == SubAlu
+  def needByPassOut(input: Value) = input == MainAlu || input == SubAlu
 }
 
 object BranchType extends ChiselEnum {
@@ -21,6 +22,10 @@ object ChiselFuType extends ChiselEnum {
 // I-Cahce stage1 should decode MemType and addr to LoadSel
 object LoadSel extends ChiselEnum {
   val LW, LB, LBU, LH, LHU, LWL0, LWL1, LWL2, LWR1, LWR2, LWR3 = Value
+}
+
+object MduType extends ChiselEnum {
+  val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ = Value
 }
 
 object CacheOp extends ChiselEnum {
@@ -107,7 +112,7 @@ trait MycpuParam {
 
   val aluBypassNum = 2
 
-  def UWord = UInt(vaddrWidth.W)
+  def UWord = UInt(32.W)
   def UByte = UInt(8.W)
   def UHalf = UInt(16.W)
 

@@ -35,7 +35,6 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val datasFromBypass =
       if (FuType.needByPass(fuKind)) Some(Vec(aluBypassNum, Flipped(Valid(new bypassBundle)))) else None
   })
-
   //注意，这里的io.in.valid已经代表着pipex_valid
   io.out.valid := io.in.valid
   io.in.ready  := !io.in.valid || io.out.fire
@@ -72,5 +71,16 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     BoringUtils.addSource(wakeUpSource, "sAluRoWakeUp")
   }
 
-  //lsu rostage need
+  //for lsu
+  if (fuKind == FuType.Lsu) {
+    val memReqVaddr12 = io.in.bits.memInstOffset.get(12, 0) + io.out.bits.srcData(0)(12, 0) //use "+"
+    val addr          = memReqVaddr12(1, 0)
+    val dCacheReq     = io.out.bits.dCacheReq.get
+    asg(dCacheReq.wWord, io.out.bits.srcData(1))
+    asg(dCacheReq.offset, memReqVaddr12(cacheOffsetWidth - 1, 0))
+    asg(dCacheReq.index, memReqVaddr12(11, cacheOffsetWidth))
+    asg(dCacheReq.memType.get, io.in.bits.basic.decoded.memType)
+    //TODO:size/wstrb
+    //use memType get size,use size and memReqVaddr12(1, 0) to get wstrb
+  }
 }

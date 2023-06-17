@@ -6,6 +6,7 @@ import chisel3.util.Decoupled
 import chisel3.util.Valid
 import utils.MultiQueue
 import chisel3.util.log2Up
+import utils._
 
 class SRATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
@@ -316,5 +317,7 @@ class Dispatcher extends MycpuModule {
   when(mainAluSlot =/= noInst) {
     io.out.toMainAluRs.bits.predictResult.get := slots(mainAluSlot).inst.predictResult
   }
-
+  when(lsuSlot =/= noInst) {
+    asg(io.out.toLsuRs.bits.memInstOffset.get, slots(lsuSlot).inst.basic.instr(memInstOffsetWidth - 1, 0))
+  }
 }

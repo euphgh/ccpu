@@ -61,19 +61,20 @@ object FrontExcCode extends ChiselEnum {
 trait MycpuParam {
   // General Parameter for mycpu
 
-  val excCodeWidth     = 5
-  val PaddrWidth       = 32
-  val tagWidth         = 20
-  val cacheIndexWidth  = 7
-  val cacheOffsetWidth = 12 - cacheIndexWidth
-  val vaddrWidth       = 32
-  val instrWidth       = 32
-  val dataWidth        = 32
-  val IcachRoads       = 4
-  val DcachRoads       = 4
-  val IcachLineBytes   = 32
-  val DcachLineBytes   = 32
-  val enableCacheInst  = true
+  val excCodeWidth       = 5
+  val PaddrWidth         = 32
+  val tagWidth           = 20
+  val cacheIndexWidth    = 7
+  val cacheOffsetWidth   = 12 - cacheIndexWidth
+  val vaddrWidth         = 32
+  val instrWidth         = 32
+  val dataWidth          = 32
+  val IcachRoads         = 4
+  val DcachRoads         = 4
+  val IcachLineBytes     = 32
+  val DcachLineBytes     = 32
+  val enableCacheInst    = true
+  val memInstOffsetWidth = 16
 
   val predictNum  = 4
   val fetchNum    = 4

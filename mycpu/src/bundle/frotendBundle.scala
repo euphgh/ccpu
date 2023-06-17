@@ -65,6 +65,7 @@ class DecodeInstInfoBundle extends MycpuBundle {
   //val exception    = new (ExceptionInfoBundle)
   val isBlockInst = Output(Bool())
   val isBr        = Output(Bool())
+  val memType     = MemType()
 }
 
 //no need to declare a readBundle here
@@ -156,6 +157,7 @@ class RsBasicEntry extends MycpuBundle {
 }
 class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val basic         = new RsBasicEntry
+  val memInstOffset = if (kind == FuType.MainAlu) Some(Output(UInt(memInstOffsetWidth.W))) else None
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {

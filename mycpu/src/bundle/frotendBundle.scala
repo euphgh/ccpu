@@ -189,10 +189,10 @@ class FunctionUnitOutIO extends MycpuBundle {
 }
 
 /**
-  * TODO:put lsu inst.offset in decoded
-  * srcDatas means data read from pReg
+  * srcDatas:=mux(pregData,Bypass)
   *
-  * wbRob not change
+  * exception for wbRob
+  * robIndex for wbRob
   * destPregAddr is for Wprf
   *
   * the dcachereq is for lsu
@@ -203,12 +203,14 @@ class FunctionUnitOutIO extends MycpuBundle {
   *   wStrb:load dont care/actually store dont care at this stage
   */
 class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
-  val wbRob        = new WbRobBundle
+  val robIndex     = Output(UInt(robIndexWidth.W))
+  val exception    = new ExceptionInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val decoded      = new DecodeInstInfoBundle
 
-  val srcDatas  = Vec(2, Output(UInt(dataWidth.W)))
-  val dCacheReq = if (kind == FuType.Lsu.id) Some(new DcacheReq(toCacheStage = 1)) else None
+  val srcData       = Vec(2, Output(UInt(dataWidth.W)))
+  val dCacheReq     = if (kind == FuType.Lsu.id) Some(new DcacheReq(toCacheStage = 1)) else None
+  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 
 /**

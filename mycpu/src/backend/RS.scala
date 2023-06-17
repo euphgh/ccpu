@@ -99,6 +99,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   )
 
   //wake-up
+  //note that mainAluRs.io.inteWakeUp.fromMainAlu.valid always false(same for the subAluRs)
   val wakeUpBroad = List(io.inteWakeUp.fromMainAlu, io.inteWakeUp.fromSubAlu, io.inteWakeUp.fromLsu)
   List.tabulate(wakeUpBroad.length)(i =>
     List.tabulate(rsSize)(j => {
@@ -106,6 +107,8 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
       srcsWaken(j)(1) := (wakeUpBroad(i).bits === rsEntries(j).basic.srcPregs(1).pIdx && wakeUpBroad(i).valid)
     })
   )
+  //alu wakeUp intra-group
+  //malu和salu wakeUp each other
   if (rsKind == FuType.MainAlu || rsKind == FuType.SubAlu) {
     List.tabulate(rsSize)(i => {
       srcsWaken(i)(0) := (rsEntries(deqSlot).basic.destPregAddr === rsEntries(i).basic.srcPregs(0).pIdx && io.out.fire)

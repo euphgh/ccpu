@@ -1,9 +1,9 @@
-package config //why?
+package cache
 
 import chisel3._
+import config._
 import chisel3.util.Decoupled
 import chisel3.util.Valid
-import org.apache.commons.lang3.text.WordUtils
 
 //for cache stage1 in and out
 class CacheInstBundle extends MycpuBundle {
@@ -122,11 +122,11 @@ class CacheStage1(
   * it waiting redirect signal to set it ready
   */
 class CacheStage2[T <: Data](
-  roads:     Int     = 4,
-  lineBytes: Int     = 8,
-  isDcache:  Boolean = false,
-  userGen:   T
-)(trans:     (UInt => T))
+  roads:     Int         = 4,
+  lineBytes: Int         = 8,
+  isDcache:  Boolean     = false,
+  userGen:   T           = UInt(0.W),
+  trans:     (UInt => T) = (x: UInt) => { 0.U })
     extends MycpuModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {

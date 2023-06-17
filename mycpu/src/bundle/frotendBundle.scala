@@ -3,6 +3,7 @@ package bundle
 import chisel3._
 import chisel3.util._
 import config._
+import cache._
 import org.apache.commons.lang3.ObjectUtils
 
 /* 一些基本的bundle，尽量做到解耦 */
@@ -101,24 +102,35 @@ class PreIfOutIO extends MycpuBundle {
   val isDelaySlot = Output(Bool()) // tell stage1 alignMask should be b1000
   val flush       = Output(Bool())
 }
+
+/**
+  * should be fast, because in one cycle
+  */
+class IfStage1ToPreIf extends MycpuBundle {
+  val stage1Rdy  = Output(Bool())
+  val pcVal      = Output(UInt(vaddrWidth.W))
+  val dsFetched  = Output(Bool())
+  val hasBranch  = Output(Bool())
+  val predictDst = Output(UWord)
+}
+
+/**
+  * can be slow, register will stage them
+  */
 class IfStage1OutIO extends MycpuBundle {
+  val validMask      = Output(Vec(fetchNum, Bool()))
   val pcVal          = Output(UInt(vaddrWidth.W))
-  val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
-  val alignMask      = Output(UInt(fetchNum.W))
-  val fire           = Output(new Bool)
   val tagOfInstGroup = Output(UInt(tagWidth.W))
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
   val iCache         = new CacheStage1OutIO(IcachRoads, false)
+  val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
 }
 
-//TODO:may declare a bundle for basic/predictres/exception (name what?)
-class IfStage2OutIO extends MycpuBundle {
-  val predictResult = Vec(fetchNum, new PredictResultBundle)
-  val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
-  val validMask     = Vec(fetchNum, Bool())
-  val validNum      = Output(UInt(log2Up(fetchNum).W))
-  val exception     = Output(FrontExcCode())
+class InstBuffEntry extends MycpuBundle {
+  val predictResult = new PredictResultBundle
+  val basicInstInfo = new BasicInstInfoBundle
+  val exception     = FrontExcCode()
 }
 
 //Q:need Output?

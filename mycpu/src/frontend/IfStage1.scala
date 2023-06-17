@@ -3,6 +3,8 @@ import bundle._
 import config._
 import chisel3._
 import chisel3.util._
+import chisel3.experimental.conversions._
+import cache._
 
 class BtbOutIO extends MycpuBundle {
   val instType = BranchType()
@@ -133,9 +135,10 @@ class IfStage1 extends MycpuModule {
     val index = UInt(cacheIndexWidth.W)
   }
   val io = IO(new Bundle {
-    val in  = Flipped(new PreIfOutIO)
-    val out = Decoupled(new IfStage1OutIO)
-    val tlb = new TLBSearchIO
+    val in      = Flipped(new PreIfOutIO)
+    val out     = Decoupled(new IfStage1OutIO)
+    val toPreIf = new IfStage1ToPreIf
+    val tlb     = new TLBSearchIO
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
     val delaySlotOK = Output(Bool()) // only to PreIf
@@ -174,18 +177,43 @@ class IfStage1 extends MycpuModule {
   pht.update.pc := io.bpuUpdateIn.pc
   pht.update.data <> io.bpuUpdateIn.pht
   // >> >> >> read =========================================
+  val btbout = Vec(fetchNum, new BtbOutIO)
+  val phtout = Vec(fetchNum, UInt(2.W))
+  val bpuout = Vec(fetchNum, new PredictResultBundle)
   (0 to 3).foreach(i => {
-    val btbout = btb.access(PCs(i))
-    val phtout = pht.access(PCs(i))
-    io.out.bits.predictResult(i).brType  := btbout.instType
-    io.out.bits.predictResult(i).target  := btbout.target
-    io.out.bits.predictResult(i).counter := phtout
+    btbout(i)         := btb.access(PCs(i))
+    phtout(i)         := pht.access(PCs(i))
+    bpuout(i).brType  := btbout(i).instType
+    bpuout(i).target  := btbout(i).target
+    bpuout(i).counter := phtout
   })
+  io.out.bits.predictResult := bpuout
+  // >> >> >> Mask and Dest ===============================
+  val validBranch = Wire(UInt(fetchNum.W))
+  val takeMask    = Wire(UInt(fetchNum.W))
+  val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
+  (0 to 3).foreach(i => {
+    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).brType === BranchType.b
+    val isTakeJp = BranchType.isJump(bpuout(i).brType)
+    takeMask(i)    := isTakeJp || isTakeBr
+    validBranch(i) := takeMask(i) && alignMask(i)
+  })
+  (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
+    Seq(
+      validBranch(0) -> (bpuout(0).target, alignMask(1), "b1100".U),
+      validBranch(1) -> (bpuout(1).target, alignMask(2), "b1110".U),
+      validBranch(2) -> (bpuout(2).target, alignMask(3), "b1100".U),
+      validBranch(3) -> (bpuout(3).target, false.B, DontCare)
+    )
+  )
+  io.toPreIf.hasBranch  := validBranch.orR
+  io.out.bits.validMask := Mux(io.toPreIf.hasBranch && io.toPreIf.dsFetched, dsMask, alignMask)
 
   // use regs in, only combinatorial logic ================
   // >> output ================
   val inst4to2  = pc(3, 2)
   val addrError = pc(1, 0).orR
+  io.toPreIf.pcVal  := pc
   io.out.bits.pcVal := pc
   import chisel3.util.experimental.decode._
   val alignMask = decoder(
@@ -201,7 +229,6 @@ class IfStage1 extends MycpuModule {
       BitPat("b0000")
     )
   )
-  io.out.bits.alignMask := Mux(isDelaySlot, "b1000".U, alignMask)
   // >> tlb ================
   io.tlb.req                 := pc
   io.out.bits.tagOfInstGroup := io.tlb.res.pTag

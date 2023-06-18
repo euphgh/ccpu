@@ -16,7 +16,7 @@ import chisel3.util._
   *  val memType = MemType()
   */
 
-//TODO:here the entry is type output,change to simple signal is easy
+//no need to write a class for storeQueue
 class StoreQueueEntry extends StoreQueueOutIO {
   val valid = Output(Bool())
 }
@@ -26,4 +26,5 @@ class StoreQueue extends MycpuModule {
     val in  = Flipped(Decoupled(new StoreQueueOutIO))
     val out = Decoupled(new StoreQueueOutIO)
   })
+
 }

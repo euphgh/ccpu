@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util._
 
 /**
-  * TODO: load inst wake up :use addsink?
+  * for now,no load inst wake up
   *
   * connect by pipeline
   * in = Mux (RoStage.out and StoreQ.out)

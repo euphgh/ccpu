@@ -27,6 +27,12 @@ object LoadSel extends ChiselEnum {
 object MduType extends ChiselEnum {
   val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ = Value
 }
+object SpecialType extends ChiselEnum {
+  val LOAD, STORE, MTC0, MTHI, MTLO, ERET, NON = Value
+}
+object BlockType extends ChiselEnum {
+  val CACHEINST, MFC0, NON = Value
+}
 
 object CacheOp extends ChiselEnum {
   val IndexInvalidI          = Value("b00000".U)

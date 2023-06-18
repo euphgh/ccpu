@@ -7,6 +7,7 @@ import chisel3._
 import utils._
 import chisel3.util._
 
+//TODO:must set isMispredict = false
 class Lsu extends FuncUnit(FuType.Lsu) {
   val tlb  = IO(new TLBSearchIO)
   val dram = IO(new DramIO)

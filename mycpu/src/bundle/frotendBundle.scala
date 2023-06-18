@@ -57,14 +57,13 @@ class BasicInstInfoBundle extends MycpuBundle {
   val pcVal = Output(UInt(vaddrWidth.W))
 }
 
-//TODO:need more control bits here
-//note:if not need a src data, just set aRegAddr as 0
+//TODO:@
 class DecodeInstInfoBundle extends MycpuBundle {
-
-  val isBlockInst = Output(Bool())
-  val isBr        = Output(Bool())
+  val blockType   = BlockType()
+  val brType      = BranchType()
   val memType     = MemType()
   val mduType     = MduType()
+  val specialType = SpecialType()
 }
 
 //no need a wen,pDest===0 means !wen
@@ -77,7 +76,7 @@ class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
   val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
-  val memReqVaddr  = Output(UInt(vaddrWidth.W))
+  val takeWord     = Output(UWord) //for ldst it's memReqVaddr,for mtxx it's wdata
 }
 
 class RetireBundle extends MycpuBundle {
@@ -147,22 +146,27 @@ class SRATEntry extends MycpuBundle {
   */
 class RsBasicEntry extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
-  val decoded      = new DecodeInstInfoBundle
+  val decoded      = new DecodeInstInfoBundle //TODO:delete this and fix other place
   val destAregAddr = Output(ARegIdx)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
 }
 class RsOutIO(kind: FuType.t) extends MycpuBundle {
-  val basic         = new RsBasicEntry
+  val basic = new RsBasicEntry
+  //val decoded=new(DecodeInstInfoBundle(kind))TODO:
   val memInstOffset = if (kind == FuType.MainAlu) Some(Output(UInt(memInstOffsetWidth.W))) else None
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
+
   val pc        = UWord // difftest check execution flow
   val prevPDest = PRegIdx // free when retire
   val currPDest = PRegIdx // updata A-RAT when retire
   val currADest = ARegIdx // updata A-RAT when retire
+
+  val specialType = SpecialType()
+  val c0Addr      = CP0Idx //for mtc0,other dontcare
 }
 
 /**

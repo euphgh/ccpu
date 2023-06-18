@@ -155,7 +155,10 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     deqSlot := OHToUInt(List.tabulate(rsSize)(i => ~(ageMask(i).asUInt & slotsRdy.asUInt).orR))
   }
   if (rsKind == FuType.MainAlu) {
-    val isBranch = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.decoded.isBr))) //TODO:fix decodeInfo
+    val isBranch =
+      WireInit(
+        VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.decoded.brType =/= BranchType.non))
+      )
     deqSlot := OHToUInt(
       List.tabulate(rsSize)(i =>
         (~(ageMask(i).asUInt & isBranch.asUInt).orR & isBranch(i))

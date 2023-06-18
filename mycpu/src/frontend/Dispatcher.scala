@@ -7,8 +7,9 @@ import chisel3.util.Valid
 import utils.MultiQueue
 import chisel3.util.log2Up
 import utils._
+import chisel3.util.Cat
 
-class SRATWriteBackIO extends MycpuBundle {
+class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
   val pDest = PRegIdx
 }
@@ -59,7 +60,8 @@ class SRAT extends MycpuModule {
         val currPDest = Flipped(Valid(PRegIdx)) //to write in
       }
     )
-    val wb = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
+    val wb      = Vec(retireNum, Flipped(Valid(new RATWriteBackIO)))
+    val recover = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
   })
 
   //areg0 -> (0,true)
@@ -112,6 +114,12 @@ class SRAT extends MycpuModule {
       })
     }
   })
+  when(io.recover.valid) {
+    List.tabulate(aRegNum)(i => {
+      asg(pIdxMap(i), io.recover.bits(i).pIdx)
+      asg(inPrf(i), io.recover.bits(i).inPrf)
+    })
+  }
 
   def read(aRegsIdx: Vec[InstARegsIdxBundle]) = {
     require(aRegsIdx.length == renameNum)
@@ -176,13 +184,15 @@ class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val fromInstBuffer  = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
-      val fromFuWriteBack = Vec(retireNum, Flipped(Valid(new SRATWriteBackIO)))
+      val fromFuWriteBack = Vec(retireNum, Flipped(Valid(new RATWriteBackIO)))
       val robIndex        = Input(ROBIdx)
     }
-    val outFireNum = Output(UInt())
-
+    val outFireNum   = Output(UInt())
     val robEmpty     = Input(Bool())
     val isMispredict = Input(Bool())
+
+    //valid when flush(mispredictRetire/exception/eret)
+    val recoverSrat = Vec(aRegNum, Flipped(Valid(new SRATEntry)))
 
     val out = new Bundle {
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
@@ -255,13 +265,13 @@ class Dispatcher extends MycpuModule {
   //deal with readyGo
   slots(0).readyGo :=
     slots(0).robReady && slots(0).pDestOk && slots(0).rsReady &&
-      !(decoder(0).io.out.decoded.isBlockInst && !io.robEmpty) && !io.isMispredict &&
+      !(decoder(0).io.out.decoded.blockType =/= BlockType.NON && !io.robEmpty) && !io.isMispredict &&
       !(blockReg && !io.robEmpty)
   (1 until dispatchNum).map(i => {
     slots(i).readyGo :=
       slots(i).robReady && slots(i).rsReady && slots(i).pDestOk &&
         slots(i - 1).readyGo &&
-        (!decoder(i).io.out.decoded.isBlockInst) && !io.isMispredict && !(blockReg && !io.robEmpty)
+        decoder(i).io.out.decoded.blockType === BlockType.NON && !io.isMispredict && !(blockReg && !io.robEmpty)
   })
 
   //io.out.toRob(i).fire === slots(i).out.fire
@@ -277,6 +287,7 @@ class Dispatcher extends MycpuModule {
 
   //srat rename
   srat.io.wb <> io.in.fromFuWriteBack
+  srat.io.recover <> io.recoverSrat
   val slotsAregsIdx = WireInit(VecInit((0 until dispatchNum).map(i => slots(i).inst.aRegsIdx)))
   val slotsRenamed  = srat.read(aRegsIdx = slotsAregsIdx)
   List.tabulate(dispatchNum)(i => {
@@ -288,11 +299,14 @@ class Dispatcher extends MycpuModule {
 
   //to rob
   List.tabulate(dispatchNum)(i => {
-    io.out.toRob(i).valid          := slots(i).valid & slots(i).readyGo
-    io.out.toRob(i).bits.pc        := slots(i).inst.basic.pcVal
-    io.out.toRob(i).bits.prevPDest := slots(i).prevPDest
-    io.out.toRob(i).bits.currADest := slots(i).inst.aRegsIdx.dest
-    io.out.toRob(i).bits.currPDest := slots(i).toRsBasic.destPregAddr
+    asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
+    asg(io.out.toRob(i).bits.pc, slots(i).inst.basic.pcVal)
+    asg(io.out.toRob(i).bits.prevPDest, slots(i).prevPDest)
+    asg(io.out.toRob(i).bits.currADest, slots(i).inst.aRegsIdx.dest)
+    asg(io.out.toRob(i).bits.currPDest, slots(i).toRsBasic.destPregAddr)
+    asg(io.out.toRob(i).bits.specialType, decoder(i).io.out.decoded.specialType)
+    val instr = slots(i).inst.basic.instr
+    asg(io.out.toRob(i).bits.c0Addr, Cat(instr(15, 11), instr(2, 0)))
   })
 
   //to fl

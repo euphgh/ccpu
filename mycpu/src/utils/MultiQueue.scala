@@ -42,8 +42,8 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   private val ptrWidth     = counterWidth + 1
 
   //ring means "+"
-  private val ringBuffer = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
-  private val headPtr    = RegInit(0.U, UInt(ptrWidth.W))
+  val ringBuffer         = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
+  val headPtr            = RegInit(0.U, UInt(ptrWidth.W))
   private val tailPtr    = RegInit(0.U, UInt(ptrWidth.W))
   private val deqFireNum = PopCount(io.pop.map(_.fire))
   private def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth + 1) //must look ahead a cycle

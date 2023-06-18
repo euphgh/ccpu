@@ -23,7 +23,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   //unchange signal
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-  asg(exeOut.wbRob.memReqVaddr, 0.U(vaddrWidth.W)) //DontCare
+  asg(exeOut.wbRob.takeWord, exeIn.srcData(1)) //only mtc0 care
   asg(exeOut.wbRob.isMispredict, false.B) //default,mainAlu may change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
 

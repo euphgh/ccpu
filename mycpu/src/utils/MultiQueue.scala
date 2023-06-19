@@ -75,4 +75,6 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   (0 until deqNum).foreach(i => {
     io.pop(i).bits := ringBuffer(tailPtr + i.U)
   })
+
+  //TODO:flush
 }

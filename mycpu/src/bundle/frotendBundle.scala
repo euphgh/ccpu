@@ -247,16 +247,6 @@ class MemStage1OutIO extends MycpuBundle {
   val dCache           = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
 }
 
-class StoreQueueOutIO extends CacheBasicReq {
-  // already has index/offset
-  val tagOfMemReqPaddr = Output(UInt(tagWidth.W)) //get in mem1
-
-  val size    = Output(UInt(3.W)) //gen in RO
-  val wWord   = Output(UWord) //read in RO
-  val wStrb   = Output(UInt(4.W)) //
-  val memType = Output(MemType()) //gen in RO
-}
-
 //------------------------------------------------------------------------------------------------------
 
 //just use to instantiate exeStageIO in alu/mdu

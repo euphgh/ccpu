@@ -139,7 +139,7 @@ class Dispatcher extends MycpuModule {
   })
 
   val mainAluSlot = getSlot(ChiselFuType.MainALU.asUInt)
-  val subAluSlot  = getSlot(ChiselFuType.ALU.asUInt)
+  val subAluSlot  = getSlot(ChiselFuType.SubALU.asUInt)
   val lsuSlot     = getSlot(ChiselFuType.LSU.asUInt)
   val mduSlot     = getSlot(ChiselFuType.MDU.asUInt)
   //indirect index
@@ -166,5 +166,4 @@ class Dispatcher extends MycpuModule {
     toRs(i).valid            := slots(i).valid & slots(i).readyGo
     freeList.io.pop(i).ready := slots(i).valid & slots(i).readyGo
   })
-
 }

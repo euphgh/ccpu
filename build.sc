@@ -14,10 +14,10 @@ object mycpu extends ScalaModule with ScalafmtModule { m =>
     "-deprecation",
     "-feature",
     "-Xcheckinit",
-    "-Xfatal-warnings",
-    "-Ywarn-dead-code",
-    "-Ywarn-unused",
-    "-Ymacro-annotations"
+    "-Xfatal-warnings"
+    // "-Ywarn-dead-code",
+    // "-Ywarn-unused",
+    // "-Ymacro-annotations"
   )
   override def ivyDeps = Agg(
     ivy"edu.berkeley.cs::chisel3:3.6.0"

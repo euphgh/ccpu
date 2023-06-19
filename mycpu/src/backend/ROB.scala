@@ -7,6 +7,8 @@ import frontend._
 import utils.MultiQueue
 import utils.asg
 
+//0619:meet 3 debug...
+
 class SimpleWriteBundle extends MycpuBundle {
   val wen   = Output(Bool())
   val wdata = Output(UWord)
@@ -49,24 +51,20 @@ class RobEntry extends MycpuBundle {
   *   take for ldst it's memReqVaddr,for mtxx it's wdata
   *
   * the oldest insts should retire from rob
-  *     1.normal(not exception and mispredict)
-  *       just use <prevDestPregAddr> to push freelist
-  *       change the a-rat:
+  *     1.Able
+  *       normal one:
+  *         just use <prevDestPregAddr> to push freelist
+  *         change the a-rat:
   *            use destPregAddr/destAregAddr
+  *       special inst:
+  *           mtc0/eret/hilo/store
+  *       mispredict:
+  *           1st mispredict and not be abandoned by prev exception
+  *           its delayslot slotValid
   *
-  *     2.special
-  *       toCP0
-  *         exception<abnormal>
-  *           <exception>:as basic to CP0
-  *           <memReqVaddr>:as badVaddr to CP0
-  *          mtc0
-  *          eret
-  *       mispredict<abnormal>
-  *         flushBackend(will unlock renameStage.valid)
-  *       storeInst
-  *         send a scommit to storeQueue
-  *       hilo
-  *         send a wen to arch-hilo
+  *     2.disable
+  *         exception abandon itself and its little brother
+  *         mispredict abandon inst after its delayslot
   */
 class ROB extends MycpuModule {
   val io = IO(new Bundle {
@@ -81,7 +79,7 @@ class ROB extends MycpuModule {
       val robIndex = Output(ROBIdx) //to dper
       val robEmpty = Output(Bool()) //to dper
       //valid = normal & instValid
-      val normalRetire = Vec(
+      val retire = Vec(
         retireNum,
         Valid(new Bundle {
           val prevDestPregAddr = Output(PRegIdx) //to fl
@@ -99,12 +97,11 @@ class ROB extends MycpuModule {
         val basic    = new ExceptionInfoBundle
         val badVaddr = Output(UWord)
       }
-      //mispredict only flushBackend
-      val flushBackend = Output(Bool())
+      //mispredict only FlushBackend
+      val mispreFlushBackend = Output(Bool())
     }
   })
-  val robSize    = 32
-  val robEntries = Module(new MultiQueue(dispatchNum, retireNum, new RobEntry, robSize))
+  val robEntries = Module(new MultiQueue(dispatchNum, retireNum, new RobEntry, robNum))
 
   //RobEnqueue
   //Dontcare means write in WB stage
@@ -113,60 +110,139 @@ class ROB extends MycpuModule {
     val enqData = robEnq(i).bits
     asg(robEnq(i).valid, io.in.fromDispatcher(i).valid)
     asg(enqData.fromDispatcher, io.in.fromDispatcher(i).bits)
-    asg(enqData.exception, DontCare)
-    asg(enqData.isMispredict, DontCare)
-    asg(enqData.takeWord, DontCare)
+    enqData.exception    := DontCare
+    enqData.isMispredict := DontCare
+    enqData.takeWord     := DontCare
     asg(io.in.fromDispatcher(i).ready, robEnq(i).ready)
   })
 
   //WB
+  val wdata = (0 until wBNum).map(i => io.in.wbRob(i).bits)
+  // 报错1:似乎是寄存器就会报错？FIXME:
   List.tabulate(wBNum)(i =>
     when(io.in.wbRob(i).valid) {
-      val wdata  = io.in.wbRob(i).bits
-      val wbSlot = robEntries.ringBuffer(wdata.robIndex)
-      asg(wbSlot.exception, wdata.exception)
-      asg(wbSlot.isMispredict, wdata.isMispredict)
-      asg(wbSlot.takeWord, wdata.takeWord)
+      asg(robEntries.ringBuffer(wdata(i).robIndex).exception, wdata(i).exception)
+      asg(robEntries.ringBuffer(wdata(i).robIndex).isMispredict, wdata(i).isMispredict)
+      asg(robEntries.ringBuffer(wdata(i).robIndex).takeWord, wdata(i).takeWord)
     }
   )
 
   //out to dper
+  //报错2:似乎是寄存器就会报错？FIXME:
   asg(io.out.robEmpty, robEntries.empty)
-  asg(io.out.robIndex, robEntries.headPtr)
+  asg(io.out.robIndex, robEntries.headPtr(robIndexWidth, 0))
 
   /**
-    * retire:
-    *     this version is kind of trouble:
-    *       normal and abnormal can retire at one cycle
-    *       but consider of arat-srat(ahilo-shilo),it's a little complicated
-    *       so need another version
+    * retire
+    *   for timing optimize,we don't want this situation happen:
+    *     at certain cycle, arch-state is change ,and spec-state need to be recoverd by arch-state
+    *   so:
+    *     if 1st exception(且他没被某mis给abandon) not in slot 0
+    *       only normal inst out at this cycle
+    *       next cycle the 1st exception come to slot 0,send exception to CP0,CP0 will redirect
+    *       so the outPort of exception just connect retire(0) when retire(0).slotsValid
+    *     else 1st mispredict(且他没被之前的exception给abandon)
+    *       ***we should notice that mispredict(and dslot) can change arch-state
+    *       ***at the same time，it want to flushBackend
+    *           so we delay the "mispreFlushBackend" for a cycle
+    *           be aware of delayslot exception...
     */
-  List.tabulate(retireNum)(i => asg(retireSlot(i).ready, true.B))
-  val retireSlot = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i))))
-  val retireInst = WireInit(VecInit((0 until retireNum).map(i => retireSlot(i).bits)))
 
-  //exception/mispredict
-  //be aware of retireSlot.Valid
-  val exceptionVec = WireInit(
-    VecInit((0 until retireNum).map(i => retireInst(i).exception.happen && retireSlot(i).valid))
+  //报错3:可以不解决(这一句会报错说：ready没有被init)
+  //val retireSlot = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i))))
+  val retireInst = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
+
+  //exception|mispredict   be aware of retireSlot.Valid
+  val mispredictVec = WireInit(
+    VecInit((0 until retireNum).map(i => retireInst(i).isMispredict && robEntries.io.pop(i).valid))
   )
-  val mispredictVec = WireInit(VecInit((0 until retireNum).map(i => retireInst(i).isMispredict && retireSlot(i).valid)))
-  val abnormalVec   = WireInit(VecInit((0 until retireNum).map(i => exceptionVec(i) | mispredictVec(i))))
-  val abandonMask   = Wire(Vec(retireNum, Bool()))
+  val exceptionVec = WireInit(
+    VecInit((0 until retireNum).map(i => retireInst(i).exception.happen && robEntries.io.pop(i).valid))
+  )
+
+  //mask from slot(1stMispredict+2) to the end:
+  val mispredictMask = WireInit(VecInit(Seq.fill(retireNum)(false.B)))
+  if (retireNum > 2) {
+    (2 until retireNum).map(i => {
+      asg(mispredictMask(i), mispredictVec(i - 2) | mispredictMask(i - 1))
+    })
+  }
+
+  //disable mask:note that we do not abandon the 1st mispredict inst and its delayslot
+  val abnormalVec = WireInit(VecInit((0 until retireNum).map(i => exceptionVec(i) | mispredictMask(i))))
+  val disableMask = Wire(Vec(retireNum, Bool()))
   (0 until retireNum).map(i => {
-    if (i == 0) { asg(abandonMask(i), abnormalVec(i)) }
-    else { asg(abandonMask(i), abnormalVec(i) | abandonMask(i - 1)) }
+    if (i == 0) { asg(disableMask(i), abnormalVec(i)) }
+    else { asg(disableMask(i), abnormalVec(i) | disableMask(i - 1)) }
   })
+  //disabled inst can't pop from rob
+  List.tabulate(retireNum)(i => { asg(robEntries.io.pop(i).ready, !disableMask(i)) })
 
   /**
-    * normal retire:
-    *   valid = instValid & !abnormalMask
-    *   feed retire data
+    * deal with retire.valid(retire端口)
+    *   指令有效 & 非mispre退休的下一拍 &没被disableMask
+    *   first Mispredict&notAbandon inst can't go until its delaySlot valid
     */
+  val mispreFlushReg = RegInit(false.B) //mispre正常退休的下一拍将会被拉起
+  val dSlotExceptReg = RegInit(false.B) //记录的是 被允许正常退休的mispre 的delaySlot是否异常
+  (0 until retireNum).map(i => {
+    asg(io.out.retire(i).valid, robEntries.io.pop(i).valid && !disableMask(i) && !mispreFlushReg)
+  })
+  //especially consider ***1st*** mispredict inst
+  //note that the 2nd(or 3rd 4th...)mispreInst's abandon bits in disableMask is certainly true
+  val lastIdx = retireNum - 1
+  (0 until lastIdx).map(i => {
+    when(robEntries.io.pop(i).valid && mispredictVec(i) && !disableMask(i) && !mispreFlushReg) {
+      asg(io.out.retire(i).valid, robEntries.io.pop(i + 1).valid) //be aware:we use delayslot's retireSlot Valid
+      asg(dSlotExceptReg, robEntries.io.pop(i + 1).valid & robEntries.io.pop(i + 1).bits.exception.happen)
+    }
+  })
+  when(robEntries.io.pop(lastIdx).valid && !disableMask(lastIdx) && mispredictVec(lastIdx)) {
+    asg(io.out.retire(lastIdx).valid, false.B)
+  }
+
+  /**
+    * mispre flushBackend:
+    *     延迟一拍才flushBackend，因为mispre也会修改arch状态
+    *     在延迟的那一拍，所有slot都unvalid！(包括例外也不能提交)
+    *     delaySlot是个特殊点，如果它发生了例外，那么在延迟的那一拍他还在，那么我们需要报出这个例外
+    *       如果不延迟一拍，当拍mispre的话，下一拍ROB就空了，没走的例外延迟槽就em(不过其实这里搞个寄存位啥的也能处理)
+    */
+  val mispreCanRetire = WireInit( //notice we use out.retire(i).valid
+    VecInit((0 until retireNum).map(i => io.out.retire(i).valid && mispredictVec(i)))
+  ).asUInt.orR
+  when(mispreCanRetire) { asg(mispreFlushReg, true.B) }
+  when(io.out.mispreFlushBackend) {
+    asg(mispreFlushReg, false.B)
+    asg(dSlotExceptReg, false.B)
+  }
+  asg(io.out.mispreFlushBackend, mispreFlushReg)
+
+  /**
+    * exception
+    *   - 在mispre退休延迟的那一拍不能报例外，除非oldest是上一拍没走掉的例外延迟槽
+    *   - 我们只用oldest连接，因为同一拍，例外和正常指令不能同时退休
+    */
+  val oldestInst = retireInst(0)
+  val oldestType = oldestInst.fromDispatcher.specialType
+  asg(
+    io.out.exception.badVaddr,
+    Mux(
+      (oldestType === SpecialType.LOAD || oldestType === SpecialType.STORE),
+      oldestInst.takeWord, //for ldst,it's memReqVaddr
+      oldestInst.fromDispatcher.pc
+    )
+  )
+  io.out.exception.basic := DontCare //default
+  asg(io.out.exception.basic.happen, false.B) //default=false
+  when(robEntries.io.pop(0).valid && !(mispreFlushReg && !dSlotExceptReg)) {
+    asg(io.out.exception.basic, oldestInst.exception)
+  }
+
+  //simple connect for <retire>
   List.tabulate(retireNum)(i => {
-    val retireOut = io.out.normalRetire(i).bits
+    val retireOut = io.out.retire(i).bits
     //basic
-    asg(io.out.normalRetire(i).valid, retireSlot(i).valid && !abandonMask(i))
     asg(retireOut.prevDestPregAddr, retireInst(i).fromDispatcher.prevPDest)
     asg(retireOut.toArat.aDest, retireInst(i).fromDispatcher.currADest)
     asg(retireOut.toArat.pDest, retireInst(i).fromDispatcher.currPDest)
@@ -185,38 +261,7 @@ class ROB extends MycpuModule {
     }
   })
 
-  /**
-    * abnormal retire:
-    *   mispredict or exception.happen
-    */
-  asg(io.out.exception.badVaddr, DontCare) //default,change when exception happen before any mispredict
-  asg(io.out.exception.basic, DontCare) //default
-  asg(io.out.exception.basic.happen, false.B) //default = false
-  asg(io.out.flushBackend, false.B) //default = false
-  //sel the first abnormal retireInst if abnormal
-  val abnormal    = abnormalVec.asUInt.orR
-  val abnormalSel = UInt(log2Up(retireNum).W)
-  when(abnormal) {
-    asg(
-      abnormalSel,
-      PriorityMux(
-        (0 until retireNum).map(i => abnormalVec(i)),
-        (0 until retireNum).map(_.U)
-      )
-    )
-    val abInst     = retireInst(abnormalSel)
-    val abInstType = abInst.fromDispatcher.specialType
-    asg(io.out.exception.basic, abInst.exception) //happen or not is recorded in exception bundle
-    asg(
-      io.out.exception.badVaddr,
-      Mux(
-        (abInstType === SpecialType.LOAD || abInstType === SpecialType.STORE),
-        abInst.takeWord, //for ldst,it's memReqVaddr
-        abInst.fromDispatcher.pc
-      )
-    )
-    //consider a inst mispredict and exception at the same time,we should ↑exception and ↑mispredict
-    asg(io.out.flushBackend, mispredictVec(abnormalSel))
-  }
-
+  //exceptionVec already consider slotsValid
+  //io.out.mispreFlushBackend is one cycle after mispre retire
+  asg(robEntries.io.flush, io.out.mispreFlushBackend || exceptionVec(0))
 }

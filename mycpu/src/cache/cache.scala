@@ -32,8 +32,9 @@ class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
 }
 
 class CacheStage1OutIO(roads: Int, isDcache: Boolean) extends MycpuBundle {
-  val data = Vec(roads, Output(if (isDcache) UWord else Vec(4, UWord)))
-  val meta = Vec(roads, new CacheMeta(isDcache))
+  val idata = if (!isDcache) Some(Vec(roads, Output(Vec(4, UWord)))) else None
+  val ddata = if (isDcache) Some(Vec(roads, Output(UWord))) else None
+  val meta  = Vec(roads, new CacheMeta(isDcache))
 
   //TODO:not for sure:
   //index和offset应该也要带到CacheStage2?
@@ -122,11 +123,11 @@ class CacheStage1(
   * it waiting redirect signal to set it ready
   */
 class CacheStage2[T <: Data](
-  roads:     Int         = 4,
-  lineBytes: Int         = 8,
-  isDcache:  Boolean     = false,
-  userGen:   T           = UInt(0.W),
-  trans:     (UInt => T) = (x: UInt) => { 0.U })
+  val roads:     Int         = 4,
+  val lineBytes: Int         = 8,
+  val isDcache:  Boolean     = false,
+  val userGen:   T           = UInt(0.W)
+)(val trans:     (UInt => T) = (x: UInt) => { 0.U })
     extends MycpuModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
@@ -138,7 +139,8 @@ class CacheStage2[T <: Data](
 
     val out = Decoupled(new Bundle {
       val toUser = Output(userGen)
-      val data   = Output(if (isDcache) UWord else Vec(fetchNum, UWord))
+      val idata  = if (!isDcache) Some(Output(Vec(fetchNum, UWord))) else None
+      val ddata  = if (isDcache) Some(Output(UWord)) else None
     })
 
     val cacheInst = new Bundle {

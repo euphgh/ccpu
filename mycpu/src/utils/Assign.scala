@@ -8,7 +8,3 @@ object asg {
     left := right
   }
 }
-
-object vassert {
-  def apply(cond: Bool) = {}
-}

@@ -127,10 +127,12 @@ class IfStage1OutIO extends MycpuBundle {
   val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
 }
 
-class InstBuffEntry extends MycpuBundle {
-  val predictResult = new PredictResultBundle
-  val basicInstInfo = new BasicInstInfoBundle
-  val exception     = FrontExcCode()
+class IfStage2OutIO extends MycpuBundle {
+  val predictResult = Vec(fetchNum, new PredictResultBundle)
+  val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
+  val validMask     = Vec(fetchNum, Bool())
+  val validNum      = Output(UInt(log2Up(fetchNum).W))
+  val exception     = Output(FrontExcCode())
 }
 
 //Q:need Output?
@@ -139,10 +141,10 @@ class InstARegsIdxBundle extends MycpuBundle {
 }
 class InstBufferOutIO extends MycpuBundle {
   val basic         = new BasicInstInfoBundle
-  val predictResult = Output(new PredictResultBundle)
-  val exception     = Output(FrontExcCode())
-  val whichFu       = Output(ChiselFuType())
-  val aRegsIdx      = Output(new InstARegsIdxBundle)
+  val predictResult = new PredictResultBundle
+  val exception     = FrontExcCode()
+  val whichFu       = ChiselFuType()
+  val aRegsIdx      = new InstARegsIdxBundle
 }
 
 /**

@@ -167,7 +167,7 @@ class IfStage1 extends MycpuModule {
   icache1.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
   io.out.bits.iCache <> icache1.out
   // >> bpu ===============================================
-  val PCs = (0 to 3).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
+  val PCs = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
   // >> >> module ============================================
   val btb = Module(new BranchTargetBuffer())
   val pht = Module(new PatternHistoryTable())
@@ -180,7 +180,7 @@ class IfStage1 extends MycpuModule {
   val btbout = Vec(fetchNum, new BtbOutIO)
   val phtout = Vec(fetchNum, UInt(2.W))
   val bpuout = Vec(fetchNum, new PredictResultBundle)
-  (0 to 3).foreach(i => {
+  (0 until fetchNum).foreach(i => {
     btbout(i)         := btb.access(PCs(i))
     phtout(i)         := pht.access(PCs(i))
     bpuout(i).brType  := btbout(i).instType
@@ -192,7 +192,7 @@ class IfStage1 extends MycpuModule {
   val validBranch = Wire(UInt(fetchNum.W))
   val takeMask    = Wire(UInt(fetchNum.W))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
-  (0 to 3).foreach(i => {
+  (0 until fetchNum).foreach(i => {
     val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).brType === BranchType.b
     val isTakeJp = BranchType.isJump(bpuout(i).brType)
     takeMask(i)    := isTakeJp || isTakeBr
@@ -200,9 +200,9 @@ class IfStage1 extends MycpuModule {
   })
   (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
     Seq(
-      validBranch(0) -> (bpuout(0).target, alignMask(1), "b1100".U),
-      validBranch(1) -> (bpuout(1).target, alignMask(2), "b1110".U),
-      validBranch(2) -> (bpuout(2).target, alignMask(3), "b1100".U),
+      validBranch(0) -> (bpuout(0).target, alignMask(1), "b0011".U),
+      validBranch(1) -> (bpuout(1).target, alignMask(2), "b0111".U),
+      validBranch(2) -> (bpuout(2).target, alignMask(3), "b1111".U),
       validBranch(3) -> (bpuout(3).target, false.B, DontCare)
     )
   )
@@ -222,11 +222,11 @@ class IfStage1 extends MycpuModule {
       Seq(
         BitPat("b?00") -> BitPat("b1111"),
         BitPat("b100") -> BitPat("b1111"),
-        BitPat("b101") -> BitPat("b1110"),
-        BitPat("b110") -> BitPat("b1100"),
-        BitPat("b111") -> BitPat("b1000")
+        BitPat("b101") -> BitPat("b0111"),
+        BitPat("b110") -> BitPat("b0011"),
+        BitPat("b111") -> BitPat("b0001")
       ),
-      BitPat("b0000")
+      BitPat("b1111")
     )
   )
   // >> tlb ================
@@ -235,7 +235,7 @@ class IfStage1 extends MycpuModule {
   io.out.bits.exception := MuxCase(
     FrontExcCode.NONE,
     Seq(
-      addrError -> FrontExcCode.AdEL,
+      addrError          -> FrontExcCode.AdEL,
       io.tlb.res.noFound -> Mux(io.tlb.res.refill, FrontExcCode.RefillTLBL, FrontExcCode.InvalidTLBL)
     )
   )

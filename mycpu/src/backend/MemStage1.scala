@@ -3,6 +3,7 @@ import bundle._
 import config._
 import chisel3._
 import chisel3.util._
+import cache._
 
 /**
   * TODO: load inst wake up :use addsink?

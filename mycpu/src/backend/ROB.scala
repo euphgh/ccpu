@@ -158,6 +158,28 @@ class ROB extends MycpuModule {
     VecInit((0 until retireNum).map(i => retireInst(i).exception.happen && readyRetire(i)))
   )
 
+  //sel the first mispredict and exception
+  val firException  = retireNum.U //default
+  val firMispredict = retireNum.U //default
+  when(exceptionVec.asUInt.orR) { //prevent undefine assign
+    asg(
+      firException,
+      PriorityMux(
+        (0 until retireNum).map(i => exceptionVec(i)),
+        (0 until retireNum).map(_.U)
+      )
+    )
+  }
+  when(mispredictVec.asUInt.orR) { //prevent undefine assign
+    asg(
+      firMispredict,
+      PriorityMux(
+        (0 until retireNum).map(i => mispredictVec(i)),
+        (0 until retireNum).map(_.U)
+      )
+    )
+  }
+
   //mask from slot(1stMispredict+2) to the end:
   val mispredictMask = WireInit(VecInit(Seq.fill(retireNum)(false.B)))
   if (retireNum > 2) {

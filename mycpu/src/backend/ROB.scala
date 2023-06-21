@@ -161,7 +161,9 @@ class ROB extends MycpuModule {
   //sel the first mispredict and exception
   val firException  = retireNum.U //default
   val firMispredict = retireNum.U //default
-  when(exceptionVec.asUInt.orR) { //prevent undefine assign
+  val hasException  = exceptionVec.asUInt.orR
+  val hasMispredict = mispredictVec.asUInt.orR
+  when(hasException) { //prevent undefine assign
     asg(
       firException,
       PriorityMux(
@@ -170,7 +172,7 @@ class ROB extends MycpuModule {
       )
     )
   }
-  when(mispredictVec.asUInt.orR) { //prevent undefine assign
+  when(hasMispredict) { //prevent undefine assign
     asg(
       firMispredict,
       PriorityMux(
@@ -178,6 +180,48 @@ class ROB extends MycpuModule {
         (0 until retireNum).map(_.U)
       )
     )
+  }
+
+  //automachine
+  object RetireState extends ChiselEnum {
+    val normal, dealDs, retireDs, dealException = Value
+  }
+  import RetireState._
+  val state = RegInit(normal)
+  switch(state) {
+    is(normal) {
+      when(hasException && hasMispredict) {
+        when(firMispredict < firException) {
+          asg(state, dealDs)
+        }
+          .elsewhen(firException < firMispredict) {
+            //if first slot is exception,just flush
+            //otherwise,we should retire normal leading slot at this cycle
+            asg(state, Mux(exceptionVec(0), normal, dealException))
+          }
+          .otherwise {
+            //don't let exception occur in a mispredict inst
+          }
+      }.elsewhen(hasException) {
+        asg(state, Mux(exceptionVec(0), normal, dealException))
+      }.elsewhen(hasMispredict) {
+        asg(state, dealDs)
+      }
+    }
+    is(dealDs) {
+      when(readyRetire(0)) {
+        //if ds is exception,just call an exception(instead of mispreFlush)
+        //next cycle the state should back to normal
+        asg(state, Mux(exceptionVec(0), normal, retireDs))
+      }
+    }
+    is(retireDs) {
+      //at this cycle we can only retire selaySlot
+      asg(state, normal)
+    }
+    is(dealException) {
+      asg(state, normal)
+    }
   }
 
   //mask from slot(1stMispredict+2) to the end:

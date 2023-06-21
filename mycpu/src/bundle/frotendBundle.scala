@@ -166,7 +166,6 @@ class DispatchToRobBundle extends MycpuBundle {
   val currADest = ARegIdx // updata A-RAT when retire
 
   val specialType = SpecialType()
-  val c0Addr      = CP0Idx //for mtc0,other dontcare
 }
 
 /**

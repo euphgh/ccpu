@@ -6,6 +6,7 @@ import chisel3.util._
 import frontend._
 import utils.MultiQueue
 import utils.asg
+import chisel3.util.experimental.BoringUtils
 
 //0619:meet 3 debug...
 
@@ -20,7 +21,6 @@ class Mtc0Bundle extends SimpleWriteBundle {
 
 class RobEntry extends MycpuBundle {
   val fromDispatcher = new DispatchToRobBundle
-  val takeWord       = UWord //for ldst it's memReqVaddr,for mtxx it's wdata
   val exception      = new ExceptionInfoBundle
   val isMispredict   = Output(Bool())
   val done           = Output(Bool())
@@ -80,11 +80,12 @@ class ROB extends MycpuModule {
           val prevDestPregAddr = Output(PRegIdx) //to fl
           val toArat           = new RATWriteBackIO //to arat
           //special inst
-          val scommit  = Output(Bool()) //to storeQ
-          val toArchHi = new SimpleWriteBundle
-          val toArchLo = new SimpleWriteBundle
-          val eret     = Output(Bool()) //to CP0
-          val mtc0     = new Mtc0Bundle //to CP0
+          val scommit      = Output(Bool()) //to storeQ
+          val muldivCommit = Output(Bool())
+          val mthiCommit   = Output(Bool())
+          val mtloCommit   = Output(Bool())
+          val mtc0Commit   = Output(Bool()) //to CP0
+          val eret         = Output(Bool()) //to CP0
         })
       )
       //to CP0
@@ -108,7 +109,6 @@ class ROB extends MycpuModule {
     asg(robEnq(i).bits.done, false.B)
     enqData.exception    := 0.U.asTypeOf(new ExceptionInfoBundle)
     enqData.isMispredict := false.B
-    enqData.takeWord     := 0.U(dataWidth.W)
     asg(io.in.fromDispatcher(i).ready, robEnq(i).ready)
   })
 
@@ -120,7 +120,6 @@ class ROB extends MycpuModule {
       asg(robEntries.ringBuffer(wdata(i).robIndex).done, true.B)
       asg(robEntries.ringBuffer(wdata(i).robIndex).exception, wdata(i).exception)
       asg(robEntries.ringBuffer(wdata(i).robIndex).isMispredict, wdata(i).isMispredict)
-      asg(robEntries.ringBuffer(wdata(i).robIndex).takeWord, wdata(i).takeWord)
     }
   )
 
@@ -236,13 +235,17 @@ class ROB extends MycpuModule {
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.exception.valid)
 
   //exception connect
-  val oldestInst = retireInst(0)
-  val oldestType = oldestInst.fromDispatcher.specialType
+  val oldestInst   = retireInst(0)
+  val oldestType   = oldestInst.fromDispatcher.specialType
+  val memReqVaddr  = UWord
+  val memException = Bool()
+  BoringUtils.addSink(memReqVaddr, "badMemVaddrReg")
+  BoringUtils.addSink(memException, "MemExceptionReg") //无法通过exccode区分开load的取指/访存例外
   asg(
     io.out.exception.bits.badVaddr,
     Mux(
-      (oldestType === SpecialType.LOAD || oldestType === SpecialType.STORE),
-      oldestInst.takeWord, //for ldst,it's memReqVaddr
+      (oldestType === SpecialType.LOAD || oldestType === SpecialType.STORE) && memException,
+      memReqVaddr,
       oldestInst.fromDispatcher.pc
     )
   )
@@ -259,14 +262,8 @@ class ROB extends MycpuModule {
     val instType = retireInst(i).fromDispatcher.specialType
     asg(retireOut.eret, instType === SpecialType.ERET)
     asg(retireOut.scommit, instType === SpecialType.STORE)
-    asg(retireOut.toArchHi.wen, instType === SpecialType.MTHI)
-    asg(retireOut.toArchLo.wen, instType === SpecialType.MTLO)
-    asg(retireOut.mtc0.wen, instType === SpecialType.MTC0)
-    //feed data/addr
-    asg(retireOut.mtc0.addr, retireInst(i).fromDispatcher.c0Addr)
-    List(retireOut.mtc0.wdata, retireOut.toArchHi.wdata, retireOut.toArchLo.wdata).map {
-      case x =>
-        asg(x, retireInst(i).takeWord)
-    }
+    asg(retireOut.mthiCommit, instType === SpecialType.MTHI)
+    asg(retireOut.mtloCommit, instType === SpecialType.MTLO)
+    asg(retireOut.mtc0Commit, instType === SpecialType.MTC0)
   })
 }

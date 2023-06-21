@@ -105,9 +105,10 @@ class ROB extends MycpuModule {
     val enqData = robEnq(i).bits
     asg(robEnq(i).valid, io.in.fromDispatcher(i).valid)
     asg(enqData.fromDispatcher, io.in.fromDispatcher(i).bits)
-    enqData.exception    := DontCare
-    enqData.isMispredict := DontCare
-    enqData.takeWord     := DontCare
+    asg(robEnq(i).bits.done, false.B)
+    enqData.exception    := 0.U.asTypeOf(new ExceptionInfoBundle)
+    enqData.isMispredict := false.B
+    enqData.takeWord     := 0.U(dataWidth.W)
     asg(io.in.fromDispatcher(i).ready, robEnq(i).ready)
   })
 
@@ -116,6 +117,7 @@ class ROB extends MycpuModule {
   // 报错1:似乎是寄存器就会报错？FIXME:
   List.tabulate(wBNum)(i =>
     when(io.in.wbRob(i).valid) {
+      asg(robEntries.ringBuffer(wdata(i).robIndex).done, true.B)
       asg(robEntries.ringBuffer(wdata(i).robIndex).exception, wdata(i).exception)
       asg(robEntries.ringBuffer(wdata(i).robIndex).isMispredict, wdata(i).isMispredict)
       asg(robEntries.ringBuffer(wdata(i).robIndex).takeWord, wdata(i).takeWord)

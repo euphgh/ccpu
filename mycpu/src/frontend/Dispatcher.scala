@@ -189,6 +189,7 @@ class Dispatcher extends MycpuModule {
     }
     val outFireNum   = Output(UInt())
     val robEmpty     = Input(Bool())
+    val stqEmpty     = Input(Bool())
     val isMispredict = Input(Bool())
 
     //valid when flush(mispredictRetire/exception/eret)
@@ -258,20 +259,25 @@ class Dispatcher extends MycpuModule {
   (0 until dispatchNum).map(i => when(needPdest(i)) { slots(i).pDestOk := freeList.io.pop(cntNeedPdest(i)).valid })
 
   //blockReg,be aware of priority
-  val blockReg = RegInit(false.B)
+  val blockReg      = RegInit(false.B)
+  val pipelineEmpty = io.robEmpty && io.stqEmpty
   when(io.isMispredict) { blockReg := true.B }
-  when(io.robEmpty) { blockReg := false.B }
+  when(pipelineEmpty) { blockReg := false.B }
 
   //deal with readyGo
+  val firBlkType = decoder(0).io.out.decoded.blockType
   slots(0).readyGo :=
     slots(0).robReady && slots(0).pDestOk && slots(0).rsReady &&
-      !(decoder(0).io.out.decoded.blockType =/= BlockType.NON && !io.robEmpty) && !io.isMispredict &&
-      !(blockReg && !io.robEmpty)
+      !((firBlkType === BlockType.CACHEINST && !pipelineEmpty) || (firBlkType === BlockType.MFC0 && !io.robEmpty)) &&
+      !io.isMispredict &&
+      !(blockReg && !pipelineEmpty)
   (1 until dispatchNum).map(i => {
     slots(i).readyGo :=
       slots(i).robReady && slots(i).rsReady && slots(i).pDestOk &&
         slots(i - 1).readyGo &&
-        decoder(i).io.out.decoded.blockType === BlockType.NON && !io.isMispredict && !(blockReg && !io.robEmpty)
+        decoder(i).io.out.decoded.blockType === BlockType.NON &&
+        !io.isMispredict &&
+        !(blockReg && pipelineEmpty)
   })
 
   //io.out.toRob(i).fire === slots(i).out.fire

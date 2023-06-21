@@ -19,16 +19,11 @@ class Mtc0Bundle extends SimpleWriteBundle {
 }
 
 class RobEntry extends MycpuBundle {
-  //val pc          = UWord // difftest check execution flow
-  //val prevPDest   = PRegIdx // free when retire
-  //val currPDest   = PRegIdx // updata A-RAT when retire
-  //val currADest   = ARegIdx // updata A-RAT when retire
-  //val specialType = SpecialType()
-  //val c0Addr      = CP0Idx //for mtc0,other dontcare
   val fromDispatcher = new DispatchToRobBundle
   val takeWord       = UWord //for ldst it's memReqVaddr,for mtxx it's wdata
   val exception      = new ExceptionInfoBundle
-  val isMispredict   = Bool()
+  val isMispredict   = Output(Bool())
+  val done           = Output(Bool())
 }
 
 /**

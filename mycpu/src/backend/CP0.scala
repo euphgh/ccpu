@@ -22,10 +22,10 @@ class CP0 extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val fromRob = new Bundle {
-        val exception = Flipped(new Bundle {
+        val exception = Flipped(Valid(new Bundle {
           val basic    = new ExceptionInfoBundle
           val badVaddr = Output(UWord)
-        })
+        }))
         val eret = Input(Bool()) //to CP0
         val mtc0 = Flipped(Valid(new Mtc0Bundle)) //to CP0
       }

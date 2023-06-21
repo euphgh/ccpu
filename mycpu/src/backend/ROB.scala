@@ -54,8 +54,8 @@ class RobEntry extends MycpuBundle {
   *       special inst:
   *           mtc0/eret/hilo/store
   *       mispredict:
-  *           1st mispredict and not be abandoned by prev exception
-  *           its delayslot slotValid
+  *           1st mispredict which not be abandoned by prev exception
+  *           its delayslot slotValid(if !exception)
   *
   *     2.disable
   *         exception abandon itself and its little brother
@@ -88,10 +88,10 @@ class ROB extends MycpuModule {
         })
       )
       //to CP0
-      val exception = new Bundle {
+      val exception = Valid(new Bundle {
         val basic    = new ExceptionInfoBundle
         val badVaddr = Output(UWord)
-      }
+      })
       //mispredict only FlushBackend
       val mispreFlushBackend = Output(Bool())
     }
@@ -141,8 +141,10 @@ class ROB extends MycpuModule {
     *     else 1st mispredict(且他没被之前的exception给abandon)
     *       ***we should notice that mispredict(and dslot) can change arch-state
     *       ***at the same time，it want to flushBackend
-    *           so we delay the "mispreFlushBackend" for a cycle
-    *           be aware of delayslot exception...
+    *           so we just retire mispre at this cycle
+    *           wait for delayslot ok
+    *             if ds exeption(certainly it locate at slot0),send exception to cp0
+    *             else retire it,send mispreFlush next cycle
     */
 
   //报错3:可以不解决(这一句会报错说：ready没有被init)
@@ -183,125 +185,68 @@ class ROB extends MycpuModule {
   }
 
   //automachine
+  asg(io.out.exception.valid, false.B) //default
+  asg(io.out.mispreFlushBackend, false.B) //default
   object RetireState extends ChiselEnum {
-    val normal, dealDs, retireDs, dealException = Value
+    val normal, waitDs, misFlush, exceptFlush = Value
   }
   import RetireState._
   val state = RegInit(normal)
   switch(state) {
     is(normal) {
-      when(hasException && hasMispredict) {
-        when(firMispredict < firException) {
-          asg(state, dealDs)
+      when(hasException && (!hasMispredict || firException < firMispredict)) {
+        when(exceptionVec(0)) {
+          asg(io.out.exception.valid, true.B) //if first slot is exception,just flush and state not change
+          (0 until retireNum).map(i => asg(io.out.retire(i).valid, false.B))
+        }.otherwise {
+          asg(state, exceptFlush) //otherwise, we should delay the exception
+          (0 until retireNum).map(i => asg(io.out.retire(i).valid, i.U < firException)) //retire normal inst
         }
-          .elsewhen(firException < firMispredict) {
-            //if first slot is exception,just flush
-            //otherwise,we should retire normal leading slot at this cycle
-            asg(state, Mux(exceptionVec(0), normal, dealException))
-          }
-          .otherwise {
-            //don't let exception occur in a mispredict inst
-          }
-      }.elsewhen(hasException) {
-        asg(state, Mux(exceptionVec(0), normal, dealException))
       }.elsewhen(hasMispredict) {
-        asg(state, dealDs)
+        asg(state, waitDs)
+        (0 until retireNum).map(i => asg(io.out.retire(i).valid, i.U <= firMispredict)) //don't let ds go
+      }.otherwise {
+        (0 until retireNum).map(i => asg(io.out.retire(i).valid, true.B))
       }
     }
-    is(dealDs) {
+    is(waitDs) {
+      (0 until retireNum).map(i => asg(io.out.retire(i).valid, false.B)) //default
       when(readyRetire(0)) {
-        //if ds is exception,just call an exception(instead of mispreFlush)
-        //next cycle the state should back to normal
-        asg(state, Mux(exceptionVec(0), normal, retireDs))
+        when(exceptionVec(0)) {
+          asg(state, normal) //next cycle the state should back to normal
+          asg(io.out.exception.valid, true.B) //call an exception this cycle
+        }.otherwise {
+          asg(state, misFlush) //next cycle will mispreflushbackend
+          asg(io.out.retire(0).valid, true.B) //should let ds go
+        }
       }
     }
-    is(retireDs) {
-      //at this cycle we can only retire selaySlot
+    is(misFlush) {
       asg(state, normal)
+      asg(io.out.mispreFlushBackend, true.B)
+      (0 until retireNum).map(i => asg(io.out.retire(i).valid, false.B))
     }
-    is(dealException) {
+    is(exceptFlush) {
       asg(state, normal)
+      asg(io.out.exception.valid, true.B)
+      (0 until retireNum).map(i => asg(io.out.retire(i).valid, false.B))
     }
   }
+  List.tabulate(retireNum)(i => { asg(robEntries.io.pop(i).ready, io.out.retire(i).valid) })
+  asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.exception.valid)
 
-  //mask from slot(1stMispredict+2) to the end:
-  val mispredictMask = WireInit(VecInit(Seq.fill(retireNum)(false.B)))
-  if (retireNum > 2) {
-    (2 until retireNum).map(i => {
-      asg(mispredictMask(i), mispredictVec(i - 2) | mispredictMask(i - 1))
-    })
-  }
-
-  //disable mask:note that we do not abandon the 1st mispredict inst and its delayslot
-  val abnormalVec = WireInit(VecInit((0 until retireNum).map(i => exceptionVec(i) | mispredictMask(i))))
-  val disableMask = Wire(Vec(retireNum, Bool()))
-  (0 until retireNum).map(i => {
-    if (i == 0) { asg(disableMask(i), abnormalVec(i)) }
-    else { asg(disableMask(i), abnormalVec(i) | disableMask(i - 1)) }
-  })
-  //disabled inst can't pop from rob
-  List.tabulate(retireNum)(i => { asg(robEntries.io.pop(i).ready, !disableMask(i)) })
-
-  /**
-    * deal with retire.valid(retire端口)
-    *   指令有效 & 非mispre退休的下一拍 &没被disableMask
-    *   first Mispredict&notAbandon inst can't go until its delaySlot valid
-    */
-  val mispreFlushReg = RegInit(false.B) //mispre正常退休的下一拍将会被拉起
-  val dSlotExceptReg = RegInit(false.B) //记录的是 被允许正常退休的mispre 的delaySlot是否异常
-  (0 until retireNum).map(i => {
-    asg(io.out.retire(i).valid, robEntries.io.pop(i).valid && !disableMask(i) && !mispreFlushReg)
-  })
-  //especially consider ***1st*** mispredict inst
-  //note that the 2nd(or 3rd 4th...)mispreInst's abandon bits in disableMask is certainly true
-  val lastIdx = retireNum - 1
-  (0 until lastIdx).map(i => {
-    when(robEntries.io.pop(i).valid && mispredictVec(i) && !disableMask(i) && !mispreFlushReg) {
-      asg(io.out.retire(i).valid, robEntries.io.pop(i + 1).valid) //be aware:we use delayslot's retireSlot Valid
-      asg(dSlotExceptReg, robEntries.io.pop(i + 1).valid & robEntries.io.pop(i + 1).bits.exception.happen)
-    }
-  })
-  when(robEntries.io.pop(lastIdx).valid && !disableMask(lastIdx) && mispredictVec(lastIdx)) {
-    asg(io.out.retire(lastIdx).valid, false.B)
-  }
-
-  /**
-    * mispre flushBackend:
-    *     延迟一拍才flushBackend，因为mispre也会修改arch状态
-    *     在延迟的那一拍，所有slot都unvalid！(包括例外也不能提交)
-    *     delaySlot是个特殊点，如果它发生了例外，那么在延迟的那一拍他还在，那么我们需要报出这个例外
-    *       如果不延迟一拍，当拍mispre的话，下一拍ROB就空了，没走的例外延迟槽就em(不过其实这里搞个寄存位啥的也能处理)
-    */
-  val mispreCanRetire = WireInit( //notice we use out.retire(i).valid
-    VecInit((0 until retireNum).map(i => io.out.retire(i).valid && mispredictVec(i)))
-  ).asUInt.orR
-  when(mispreCanRetire) { asg(mispreFlushReg, true.B) }
-  when(io.out.mispreFlushBackend) {
-    asg(mispreFlushReg, false.B)
-    asg(dSlotExceptReg, false.B)
-  }
-  asg(io.out.mispreFlushBackend, mispreFlushReg)
-
-  /**
-    * exception
-    *   - 在mispre退休延迟的那一拍不能报例外，除非oldest是上一拍没走掉的例外延迟槽
-    *   - 我们只用oldest连接，因为同一拍，例外和正常指令不能同时退休
-    */
+  //exception connect
   val oldestInst = retireInst(0)
   val oldestType = oldestInst.fromDispatcher.specialType
   asg(
-    io.out.exception.badVaddr,
+    io.out.exception.bits.badVaddr,
     Mux(
       (oldestType === SpecialType.LOAD || oldestType === SpecialType.STORE),
       oldestInst.takeWord, //for ldst,it's memReqVaddr
       oldestInst.fromDispatcher.pc
     )
   )
-  io.out.exception.basic := DontCare //default
-  asg(io.out.exception.basic.happen, false.B) //default=false
-  when(robEntries.io.pop(0).valid && !(mispreFlushReg && !dSlotExceptReg)) {
-    asg(io.out.exception.basic, oldestInst.exception)
-  }
+  asg(io.out.exception.bits.basic, oldestInst.exception)
 
   //simple connect for <retire>
   List.tabulate(retireNum)(i => {
@@ -324,8 +269,4 @@ class ROB extends MycpuModule {
         asg(x, retireInst(i).takeWord)
     }
   })
-
-  //exceptionVec already consider slotsValid
-  //io.out.mispreFlushBackend is one cycle after mispre retire
-  asg(robEntries.io.flush, io.out.mispreFlushBackend || exceptionVec(0))
 }

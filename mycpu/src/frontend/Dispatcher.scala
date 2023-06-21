@@ -311,8 +311,6 @@ class Dispatcher extends MycpuModule {
     asg(io.out.toRob(i).bits.currADest, slots(i).inst.aRegsIdx.dest)
     asg(io.out.toRob(i).bits.currPDest, slots(i).toRsBasic.destPregAddr)
     asg(io.out.toRob(i).bits.specialType, decoder(i).io.out.decoded.specialType)
-    val instr = slots(i).inst.basic.instr
-    asg(io.out.toRob(i).bits.c0Addr, Cat(instr(15, 11), instr(2, 0)))
   })
 
   //to fl

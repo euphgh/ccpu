@@ -2,8 +2,7 @@ package cache
 
 import chisel3._
 import config._
-import chisel3.util.Decoupled
-import chisel3.util.Valid
+import chisel3.util._
 
 //for cache stage1 in and out
 class CacheInstBundle extends MycpuBundle {

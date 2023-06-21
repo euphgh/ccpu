@@ -2,7 +2,7 @@ package backend
 import bundle._
 import config._
 import chisel3._
-import chisel3.util._
+import chisel3.util.Valid
 
 /**
   * no need decoupled,always rdy
@@ -21,15 +21,13 @@ import chisel3.util._
 class CP0 extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val exception = new Bundle {
-        val basic    = Flipped(new ExceptionInfoBundle)
-        val badVaddr = Input(UWord) // from mem stage1
-      }
-      val eret = Input(Bool())
-      val mtc0 = new Bundle {
-        val wen   = Input(Bool())
-        val wdata = Input(UWord)
-        val addr  = Input(CP0Idx)
+      val fromRob = new Bundle {
+        val exception = Flipped(new Bundle {
+          val basic    = new ExceptionInfoBundle
+          val badVaddr = Output(UWord)
+        })
+        val eret = Input(Bool()) //to CP0
+        val mtc0 = Flipped(Valid(new Mtc0Bundle)) //to CP0
       }
       val mfc0 = Input(CP0Idx)
     }

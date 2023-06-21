@@ -63,32 +63,31 @@ class BasicInstInfoBundle extends MycpuBundle {
   val pcVal = Output(UInt(vaddrWidth.W))
 }
 
-//TODO:need more control bits here
-//note:if not need a src data, just set aRegAddr as 0
+//TODO:@
 class DecodeInstInfoBundle extends MycpuBundle {
-  val srcAregAddrs = Vec(srcDataNum, Output(ARegIdx))
-  val destAregAddr = Output(ARegIdx)
-  val exception    = new (ExceptionInfoBundle)
+  val blockType   = BlockType()
+  val brType      = BranchType()
+  val memType     = MemType()
+  val mduType     = MduType()
+  val specialType = SpecialType()
 }
 
-//no need to declare a readBundle here
-//TODO:no need a wen?use addr 0 to unable wen
+//no need a wen,pDest===0 means !wen
 class WPrfBundle extends MycpuBundle {
-  val wen      = Output(Bool())
-  val result   = Output(UInt(dataWidth.W))
-  val destAddr = Output(UInt(pRegAddrWidth.W))
+  val pDest  = PRegIdx
+  val result = UWord
 }
 
 class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
   val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
-  val memReqVaddr  = Output(UInt(vaddrWidth.W))
+  val takeWord     = Output(UWord) //for ldst it's memReqVaddr,for mtxx it's wdata
 }
 
 class RetireBundle extends MycpuBundle {
-  val exception        = new ExceptionInfoBundle
-  val flushBackend     = Output(Bool())
+  val exception        = new ExceptionInfoBundle //exception flush all
+  val flushBackend     = Output(Bool()) //mispredict only flushBackend
   val destAregAddr     = Output(ARegIdx) //to a-rat
   val prevDestPregAddr = Output(PRegIdx) //to freeList
   val destPregAddr     = Output(PRegIdx) //to a-rat
@@ -135,7 +134,6 @@ class IfStage2OutIO extends MycpuBundle {
   val exception     = Output(FrontExcCode())
 }
 
-//Q:need Output?
 class InstARegsIdxBundle extends MycpuBundle {
   val (src0, src1, dest) = (ARegIdx, ARegIdx, ARegIdx)
 }
@@ -162,19 +160,27 @@ class SRATEntry extends MycpuBundle {
   */
 class RsBasicEntry extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
-  val decoded      = new DecodeInstInfoBundle
+  val decoded      = new DecodeInstInfoBundle //TODO:delete this and fix other place
+  val destAregAddr = Output(ARegIdx)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
 }
-class RsOutIO(kind: FuType.t) extends RsBasicEntry {
-  val predictResult = if (kind == FuType.MainAlu) Some(Output(new PredictResultBundle)) else None
+class RsOutIO(kind: FuType.t) extends MycpuBundle {
+  val basic = new RsBasicEntry
+  //val decoded=new(DecodeInstInfoBundle(kind))TODO:
+  val memInstOffset = if (kind == FuType.MainAlu) Some(Output(UInt(memInstOffsetWidth.W))) else None
+  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
-  val pc          = UWord // difftest check execution flow
-  val prevPRegIdx = PRegIdx // free when retire
-  val currPRegIdx = PRegIdx // updata A-RAT when retire
-  val currARegIdx = ARegIdx // updata A-RAT when retire
+
+  val pc        = UWord // difftest check execution flow
+  val prevPDest = PRegIdx // free when retire
+  val currPDest = PRegIdx // updata A-RAT when retire
+  val currADest = ARegIdx // updata A-RAT when retire
+
+  val specialType = SpecialType()
+  val c0Addr      = CP0Idx //for mtc0,other dontcare
 }
 
 /**
@@ -201,58 +207,58 @@ class FunctionUnitOutIO extends MycpuBundle {
 }
 
 /**
-  * TODO:put lsu inst.offset in decoded
-  * srcDatas means data read from pReg
+  * exception for wbRob
+  * robIndex for wbRob
+  * destPregAddr is for Wprf/srat
+  * destAregAddr is for srat
   *
-  * wbRob not change
-  * destPregAddr is for Wprf
+  * srcDatas:=mux(pregData,Bypass)
   *
   * the dcachereq is for lsu
   *   index/offset:12 bit cal
-  *   size/memType:gen in Ro Stage(decoupled from decode)
-  *
+  *   memType:take from decode
   *   wWord:load dont care/store read src
+  *
+  *   size:gen in Rostage
   *   wStrb:load dont care/actually store dont care at this stage
   */
 class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
-  val wbRob        = new WbRobBundle
+  val robIndex  = Output(UInt(robIndexWidth.W))
+  val exception = new ExceptionInfoBundle
+
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
+  val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
 
-  val srcDatas  = Vec(2, Output(UInt(dataWidth.W)))
-  val dCacheReq = if (kind == FuType.Lsu.id) Some(new DcacheReq(toCacheStage = 1)) else None
+  val srcData       = Vec(2, Output(UInt(dataWidth.W)))
+  val dCacheReq     = if (kind == FuType.Lsu.id) Some(new DcacheReq(toCacheStage = 1)) else None
+  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 
 /**
+  * wbRob
+  *       change:exception and memReqVaddr
+  *       robIndex keep
+  *       isMispredict=DontCare
+  *
+  * destPregAddr is for Wprf/srat
+  * destAregAddr is for srat
+  *
   * decoded is for mem2:deal with loadData
   *
-  * wbRob change:exception and memReqVaddr
   * tagOfMemReqPaddr is for mem2:hitOrMiss detect
   *
-  * take cache data/meta with us
-  * TODO:storeData not need to take?cause after mem1,store inst get into storeQ
+  * take dCacheReq to dcache2
   */
-
 class MemStage1OutIO extends MycpuBundle {
-  val destPregAddr = Output(UInt(pRegAddrWidth.W))
+  val wbRob = new WbRobBundle
+
+  val destPregAddr = Output(PRegIdx)
+  val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
 
-  val wbRob            = new WbRobBundle
   val tagOfMemReqPaddr = Output(UInt(tagWidth.W))
-
-  val dCache = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
-
-}
-
-class StoreQueueOutIO extends CacheBasicReq {
-
-  // already has index/offset
-  val tagOfMemReqPaddr = Output(UInt(tagWidth.W)) //get in mem1
-
-  val size    = Output(UInt(3.W)) //gen in RO
-  val wWord   = Output(UWord) //read in RO
-  val wStrb   = Output(UInt(4.W)) //
-  val memType = Output(MemType()) //gen in RO
+  val dCache           = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
 }
 
 //------------------------------------------------------------------------------------------------------

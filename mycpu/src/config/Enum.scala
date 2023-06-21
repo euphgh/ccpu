@@ -12,3 +12,13 @@ object DSTType extends ChiselEnum {
 object ChiselFuType extends ChiselEnum {
   val MainALU, SubALU, LSU, MDU = Value
 }
+
+object MduType extends ChiselEnum {
+  val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ = Value
+}
+object SpecialType extends ChiselEnum {
+  val LOAD, STORE, MTC0, MTHI, MTLO, ERET, NON = Value
+}
+object BlockType extends ChiselEnum {
+  val CACHEINST, MFC0, NON = Value
+}

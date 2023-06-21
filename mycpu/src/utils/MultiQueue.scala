@@ -33,8 +33,9 @@ import chisel3.util._
 class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, allIn: Boolean = false)
     extends MycpuModule {
   val io = IO(new Bundle {
-    val push = Vec(enqNum, Flipped(Decoupled(gen)))
-    val pop  = Vec(deqNum, Decoupled(gen))
+    val push  = Vec(enqNum, Flipped(Decoupled(gen)))
+    val pop   = Vec(deqNum, Decoupled(gen))
+    val flush = Input(Bool())
   })
   require(isPow2(size))
 
@@ -42,7 +43,7 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   private val ptrWidth     = counterWidth + 1
 
   //ring means "+"
-  private val ringBuffer = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
+  val ringBuffer         = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
   val headPtr            = RegInit(UInt(ptrWidth.W), 0.U)
   val tailPtr            = RegInit(UInt(ptrWidth.W), 0.U)
   private val deqFireNum = PopCount(io.pop.map(_.fire))
@@ -74,4 +75,6 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   (0 until deqNum).foreach(i => {
     io.pop(i).bits := ringBuffer(tailPtr + i.U)
   })
+
+  //TODO:flush
 }

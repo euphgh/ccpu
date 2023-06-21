@@ -147,14 +147,15 @@ class ROB extends MycpuModule {
 
   //报错3:可以不解决(这一句会报错说：ready没有被init)
   //val retireSlot = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i))))
-  val retireInst = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
+  val retireInst  = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
+  val readyRetire = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).valid && retireInst(i).done)))
 
-  //exception|mispredict   be aware of retireSlot.Valid
+  //exception|mispredict   be aware of readyRetire
   val mispredictVec = WireInit(
-    VecInit((0 until retireNum).map(i => retireInst(i).isMispredict && robEntries.io.pop(i).valid))
+    VecInit((0 until retireNum).map(i => retireInst(i).isMispredict && readyRetire(i)))
   )
   val exceptionVec = WireInit(
-    VecInit((0 until retireNum).map(i => retireInst(i).exception.happen && robEntries.io.pop(i).valid))
+    VecInit((0 until retireNum).map(i => retireInst(i).exception.happen && readyRetire(i)))
   )
 
   //mask from slot(1stMispredict+2) to the end:

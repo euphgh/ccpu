@@ -332,6 +332,6 @@ class Dispatcher extends MycpuModule {
     io.out.toMainAluRs.bits.predictResult.get := slots(mainAluSlot).inst.predictResult
   }
   when(lsuSlot =/= noInst) {
-    asg(io.out.toLsuRs.bits.memInstOffset.get, slots(lsuSlot).inst.basic.instr(memInstOffsetWidth - 1, 0))
+    asg(io.out.toLsuRs.bits.immOffset.get, slots(lsuSlot).inst.basic.instr(immWidth - 1, 0))
   }
 }

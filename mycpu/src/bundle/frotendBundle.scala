@@ -155,7 +155,8 @@ class RsBasicEntry extends MycpuBundle {
 class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val basic = new RsBasicEntry
   //val decoded=new(DecodeInstInfoBundle(kind))TODO:
-  val memInstOffset = if (kind == FuType.MainAlu) Some(Output(UInt(memInstOffsetWidth.W))) else None
+  val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
+  val memInstOffset = if (kind == FuType.MainAlu) Some(Output(UInt(memInstOffsetWidth.W))) else None //FIXME:
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
@@ -216,7 +217,8 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val decoded      = new DecodeInstInfoBundle
 
   val srcData       = Vec(2, Output(UInt(dataWidth.W)))
-  val dCacheReq     = if (kind == FuType.Lsu.id) Some(new DcacheReq(toCacheStage = 1)) else None
+  val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
+  val dCacheReq     = if (kind == FuType.Lsu) Some(new DcacheReq(toCacheStage = 1)) else None
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 

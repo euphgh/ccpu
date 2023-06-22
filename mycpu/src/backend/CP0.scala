@@ -4,6 +4,14 @@ import config._
 import chisel3._
 import chisel3.util.Valid
 
+class SimpleWriteBundle extends MycpuBundle {
+  val wen   = Output(Bool())
+  val wdata = Output(UWord)
+}
+class Mtc0Bundle extends SimpleWriteBundle {
+  val waddr = Output(CP0Idx)
+}
+
 /**
   * no need decoupled,always rdy
   *
@@ -21,15 +29,15 @@ import chisel3.util.Valid
 class CP0 extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromRob = new Bundle {
-        val exception = Flipped(Valid(new Bundle {
-          val basic    = new ExceptionInfoBundle
-          val badVaddr = Output(UWord)
-        }))
-        val eret = Input(Bool()) //to CP0
-        val mtc0 = Flipped(Valid(new Mtc0Bundle)) //to CP0
-      }
-      val mfc0 = Input(CP0Idx)
+
+      val exception = Flipped(Valid(new Bundle {
+        val basic    = new ExceptionInfoBundle
+        val badVaddr = Output(UWord)
+      }))
+      val eret = Input(Bool()) //to CP0
+      val mtc0 = Flipped(new Mtc0Bundle)
+
+      val mfc0Addr = Input(CP0Idx)
     }
     val out = new Bundle {
       val mfc0Data = Output(UWord) // wire logic of mfc0

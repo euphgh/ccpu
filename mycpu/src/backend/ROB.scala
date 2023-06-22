@@ -10,13 +10,11 @@ import chisel3.util.experimental.BoringUtils
 
 //0619:meet 3 debug...
 
-class SimpleWriteBundle extends MycpuBundle {
-  val wen   = Output(Bool())
-  val wdata = Output(UWord)
-}
-
-class Mtc0Bundle extends SimpleWriteBundle {
-  val addr = Output(CP0Idx)
+class SingleRetireBundle extends MycpuBundle {
+  val muldiv = Output(Bool())
+  val mtlo   = Output(Bool())
+  val mthi   = Output(Bool())
+  val mtc0   = Output(Bool()) //to CP0
 }
 
 class RobEntry extends MycpuBundle {
@@ -100,11 +98,7 @@ class ROB extends MycpuModule {
         })
       )
       //single Retire inst
-      val singleRetire = Valid(new Bundle {
-        val muldivCommit = Output(Bool())
-        val mthiloCommit = Output(Bool())
-        val mtc0Commit   = Output(Bool()) //to CP0
-      })
+      val singleRetire = Valid(new SingleRetireBundle)
       //to CP0
       val eretFlush = Output(Bool()) //to CP0
       val exception = Valid(new Bundle {
@@ -185,7 +179,8 @@ class ROB extends MycpuModule {
     VecInit(
       (0 until retireNum).map(i =>
         (retireSpType(i) === SpecialType.MTC0 ||
-          retireSpType(i) === SpecialType.MTHILO ||
+          retireSpType(i) === SpecialType.MTHI ||
+          retireSpType(i) === SpecialType.MTLO ||
           retireSpType(i) === SpecialType.MULDIV) &&
           readyRetire(i)
       )
@@ -302,12 +297,13 @@ class ROB extends MycpuModule {
 
   //singleRetire connect
   val sRetireList = List(
-    io.out.singleRetire.bits.mtc0Commit,
-    io.out.singleRetire.bits.mthiloCommit,
-    io.out.singleRetire.bits.muldivCommit
+    io.out.singleRetire.bits.mtc0,
+    io.out.singleRetire.bits.mthi,
+    io.out.singleRetire.bits.mtlo,
+    io.out.singleRetire.bits.muldiv
   )
   (0 until sRetireList.length).map(i => asg(sRetireList(i), false.B)) //default
-  val spList = List(SpecialType.MTC0, SpecialType.MTHILO, SpecialType.MULDIV)
+  val spList = List(SpecialType.MTC0, SpecialType.MTHI, SpecialType.MTLO, SpecialType.MULDIV)
   when(io.out.singleRetire.valid) {
     List.tabulate(sRetireList.length)(i => {
       asg(sRetireList(i), retireSpType(firSingle) === spList(i))

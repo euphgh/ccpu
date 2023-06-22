@@ -4,67 +4,98 @@ import config._
 import chisel3._
 import chisel3.util._
 import utils.asg
+import cache._
+import utils.LookupUInt
 
-//this bundle is used when store inst get into mem1
-//cache basic req contain index/offset
-class StoreQBasicEntry extends CacheBasicReq {
-  val tagOfMemReqPaddr = Output(UInt(tagWidth.W)) //get in mem1
-
-  val size    = Output(UInt(3.W)) //gen in RO
-  val wWord   = Output(UWord) //read in RO
-  val wStrb   = Output(UInt(4.W)) //
-  val memType = Output(MemType()) //FIXME:
-}
-
-//retired:retire from rob
-//done:really write into mem
-class StoreQueueEntry extends MycpuBundle {
-  val basic   = new StoreQBasicEntry
-  val retired = Output(Bool())
-  val done    = Output(Bool())
-}
-
-class StoreQueue extends MycpuModule {
+class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new StoreQBasicEntry))
-    val out = Decoupled(new StoreQBasicEntry)
-
+    val enq    = Flipped(Decoupled(new StoreQIO))
+    val retire = Vec(retireNum, Input(Bool()))
+    val deq = new Bundle {
+      val req  = Decoupled(new StoreQIO)
+      val back = Input(Bool())
+    }
+    val flush = Input(Bool()) // only flush not retire
+    val empty = Output(Bool())
     val full  = Output(Bool())
-    val flush = Input(Bool())
-
-    val storeRetire  = Input(Bool()) //TODO:set to retire num?
-    val storeReqDone = Input(Bool())
+  })
+  val query = IO(Flipped(new QuerySQ))
+  class StoreQEntry extends MycpuBundle {
+    val data    = new StoreQIO
+    val valid   = Bool()
+    val retired = Bool()
+  }
+  val ram        = Mem(entries, new StoreQEntry)
+  val enq_ptr    = RegInit(UInt(log2Ceil(entries).W))
+  val ret_ptr    = RegInit(UInt(log2Ceil(entries).W))
+  val deq_ptr    = RegInit(UInt(log2Ceil(entries).W))
+  val maybe_full = RegInit(false.B)
+  when(do_enq =/= do_deq) {
+    maybe_full := do_enq
+  }
+  val ptr_match = enq_ptr === deq_ptr
+  val empty     = ptr_match && !maybe_full
+  val full      = ptr_match && maybe_full
+  //=================== query ====================
+  import chisel3.experimental.conversions._
+  (query.res.data, query.res.sqMask) := MuxCase(
+    (0.U, 0.U),
+    (0 until entries).map(i => {
+      val entryData    = ram(i).data
+      val entryLowAddr = entryData.rwReq.lowAddr
+      val entryAddr    = Cat(entryData.pTag, entryLowAddr.index, entryLowAddr.offset)
+      (entryAddr === query.req.addr && ram(i).valid) -> (entryData.rwReq.wWord, entryData.rwReq.wStrb)
+    })
+  )
+  (0 to 3).foreach(i => {
+    query.res.memMask(i) := query.req.needMask(i) && !query.res.sqMask(i)
   })
 
-  //TODO:storeQ size
-  val storeQueueSize = 8
-  val storeQEntries  = Module(new Queue(gen = new StoreQueueEntry, entries = storeQueueSize, hasFlush = true))
-  asg(storeQEntries.flush, io.flush)
-  asg(io.full, storeQEntries.full)
+  //=================== enq =======================
+  io.enq.ready    := !full || io.deq.back
+  io.deq.req.bits := ram(deq_ptr).data
+  val do_enq = WireDefault(io.enq.fire)
+  when(do_enq) {
+    ram(enq_ptr).data    := io.enq.bits
+    ram(enq_ptr).valid   := true.B
+    ram(enq_ptr).retired := false.B
+    enq_ptr              := enq_ptr + 1.U
+  }
 
-  //storeQ enq ~ io.in
-  val storeEnqBits = storeQEntries.io.enq.bits
-  asg(storeQEntries.io.enq.valid, io.in.valid)
-  asg(storeEnqBits.basic, io.in.bits)
-  asg(storeEnqBits.done, false.B)
-  asg(storeEnqBits.done, false.B)
-  asg(io.in.ready, storeQEntries.io.enq.ready)
+  //=================== deq =======================
+  val state                  = RegInit(idle)
+  val idle :: waitDeq :: Nil = Enum(2)
+  io.deq.req.valid := !empty && (state === idle)
+  switch(state) {
+    is(idle) {
+      when(io.deq.req.fire) {
+        state := waitDeq
+      }
+    }
+    is(waitDeq) {
+      when(io.deq.back) {
+        state := idle
+      }
+    }
+  }
+  //deq back
+  val do_deq = WireDefault(io.deq.back)
+  when(do_deq) {
+    deq_ptr := deq_ptr + 1.U
+  }
 
-  //storeQ deq
-  //attention:出队和io.out无关
-  val storeDeqBits = storeQEntries.io.deq.bits
-  asg(storeQEntries.io.deq.ready, storeDeqBits.done)
+  //=================== flush =====================
+  //not move deq_ptr, only enq_ptr
+  when(io.flush) {
+    enq_ptr    := ret_ptr
+    maybe_full := false.B
+  }
 
-  //io.out
-  //retired deqInst can call a memReq
-  asg(io.out.valid, storeQEntries.io.deq.valid && storeDeqBits.retired)
-  asg(io.out.bits, storeDeqBits.basic)
-
-  /**
-    *   when store inst retire from rob, set its retired bit
-    *     TODO:should we use a storeQIdx?because 2nd inst can be set retired
-    *   when store inst done req,set its reqDone bit
-    *     only head store inst will be set done!
-    */
-  asg(storeQEntries.ram(storeQEntries.deq_ptr.value).done, io.storeReqDone)
+  //=================== retire =====================
+  when(io.retire.asUInt.orR) {
+    ret_ptr := ret_ptr + PopCount(io.retire.asUInt)
+    (0 until retireNum).foreach(i => {
+      ram(ret_ptr + i.U).retired := io.retire(i)
+    })
+  }
 }

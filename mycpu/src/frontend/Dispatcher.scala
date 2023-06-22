@@ -60,12 +60,12 @@ class SRAT extends MycpuModule {
         val currPDest = Flipped(Valid(PRegIdx)) //to write in
       }
     )
-    val wb      = Vec(retireNum, Flipped(Valid(new RATWriteBackIO)))
+    val wb      = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
     val recover = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
   })
 
   //areg0 -> (0,true)
-  val pIdxMap = RegInit(VecInit((0 until aRegNum).map(i => i.U)))
+  val pIdxMap = RegInit(VecInit((0 until aRegNum).map(i => i.U(pRegAddrWidth.W))))
   val inPrf   = RegInit(VecInit(Seq.fill(aRegNum)(true.B)))
 
   //read from srat:lowest priority
@@ -81,12 +81,12 @@ class SRAT extends MycpuModule {
   //wb change inprf:middle priority
   //io.wb.valid is pipex_valid(whether has valid inst)
   //aDest=0 actually not change anything
-  List.tabulate(retireNum)(i =>
-    when(io.wb(i).valid & (pIdxMap(io.wb(i).bits.aDest) === io.wb(i).bits.pDest)) {
+  List.tabulate(wBNum)(i =>
+    when(io.wb(i).valid && (pIdxMap(io.wb(i).bits.aDest) === io.wb(i).bits.pDest)) {
       inPrf(io.wb(i).bits.aDest) := true.B
-      List.tabulate(renameNum)(i => {
-        List.tabulate(srcDataNum)(j =>
-          when(io.wb(i).bits.aDest === io.src(i).in(j)) { io.src(i).out(j).inPrf := true.B }
+      List.tabulate(renameNum)(j => {
+        List.tabulate(srcDataNum)(k =>
+          when(io.wb(i).bits.aDest === io.src(j).in(k)) { io.src(j).out(k).inPrf := true.B }
         )
       })
     }
@@ -108,7 +108,7 @@ class SRAT extends MycpuModule {
             io.src(j).out(k).pIdx  := io.dest(i).currPDest.bits
           }
           when(io.dest(i).currADest === io.dest(j).currADest) {
-            io.dest(j).prevPDest := io.dest(i).currPDest
+            io.dest(j).prevPDest := io.dest(i).currPDest.bits
           }
         })
       })
@@ -136,8 +136,8 @@ class SRAT extends MycpuModule {
 class Decoder extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val inst      = UWord
-      val exception = FrontExcCode()
+      val inst      = Input(UWord)
+      val exception = Input(FrontExcCode())
     }
     val out = new Bundle {
       val decoded   = new DecodeInstInfoBundle
@@ -184,7 +184,7 @@ class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val fromInstBuffer  = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
-      val fromFuWriteBack = Vec(retireNum, Flipped(Valid(new RATWriteBackIO)))
+      val fromFuWriteBack = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
       val robIndex        = Input(ROBIdx)
     }
     val outFireNum   = Output(UInt())
@@ -193,7 +193,7 @@ class Dispatcher extends MycpuModule {
     val isMispredict = Input(Bool())
 
     //valid when flush(mispredictRetire/exception/eret)
-    val recoverSrat = Vec(aRegNum, Flipped(Valid(new SRATEntry)))
+    val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
 
     val out = new Bundle {
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
@@ -230,7 +230,8 @@ class Dispatcher extends MycpuModule {
     slots(i).inst  := io.in.fromInstBuffer(i).bits
     slots(i).valid := io.in.fromInstBuffer(i).valid
 
-    slots(i).toRsBasic.destPregAddr := freeList.io.pop(i).bits
+    slots(i).toRsBasic.destAregAddr := slots(i).inst.aRegsIdx.dest
+    slots(i).toRsBasic.destPregAddr := 0.U(pRegAddrWidth.W) //default
     slots(i).toRsBasic.robIndex     := io.in.robIndex + i.U
 
     slots(i).robReady := io.out.toRob(i).ready
@@ -253,10 +254,15 @@ class Dispatcher extends MycpuModule {
 
   //deal with pDestOk
   val needPdest    = WireInit(VecInit((0 until dispatchNum).map(i => (slots(i).inst.aRegsIdx.dest =/= 0.U))))
-  val cntNeedPdest = Wire(Vec(dispatchNum, UInt(log2Up(dispatchNum).W)))
+  val cntNeedPdest = Wire(Vec(dispatchNum, UInt(log2Up(dispatchNum + 1).W)))
   cntNeedPdest(0) := 0.U
-  (1 to dispatchNum).map(i => { cntNeedPdest(i) := cntNeedPdest(i - 1) +& needPdest(i - 1).asUInt }) //cntNeedPdest是总数
-  (0 until dispatchNum).map(i => when(needPdest(i)) { slots(i).pDestOk := freeList.io.pop(cntNeedPdest(i)).valid })
+  (1 until dispatchNum).map(i => { cntNeedPdest(i) := cntNeedPdest(i - 1) +& needPdest(i - 1).asUInt })
+  (0 until dispatchNum).map(i =>
+    when(needPdest(i)) {
+      asg(slots(i).pDestOk, freeList.io.pop(cntNeedPdest(i)).valid)
+      asg(slots(i).toRsBasic.destPregAddr, freeList.io.pop(cntNeedPdest(i)).bits)
+    }
+  )
 
   //blockReg,be aware of priority
   val blockReg      = RegInit(false.B)
@@ -285,7 +291,7 @@ class Dispatcher extends MycpuModule {
 
   //decoder
   List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in             := slots(i).inst.basic.instr
+    decoder(i).io.in.inst        := slots(i).inst.basic.instr
     decoder(i).io.in.exception   := slots(i).inst.exception
     slots(i).toRsBasic.decoded   := decoder(i).io.out.decoded
     slots(i).toRsBasic.exception := decoder(i).io.out.exception
@@ -322,20 +328,22 @@ class Dispatcher extends MycpuModule {
 
   //to rs
   //rs is special
+  val rsKind = List(FuType.MainAlu, FuType.SubAlu, FuType.Lsu, FuType.Mdu)
   List.tabulate(toRs.length)(i => {
-    when(rsSlotSel(i) === noInst) {
-      toRs(i).valid := false.B
-      toRs(i).bits  := DontCare
-    }.otherwise {
+
+    toRs(i).valid := false.B //default
+    toRs(i).bits  := 0.U.asTypeOf(new RsOutIO(kind = rsKind(i))) //default
+
+    when(rsSlotSel(i) =/= noInst) {
       toRs(i).valid      := slots(rsSlotSel(i)).valid & slots(rsSlotSel(i)).readyGo
       toRs(i).bits.basic := slots(rsSlotSel(i)).toRsBasic
+
+      if (rsKind(i) == FuType.MainAlu) { asg(toRs(i).bits.predictResult.get, slots(mainAluSlot).inst.predictResult) }
+      if (rsKind(i) == FuType.Mdu) {
+        val mduInstr = slots(mduSlot).inst.basic.instr
+        asg(toRs(i).bits.mfc0Addr.get, Cat(mduInstr(15, 11), mduInstr(2, 0)))
+      }
+      //FIXME:immOffset
     }
   })
-  //已经考虑===noInst的情况 =DontCare
-  when(mainAluSlot =/= noInst) {
-    io.out.toMainAluRs.bits.predictResult.get := slots(mainAluSlot).inst.predictResult
-  }
-  when(lsuSlot =/= noInst) {
-    asg(io.out.toLsuRs.bits.memInstOffset.get, slots(lsuSlot).inst.basic.instr(memInstOffsetWidth - 1, 0))
-  }
 }

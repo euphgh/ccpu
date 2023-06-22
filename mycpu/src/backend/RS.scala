@@ -4,6 +4,7 @@ import config._
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
+import utils.asg
 
 class WakeUpBroadCast extends MycpuBundle {
   val (fromMainAlu, fromSubAlu, fromLsu) = (Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx))
@@ -71,6 +72,8 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
 
   val rsEntries  = RegInit(VecInit(Seq.fill(rsSize)(0.U.asTypeOf(new RsOutIO(rsKind)))))
   val slotsValid = RegInit(VecInit(Seq.fill(rsSize)(false.B)))
+  val deqSel     = Wire(Vec(rsSize, Bool()))
+  val enqSlot    = WireInit(0.U(log2Up(rsSize).W)) //default
 
   val srcsWaken = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B)))))
   val src1Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(0).inPrf | srcsWaken(i)(0))))
@@ -81,7 +84,15 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   //attention:in and out fire together
   val ageMask = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(rsSize)(false.B)))))
   when(io.in.fromDispatcher.fire) { ageMask(enqSlot) := slotsValid }
-  when(io.out.fire) { (0 until rsSize).map(i => ageMask(i)(deqSlot) := false.B) }
+  when(io.out.fire) {
+    ageMask.foreach(msk => {
+      (0 until rsSize).map(idx =>
+        when(deqSel(idx)) {
+          asg(msk(idx), false.B)
+        }
+      )
+    })
+  }
 
   //listen to wPrf
   List.tabulate(wBNum)(i =>
@@ -96,11 +107,11 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   )
 
   //wake-up
-  val wakeUpSource = Valid(PRegIdx)
-  wakeUpSource.bits  := rsEntries(deqSlot).basic.destPregAddr
+  val wakeUpSource = Wire(Valid(PRegIdx))
+  wakeUpSource.bits  := io.out.bits.basic.destPregAddr
   wakeUpSource.valid := io.out.fire
 
-  val wakeUpReceive = new WakeUpBroadCast
+  val wakeUpReceive = Wire(new WakeUpBroadCast)
   //BoringUtils.addSink(wakeUpReceive.fromLsu, "LsuMem1WakeUp")
   wakeUpReceive.fromLsu.valid := false.B
   wakeUpReceive.fromLsu.bits  := DontCare
@@ -119,10 +130,11 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   }
 
   val wakeUpBroad = List(wakeUpReceive.fromMainAlu, wakeUpReceive.fromSubAlu, wakeUpReceive.fromLsu)
-  List.tabulate(wakeUpBroad.length)(i =>
+  wakeUpBroad.foreach(e =>
     List.tabulate(rsSize)(j => {
-      srcsWaken(j)(0) := (wakeUpBroad(i).bits === rsEntries(j).basic.srcPregs(0).pIdx && wakeUpBroad(i).valid)
-      srcsWaken(j)(1) := (wakeUpBroad(i).bits === rsEntries(j).basic.srcPregs(1).pIdx && wakeUpBroad(i).valid)
+      val pSrcs = rsEntries(j).basic.srcPregs
+      asg(srcsWaken(j)(0), e.bits === pSrcs(0).pIdx && e.valid)
+      asg(srcsWaken(j)(1), e.bits === pSrcs(1).pIdx && e.valid)
     })
   )
 
@@ -130,10 +142,11 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     * rs enqueue
     * enq not zip,fill in minIndex notValid Slot
     */
+  //(log2Up(rsSize + 1).W)
   val rsFull = slotsValid.asUInt.andR
   io.in.fromDispatcher.ready := ~rsFull
   val emptySlot = ~slotsValid.asUInt
-  val enqSlot   = PriorityEncoder(emptySlot)
+  when(~rsFull) { asg(enqSlot, PriorityEncoder(emptySlot)) }
   when(io.in.fromDispatcher.fire) {
     rsEntries(enqSlot)  := io.in.fromDispatcher.bits
     slotsValid(enqSlot) := true.B
@@ -146,28 +159,36 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     *     older not ready/not any older
     *     bru is special
     */
-  io.out.valid := slotsRdy.asUInt.orR
-  val deqSlot = Wire(UInt(log2Up(rsSize).W))
+  asg(io.out.valid, deqSel.asUInt.orR)
+
   if (rsKind == FuType.Mdu || rsKind == FuType.Lsu) {
-    deqSlot := OHToUInt(List.tabulate(rsSize)(i => ~ageMask(i).asUInt.orR))
+    (0 until rsSize).map(i => asg(deqSel(i), !ageMask(i).asUInt.orR))
   }
   if (rsKind == FuType.SubAlu) {
-    deqSlot := OHToUInt(List.tabulate(rsSize)(i => ~(ageMask(i).asUInt & slotsRdy.asUInt).orR))
+    (0 until rsSize).map(i => asg(deqSel(i), !((ageMask(i).asUInt & slotsRdy.asUInt).orR)))
   }
   if (rsKind == FuType.MainAlu) {
     val isBranch =
       WireInit(
         VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.decoded.brType =/= BranchType.non))
       )
-    deqSlot := OHToUInt(
-      List.tabulate(rsSize)(i =>
-        (~(ageMask(i).asUInt & isBranch.asUInt).orR & isBranch(i))
-          | (~(ageMask(i).asUInt & slotsRdy.asUInt).orR & ~isBranch(i))
+    (0 until rsSize).map(i =>
+      asg(
+        deqSel(i),
+        (!((ageMask(i).asUInt & isBranch.asUInt).orR) & isBranch(i))
+          | (!((ageMask(i).asUInt & slotsRdy.asUInt).orR) & !isBranch(i))
       )
     )
   }
-  io.out.bits := rsEntries(deqSlot)
-  when(io.out.fire) { slotsValid(deqSlot) := false.B }
+
+  io.out.bits := Mux1H(deqSel, rsEntries)
+  when(io.out.fire) {
+    (0 until rsSize).foreach(i => {
+      when(deqSel(i)) {
+        asg(slotsValid(i), false.B)
+      }
+    })
+  }
 
   //flush
   when(io.in.flush) {

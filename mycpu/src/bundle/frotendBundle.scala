@@ -256,16 +256,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   *
   * take dCacheReq to dcache2
   */
-class MemStage1OutIO extends MycpuBundle {
-  val wbRob = new WbRobBundle
-
-  val destPregAddr = Output(PRegIdx)
-  val destAregAddr = Output(ARegIdx)
-  val decoded      = new DecodeInstInfoBundle
-
-  val tagOfMemReqPaddr = Output(UInt(tagWidth.W))
-  val dCache           = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
-}
 
 //------------------------------------------------------------------------------------------------------
 

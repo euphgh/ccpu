@@ -160,8 +160,8 @@ class IfStage1 extends MycpuModule {
   // >> cache =============================================
   val icache1 = Module(new CacheStage1())
   icache1.in.valid                         := update
-  icache1.in.bits.req.index                := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
-  icache1.in.bits.req.offset               := getOffset(io.in.npc)
+  icache1.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
+  icache1.in.bits.ifReq.get.offset         := getOffset(io.in.npc)
   icache1.in.bits.cacheInst.get.valid      := isCacheInst
   icache1.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
   icache1.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo

@@ -4,7 +4,6 @@ import chisel3._
 import chisel3.util._
 import config._
 import cache._
-import org.apache.commons.lang3.ObjectUtils
 
 /* 一些基本的bundle，尽量做到解耦 */
 

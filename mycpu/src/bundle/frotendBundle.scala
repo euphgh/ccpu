@@ -75,6 +75,7 @@ class DecodeInstInfoBundle extends MycpuBundle {
 class WPrfBundle extends MycpuBundle {
   val pDest  = PRegIdx
   val result = UWord
+  val wen    = UInt(4.W)
 }
 
 class WbRobBundle extends MycpuBundle {

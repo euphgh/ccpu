@@ -28,6 +28,7 @@ object LoadSel extends ChiselEnum {
 object CCAttr extends ChiselEnum {
   val Cached   = Value("b011".U)
   val Uncached = Value("b010".U)
+  def isUnCache(attr: UInt) = attr =/= Cached.asUInt
 }
 object CacheOp extends ChiselEnum {
   val IndexInvalidI          = Value("b00000".U)
@@ -61,10 +62,6 @@ object ExcCode extends ChiselEnum {
   val Tr   = Value(0x0d.U)
 }
 
-object MemType extends ChiselEnum {
-  val LW, LB, LBU, LH, LHU, LWL, LWR, SW, SH, SB, SWL, SWR = Value
-}
-
 object FrontExcCode extends ChiselEnum {
   val AdEL, InvalidTLBL, RefillTLBL, NONE = Value
 }
@@ -72,20 +69,20 @@ object FrontExcCode extends ChiselEnum {
 trait MycpuParam {
   // General Parameter for mycpu
 
-  val excCodeWidth       = 5
-  val PaddrWidth         = 32
-  val tagWidth           = 20
-  val cacheIndexWidth    = 7
-  val cacheOffsetWidth   = 12 - cacheIndexWidth
-  val vaddrWidth         = 32
-  val instrWidth         = 32
-  val dataWidth          = 32
-  val IcachRoads         = 4
-  val DcachRoads         = 4
-  val IcachLineBytes     = 32
-  val DcachLineBytes     = 32
-  val enableCacheInst    = true
-  val memInstOffsetWidth = 20
+  val excCodeWidth     = 5
+  val PaddrWidth       = 32
+  val tagWidth         = 20
+  val cacheIndexWidth  = 7
+  val cacheOffsetWidth = 12 - cacheIndexWidth
+  val vaddrWidth       = 32
+  val instrWidth       = 32
+  val dataWidth        = 32
+  val IcachRoads       = 4
+  val DcachRoads       = 4
+  val IcachLineBytes   = 32
+  val DcachLineBytes   = 32
+  val enableCacheInst  = true
+  val immWidth         = 16
   def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
   def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
 

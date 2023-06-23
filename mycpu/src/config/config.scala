@@ -29,6 +29,11 @@ object CCAttr extends ChiselEnum {
   val Cached   = Value("b011".U)
   val Uncached = Value("b010".U)
   def isUnCache(attr: UInt) = attr =/= Cached.asUInt
+object MduType extends ChiselEnum {
+  val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ, MTC0, MFC0 = Value
+}
+object SpecialType extends ChiselEnum {
+  val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, NON = Value
 }
 object CacheOp extends ChiselEnum {
   val IndexInvalidI          = Value("b00000".U)

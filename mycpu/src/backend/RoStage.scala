@@ -43,6 +43,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   asg(io.out.bits.exception, io.in.bits.basic.exception)
   asg(io.out.bits.robIndex, io.in.bits.basic.robIndex)
   if (fuKind == FuType.MainAlu) { asg(io.out.bits.predictResult.get, io.in.bits.predictResult.get) }
+  //TODO:immOffest
+  if (fuKind == FuType.Mdu) { asg(io.out.bits.mfc0Addr.get, io.in.bits.mfc0Addr.get) }
 
   //select srcData
   val pSrcs = io.in.bits.basic.srcPregs
@@ -59,7 +61,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   }
 
   //wake up
-  val wakeUpSource = Valid(PRegIdx)
+  val wakeUpSource = Wire(Valid(PRegIdx))
   asg(wakeUpSource.bits, io.out.bits.destPregAddr)
   asg(wakeUpSource.valid, io.out.fire)
   if (fuKind == FuType.MainAlu) {

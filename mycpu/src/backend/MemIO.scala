@@ -24,7 +24,7 @@ class ROplusReq extends MycpuBundle {
   val carryout  = Output(Bool())
 }
 
-class SQlusReq extends MycpuBundle {
+class SQplusReq extends MycpuBundle {
   val pTag  = UInt(tagWidth.W)
   val cAttr = CCAttr()
 }
@@ -32,7 +32,7 @@ class SQlusReq extends MycpuBundle {
 class Mem1ReqBus extends MycpuBundle {
   val rwReq  = new CacheRWReq
   val ROplus = new ROplusReq
-  val SQplus = new SQlusReq
+  val SQplus = new SQplusReq
 }
 
 class MemStage1InIO extends MycpuBundle {

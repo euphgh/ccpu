@@ -65,7 +65,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   //=================== deq =======================
   val state                  = RegInit(idle)
   val idle :: waitDeq :: Nil = Enum(2)
-  io.deq.req.valid := !empty && (state === idle)
+  io.deq.req.valid := !empty && (state === idle) && (ret_ptr =/= deq_ptr)
   switch(state) {
     is(idle) {
       when(io.deq.req.fire) {
@@ -93,9 +93,10 @@ class StoreQueue(entries: Int) extends MycpuModule {
 
   //=================== retire =====================
   when(io.retire.asUInt.orR) {
-    ret_ptr := ret_ptr + PopCount(io.retire.asUInt)
+    val scommitNum = PopCount(io.retire.asUInt)
+    ret_ptr := ret_ptr + scommitNum
     (0 until retireNum).foreach(i => {
-      ram(ret_ptr + i.U).retired := io.retire(i)
+      ram(ret_ptr + i.U).retired := i.U < scommitNum
     })
   }
 }

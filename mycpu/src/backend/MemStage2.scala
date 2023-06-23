@@ -136,7 +136,7 @@ class MemStage2 extends MycpuModule {
     )
   )
   asg(
-    io.out.bits.wPrf.wen,
+    io.out.bits.wPrf.wmask,
     Mux(inBits.memType === MemType.LWL, lwlWen, Mux(inBits.memType === MemType.LWR, lwrWen, "b1111".U))
   )
   // CacheInst =====================================================

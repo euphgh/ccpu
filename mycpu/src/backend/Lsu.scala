@@ -52,13 +52,13 @@ class Lsu extends FuncUnit(FuType.Lsu) {
     }
   )
   // pipeline connect storeQ/roStage => mem1Stage
-  PipelineConnect(mem1in, memStage1.io.in, memStage2.io.out.fire, io.flush)
+  // PipelineConnect(mem1in, memStage1.io.in, memStage1.io.out.fire, io.flush)
   // pipeline connect mem1Stage => mem2Stage
   PipelineConnect(memStage1.io.out.toMem2, memStage2.io.in, memStage2.io.out.fire, io.flush)
   // wire connect mem1Stage => storeQ
   memStage1.io.out.toStoreQ <> storeQ.io.enq
 
   dram <> memStage2.io.dmem
-  storeQ.full := io.flush
+  storeQ.io.flush := io.flush
   (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
 }

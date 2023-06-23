@@ -3,6 +3,7 @@ package bundle
 import chisel3._
 import chisel3.util._
 import config._
+import cache._
 
 /* 一些基本的bundle，尽量做到解耦 */
 
@@ -22,6 +23,7 @@ class ExceptionInfoBundle extends MycpuBundle {
   val isBd    = Output(Bool())
   val excCode = Output(UInt(excCodeWidth.W))
   val pc      = Output(UWord)
+  val refill  = Output(Bool())
 }
 
 /*
@@ -47,10 +49,13 @@ class ExceptionRedirectBundle extends MycpuBundle {
   val valid      = Output(Bool())
 }
 
+/**
+  * bpu info for per inst
+  */
 class PredictResultBundle extends MycpuBundle {
-  val taken  = Output(Bool())
-  val brType = Output(BranchType())
-  val target = Output(UInt(vaddrWidth.W))
+  val counter = UInt(2.W)
+  val brType  = BranchType()
+  val target  = UInt(vaddrWidth.W)
 }
 class BasicInstInfoBundle extends MycpuBundle {
   val instr = Output(UInt(instrWidth.W))
@@ -70,6 +75,7 @@ class DecodeInstInfoBundle extends MycpuBundle {
 class WPrfBundle extends MycpuBundle {
   val pDest  = PRegIdx
   val result = UWord
+  val wmask  = UInt(4.W)
 }
 
 class WbRobBundle extends MycpuBundle {
@@ -90,28 +96,36 @@ class RetireBundle extends MycpuBundle {
 //------------------------------------------------------------------------------------------------------
 /* 各流水级的OUT接口，这些接口不带valid-rdy */
 
-//all the insts must take its predict result with it
-//takenMask will be used to gen npc in preIF,and to gen validNum in IF2
-class BpuOutIO() extends MycpuBundle {
-  val predictTarget = Output(Vec(predictNum, UInt(vaddrWidth.W)))
-  val takenMask     = Output(UInt(predictNum.W))
-  val brType        = Output(BranchType())
-}
 class PreIfOutIO extends MycpuBundle {
   val npc         = Output(UInt(vaddrWidth.W))
-  val isDelaySlot = Output(Bool())
+  val isDelaySlot = Output(Bool()) // tell stage1 alignMask should be b1000
   val flush       = Output(Bool())
 }
-class IfStage1OutIO extends MycpuBundle {
-  val pcVal          = Output(UInt(vaddrWidth.W))
-  val bpuOut         = new BpuOutIO
-  val alignMask      = Output(UInt(fetchNum.W))
-  val tagOfInstGroup = Output(UInt(tagWidth.W))
-  val exception      = Output(FrontExcCode())
-  val iCache         = new CacheStage1OutIO(IcachRoads, false)
+
+/**
+  * should be fast, because in one cycle
+  */
+class IfStage1ToPreIf extends MycpuBundle {
+  val stage1Rdy  = Output(Bool())
+  val pcVal      = Output(UInt(vaddrWidth.W))
+  val dsFetched  = Output(Bool())
+  val hasBranch  = Output(Bool())
+  val predictDst = Output(UWord)
 }
 
-//TODO:may declare a bundle for basic/predictres/exception (name what?)
+/**
+  * can be slow, register will stage them
+  */
+class IfStage1OutIO extends MycpuBundle {
+  val validMask      = Output(Vec(fetchNum, Bool()))
+  val pcVal          = Output(UInt(vaddrWidth.W))
+  val tagOfInstGroup = Output(UInt(tagWidth.W))
+  val isUncached     = Output(Bool())
+  val exception      = Output(FrontExcCode())
+  val iCache         = new CacheStage1OutIO(IcachRoads, false)
+  val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
+}
+
 class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
@@ -126,9 +140,9 @@ class InstARegsIdxBundle extends MycpuBundle {
 class InstBufferOutIO extends MycpuBundle {
   val basic         = new BasicInstInfoBundle
   val predictResult = new PredictResultBundle
-  val exception     = Output(FrontExcCode())
-  val whichFu       = Output(ChiselFuType())
-  val aRegsIdx      = Output(new InstARegsIdxBundle)
+  val exception     = FrontExcCode()
+  val whichFu       = ChiselFuType()
+  val aRegsIdx      = new InstARegsIdxBundle
 }
 
 /**
@@ -155,8 +169,8 @@ class RsBasicEntry extends MycpuBundle {
 class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val basic = new RsBasicEntry
   //val decoded=new(DecodeInstInfoBundle(kind))TODO:
+  val immOffset     = if (kind == FuType.Lsu) Some(Output(UInt(immWidth.W))) else None
   val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
-  val memInstOffset = if (kind == FuType.MainAlu) Some(Output(UInt(memInstOffsetWidth.W))) else None //FIXME:
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 class DispatchToRobBundle extends MycpuBundle {
@@ -216,9 +230,16 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
 
+  val srcData = Vec(2, Output(UInt(dataWidth.W)))
+  val mem =
+    if (kind == FuType.Lsu) Some(Output(new Bundle {
+      val cache     = Output(new CacheStage1In(true))
+      val immOffset = Output(UInt(16.W))
+      val carryout  = Output(Bool())
+    }))
+    else None
   val srcData       = Vec(2, Output(UInt(dataWidth.W)))
   val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
-  val dCacheReq     = if (kind == FuType.Lsu) Some(new DcacheReq(toCacheStage = 1)) else None
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
 
@@ -237,16 +258,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   *
   * take dCacheReq to dcache2
   */
-class MemStage1OutIO extends MycpuBundle {
-  val wbRob = new WbRobBundle
-
-  val destPregAddr = Output(PRegIdx)
-  val destAregAddr = Output(ARegIdx)
-  val decoded      = new DecodeInstInfoBundle
-
-  val tagOfMemReqPaddr = Output(UInt(tagWidth.W))
-  val dCache           = Output(new CacheStage1OutIO(DcachRoads, isDcache = true))
-}
 
 //------------------------------------------------------------------------------------------------------
 

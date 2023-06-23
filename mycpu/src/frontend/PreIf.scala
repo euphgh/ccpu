@@ -2,6 +2,7 @@ package frontend
 import chisel3._
 import bundle._
 import config._
+import chisel3.util._
 
 class FrontRedirctIO extends MycpuBundle {
   val target = Output(UInt(vaddrWidth.W))
@@ -22,18 +23,54 @@ class FrontRedirctIO extends MycpuBundle {
   *
   * need a automat in it to save bpu result when only valid
   * branch or jump but not valid delay branch
-  * change automat status when first branch valid is "10"
-  * and when delaySlotOK is set
+  * set automat status to use ds pc in next cycle when first branch valid is "10"
+  * set automat status to give up ds pc when delaySlotOK is set
   */
 
 class PreIf extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val redirect    = Flipped(new FrontRedirctIO)
-      val fromBpu     = Flipped(new BpuOutIO)
-      val alignMask   = Input(UInt(fetchNum.W))
-      val delaySlotOK = Bool()
+      val redirect   = Flipped(new FrontRedirctIO)
+      val fire       = Input(Bool())
+      val pcVal      = Input(UWord)
+      val hasBranch  = Input(Bool())
+      val predictDst = Input(UWord)
+      val dsFetched  = Input(Bool())
     }
     val out = new PreIfOutIO
   })
+  val alignPC = Cat(io.in.pcVal(31, 4) + 1.U, "b0000".U)
+  object PreIfState extends ChiselEnum {
+    val normal, keepDest = Value
+  }
+  import PreIfState._
+  val state       = RegInit(normal)
+  val brDestSaved = RegInit(0.U, UWord)
+  switch(state) {
+    is(normal) {
+      when(io.in.hasBranch && !io.in.dsFetched) {
+        state              := Mux(io.in.fire, keepDest, normal)
+        io.out.isDelaySlot := true.B
+        io.out.npc         := alignPC
+        brDestSaved        := io.in.predictDst
+      }.otherwise {
+        io.out.isDelaySlot := false.B
+        io.out.npc         := Mux(io.in.hasBranch, io.in.predictDst, alignPC)
+      }
+    }
+    is(keepDest) {
+      io.out.isDelaySlot := false.B
+      io.out.npc         := brDestSaved
+      when(io.in.fire) {
+        state := normal
+      }
+    }
+  }
+  // flush has highest priority
+  io.out.flush := io.in.redirect.flush
+  when(io.in.redirect.flush) {
+    io.out.isDelaySlot := false.B
+    io.out.npc         := io.in.redirect.target
+    state              := normal
+  }
 }

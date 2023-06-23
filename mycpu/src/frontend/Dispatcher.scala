@@ -241,7 +241,7 @@ class Dispatcher extends MycpuModule {
 
   //deal with rsReady
   val mainAluSlot = getRsSlot(ChiselFuType.MainALU.asUInt)
-  val subAluSlot  = getRsSlot(ChiselFuType.ALU.asUInt)
+  val subAluSlot  = getRsSlot(ChiselFuType.SubALU.asUInt)
   val lsuSlot     = getRsSlot(ChiselFuType.LSU.asUInt)
   val mduSlot     = getRsSlot(ChiselFuType.MDU.asUInt)
   val rsSlotSel   = List(mainAluSlot, subAluSlot, lsuSlot, mduSlot)

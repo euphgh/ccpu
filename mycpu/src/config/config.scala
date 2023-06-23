@@ -12,11 +12,12 @@ object FuType extends Enumeration {
 }
 
 object BranchType extends ChiselEnum {
-  val jcall, jret, jmp, jr, b, non = Value
-}
-
-object ChiselFuType extends ChiselEnum {
-  val MainALU, ALU, LSU, MDU = Value
+  val jcall  = Value("b000".U)
+  val jret   = Value("b001".U)
+  val jmp    = Value("b010".U)
+  val jr     = Value("b011".U)
+  val b, non = Value
+  def isJump(brType: BranchType.Type) = !brType.asUInt(2).asBool
 }
 
 // I-Cahce stage1 should decode MemType and addr to LoadSel
@@ -24,16 +25,16 @@ object LoadSel extends ChiselEnum {
   val LW, LB, LBU, LH, LHU, LWL0, LWL1, LWL2, LWR1, LWR2, LWR3 = Value
 }
 
+object CCAttr extends ChiselEnum {
+  val Cached   = Value("b011".U)
+  val Uncached = Value("b010".U)
+  def isUnCache(attr: UInt) = attr =/= Cached.asUInt
 object MduType extends ChiselEnum {
   val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ, MTC0, MFC0 = Value
 }
 object SpecialType extends ChiselEnum {
   val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, NON = Value
 }
-object BlockType extends ChiselEnum {
-  val CACHEINST, MFC0, NON = Value
-}
-
 object CacheOp extends ChiselEnum {
   val IndexInvalidI          = Value("b00000".U)
   val IndexWriteBackInvalidD = Value("b00001".U)
@@ -42,6 +43,11 @@ object CacheOp extends ChiselEnum {
   val HitInvalidI            = Value("b10000".U)
   val HitInvalidD            = Value("b10001".U)
   val HitWriteBackInvalidD   = Value("b10101".U)
+}
+
+class ExcCode extends MycpuBundle {
+  val excCode = ExcCode()
+  val refill  = Bool()
 }
 
 object ExcCode extends ChiselEnum {
@@ -61,31 +67,29 @@ object ExcCode extends ChiselEnum {
   val Tr   = Value(0x0d.U)
 }
 
-object MemType extends ChiselEnum {
-  val LW, LB, LBU, LH, LHU, LWL, LWR, SW, SH, SB, SWL, SWR = Value
-}
-
 object FrontExcCode extends ChiselEnum {
-  val AdEL, TLBL, NONE = Value
+  val AdEL, InvalidTLBL, RefillTLBL, NONE = Value
 }
 
 trait MycpuParam {
   // General Parameter for mycpu
 
-  val excCodeWidth       = 5
-  val PaddrWidth         = 32
-  val tagWidth           = 20
-  val cacheIndexWidth    = 7
-  val cacheOffsetWidth   = 12 - cacheIndexWidth
-  val vaddrWidth         = 32
-  val instrWidth         = 32
-  val dataWidth          = 32
-  val IcachRoads         = 4
-  val DcachRoads         = 4
-  val IcachLineBytes     = 32
-  val DcachLineBytes     = 32
-  val enableCacheInst    = true
-  val memInstOffsetWidth = 16
+  val excCodeWidth     = 5
+  val PaddrWidth       = 32
+  val tagWidth         = 20
+  val cacheIndexWidth  = 7
+  val cacheOffsetWidth = 12 - cacheIndexWidth
+  val vaddrWidth       = 32
+  val instrWidth       = 32
+  val dataWidth        = 32
+  val IcachRoads       = 4
+  val DcachRoads       = 4
+  val IcachLineBytes   = 32
+  val DcachLineBytes   = 32
+  val enableCacheInst  = true
+  val immWidth         = 16
+  def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
+  def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
 
   val predictNum  = 4
   val fetchNum    = 4

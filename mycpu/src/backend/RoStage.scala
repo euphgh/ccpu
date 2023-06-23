@@ -6,7 +6,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import utils.asg
-import utils.vassert
+import utils._
 
 /**
   * prfData is read in "Backend",connect to io.in
@@ -73,15 +73,11 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
   //for lsu
   if (fuKind == FuType.Lsu) {
-    val memReqVaddr12 = io.in.bits.memInstOffset.get(12, 0) + io.out.bits.srcData(0)(12, 0) //use "+"
-    val addr          = memReqVaddr12(1, 0)
-    val dCacheReq     = io.out.bits.dCacheReq.get
-    asg(dCacheReq.wWord, io.out.bits.srcData(1))
-    asg(dCacheReq.offset, memReqVaddr12(cacheOffsetWidth - 1, 0))
-    asg(dCacheReq.index, memReqVaddr12(11, cacheOffsetWidth))
-    asg(dCacheReq.memType.get, io.in.bits.basic.decoded.memType)
-    //TODO:size/wstrb
-    //use memType get size,use size and memReqVaddr12(1, 0) to get wstrb
-    // wStrb:load dont care/actually store dont care at this stage
+    val outMem    = io.out.bits.mem.get
+    val addrL12sb = io.in.bits.immOffset.get(11, 0) +& io.out.bits.srcData(0)(11, 0)
+    outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(cacheOffsetWidth - 1, 0)
+    outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, cacheOffsetWidth)
+    outMem.immOffset                      := io.in.bits.immOffset.get
+    outMem.carryout                       := addrL12sb(12)
   }
 }

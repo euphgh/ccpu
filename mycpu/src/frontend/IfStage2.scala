@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import utils._
 import cache._
+import decodemacro.MacroDecode
 
 /**
   * out.predictResult := stage1.out.bpuOut(bpuOut.takenMask become a "taken" bit)
@@ -31,6 +32,8 @@ class IfStage2 extends Module with MycpuParam {
     val in   = Flipped(Decoupled(new IfStage1OutIO))
     val out  = Decoupled(new IfStage2OutIO)
     val imem = new DramReadIO
+
+    val noBrMispreRedirect = new FrontRedirctIO
   })
   val icache2 = Module(new CacheStage2(IcachRoads, IcachLineBytes)())
   icache2.io.in.valid := io.in.valid
@@ -51,4 +54,47 @@ class IfStage2 extends Module with MycpuParam {
   })
   io.out.valid         := icache2.io.out.valid
   icache2.io.out.ready := io.out.ready
+
+  /**
+    * pre-decode
+    *   find out if a no-branch inst have been predicted taken
+    *     change its predict result
+    *     mask the inst behind it
+    *     need to redirect frontend
+    *     need to update BPUFIXME:
+    */
+  @MacroDecode
+  class IF2PreDecodeOut extends MycpuBundle {
+    val brType = BranchType()
+  }
+
+  import chisel3.util.experimental.decode.QMCMinimizer
+  val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
+  val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
+  val firNonBrMispre = WireDefault(0.U(log2Up(retireNum).W))
+
+  //default
+  asg(io.noBrMispreRedirect.flush, false.B)
+  asg(io.noBrMispreRedirect.target, 0.U(vaddrWidth.W))
+
+  (0 until fetchNum).foreach(i => {
+    val instr     = io.out.bits.basicInstInfo(i).instr
+    val preRes    = io.out.bits.predictResult(i)
+    val take      = preRes.counter > 1.U
+    val instValid = io.out.bits.validMask(i)
+    preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+    nonBrMisPreVec(i) := (preDecoder(i).brType === BranchType.non && take && instValid)
+  })
+
+  when(nonBrMisPreVec.asUInt.orR) {
+    firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
+    //mask the inst behind it
+    (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
+    //change its preResult
+    io.out.bits.predictResult(firNonBrMispre).counter := 0.U
+    //redirect frontend
+    asg(io.noBrMispreRedirect.flush, false.B)
+    asg(io.noBrMispreRedirect.target, io.out.bits.basicInstInfo(firNonBrMispre).pcVal + 4.U)
+    //FIXME:update BPU:make btb/pht entry unvalid?
+  }
 }

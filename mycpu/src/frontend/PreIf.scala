@@ -4,10 +4,15 @@ import bundle._
 import config._
 import chisel3.util._
 
+/**
+  * flush:
+  *      exception/eret-----<retire>
+  *      mispredict occur-----<exe>
+  *      no-branch mispredict-----<if2>
+  */
 class FrontRedirctIO extends MycpuBundle {
   val target = Output(UInt(vaddrWidth.W))
   val flush  = Output(Bool())
-  // need addsink to if-stage1 and if-stage2
 }
 
 /**

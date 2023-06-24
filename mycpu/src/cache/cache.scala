@@ -1,28 +1,26 @@
 package cache
 
-import chisel3._
 import config._
-import chisel3.util.Decoupled
-import chisel3.util.Valid
+import chisel3._
+import chisel3.util._
+import bundle.DramIO
 
 //for cache stage1 in and out
 class CacheInstBundle extends MycpuBundle {
   val op    = Output(CacheOp())
   val taglo = Output(UWord)
 }
-class CacheBasicReq extends MycpuBundle {
+class CacheLowAddr extends MycpuBundle {
   val index  = Output(UInt(cacheIndexWidth.W))
   val offset = Output(UInt(cacheOffsetWidth.W))
 }
-//for dCache interface IO
-class DcacheReq(toCacheStage: Int) extends CacheBasicReq {
-  val size  = Output(UInt(3.W))
-  val wWord = Output(UWord)
-  val wStrb = Output(UInt(4.W))
 
-  val memType = if (toCacheStage == 1) Some(Output(MemType())) else None
-  val isWrite = if (toCacheStage == 2) Some(Output(Bool())) else None
-  val loadSel = if (toCacheStage == 2) Some(Output(LoadSel())) else None
+class CacheRWReq extends MycpuBundle {
+  val lowAddr = new CacheLowAddr
+  val isWrite = Bool()
+  val size    = UInt(3.W)
+  val wWord   = UWord
+  val wStrb   = UInt(4.W)
 }
 
 class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
@@ -32,27 +30,21 @@ class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
 }
 
 class CacheStage1OutIO(roads: Int, isDcache: Boolean) extends MycpuBundle {
-  val idata = if (!isDcache) Some(Vec(roads, Output(Vec(4, UWord)))) else None
-  val ddata = if (isDcache) Some(Vec(roads, Output(UWord))) else None
-  val meta  = Vec(roads, new CacheMeta(isDcache))
-
-  //TODO:not for sure:
-  //index和offset应该也要带到CacheStage2?
-  //这里的写法可能也得改一改
-  val dCacheReq = if (isDcache) Some(new DcacheReq(toCacheStage = 2)) else None
-  val iCacheReq = if (!isDcache) Some(new CacheBasicReq) else None
+  val meta = Vec(roads, new CacheMeta(isDcache))
+  // ICache
+  val idata     = if (!isDcache) Some(Vec(roads, Output(Vec(4, UWord)))) else None
+  val iCacheReq = if (!isDcache) Some(new CacheLowAddr) else None
+  // DCache
+  val ddata     = if (isDcache) Some(Vec(roads, Output(UWord))) else None
+  val dCacheReq = if (isDcache) Some(new CacheRWReq) else None
+  // Cache Inst
   val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
+}
 
-  /**
-    * TODO: 这样写找不到成员
-    * if (isDcache) {
-    *    val forDache = new DcacheExtraReq(toCacheStage = 2)
-    *  }
-    *  if (enableCacheInst) {
-    *    val cacheInst = Valid(new CacheInstBundle)
-    *  }
-    */
-
+class CacheStage1In(isDcache: Boolean) extends MycpuBundle {
+  val rwReq     = if (isDcache) Some(new CacheRWReq) else None
+  val ifReq     = if (!isDcache) Some(new CacheLowAddr) else None
+  val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
 }
 
 /**
@@ -91,13 +83,9 @@ class CacheStage1(
   isDcache:  Boolean = false)
     extends MycpuModule {
   val io = IO(new Bundle {
-    val in = Flipped(Decoupled(new Bundle {
-      val req       = if (isDcache) new DcacheReq(toCacheStage = 1) else new CacheBasicReq
-      val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
-    }))
+    val in = Flipped(Decoupled(new CacheStage1In(isDcache)))
     val out = new CacheStage1OutIO(roads, isDcache)
   })
-
 }
 
 /**
@@ -134,21 +122,21 @@ class CacheStage2[T <: Data](
     extends MycpuModule {
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
-      val ptag        = Output(UInt(tagWidth.W))
-      val isUncached  = Output(Bool())
+      val ptag        = UInt(tagWidth.W)
+      val isUncached  = Bool()
       val fromStage1  = new CacheStage1OutIO(roads, isDcache)
-      val isException = Output(Bool())
+      val isException = Bool()
+      val sqCancel    = Bool() // cancel the cache when all find in SQ
     }))
-
     val out = Decoupled(new Bundle {
       val toUser = Output(userGen)
       val idata  = if (!isDcache) Some(Output(Vec(fetchNum, UWord))) else None
       val ddata  = if (isDcache) Some(Output(UWord)) else None
     })
-
     val cacheInst = new Bundle {
       val finish   = if (enableCacheInst) Some(Output(Bool())) else None
       val redirect = if (enableCacheInst) Some(Input(Bool())) else None
     }
+    val dram = new DramIO
   })
 }

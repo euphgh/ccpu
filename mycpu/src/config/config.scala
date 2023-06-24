@@ -7,7 +7,8 @@ object FuType extends Enumeration {
   type t = Value
   // 自动赋值枚举成员
   val MainAlu, SubAlu, Lsu, Mdu = Value
-  def needByPass(input: Value) = input == MainAlu || input == SubAlu
+  def needByPassIn(input:  Value) = input == MainAlu || input == SubAlu
+  def needByPassOut(input: Value) = input == MainAlu || input == SubAlu
 }
 
 object BranchType extends ChiselEnum {
@@ -27,6 +28,7 @@ object LoadSel extends ChiselEnum {
 object CCAttr extends ChiselEnum {
   val Uncached = Value("b010".U)
   val Cached   = Value("b011".U)
+  def isUnCache(attr: UInt) = attr =/= Cached.asUInt
 }
 
 object CacheOp extends ChiselEnum {
@@ -61,10 +63,6 @@ object ExcCode extends ChiselEnum {
   val Tr   = Value(0x0d.U)
 }
 
-object MemType extends ChiselEnum {
-  val LW, LB, LBU, LH, LHU, LWL, LWR, SW, SH, SB, SWL, SWR = Value
-}
-
 object FrontExcCode extends ChiselEnum {
   val AdEL, InvalidTLBL, RefillTLBL, NONE = Value
 }
@@ -85,6 +83,7 @@ trait MycpuParam {
   val IcachLineBytes   = 32
   val DcachLineBytes   = 32
   val enableCacheInst  = true
+  val immWidth         = 16
   def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
   def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
 
@@ -119,7 +118,7 @@ trait MycpuParam {
 
   val aluBypassNum = 2
 
-  def UWord = UInt(vaddrWidth.W)
+  def UWord = UInt(32.W)
   def UByte = UInt(8.W)
   def UHalf = UInt(16.W)
 

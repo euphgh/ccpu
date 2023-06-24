@@ -1,12 +1,9 @@
 package utils
 
-import config._
-import bundle._
 import chisel3._
 import chisel3.util.DecoupledIO
 import chisel3.util.Valid
 import chisel3.util.RegEnable
-import os.makeDir
 
 /**
   * 4 kinds of connect:
@@ -41,14 +38,17 @@ object PipelineConnect {
   *     这里着重关注right.valid,在dp.scala中它以线的方式直接赋值给slot.valid
   *
   * allowLeftNum由right产生：用于生成left.out.rdy
+  *
+  * flush包括exception/eret/mispredict
   */
-//TODO:flush
+
 object IbfConnectDper {
   def apply[T <: Data](
     gen:             T,
     left:            Vec[DecoupledIO[T]],
     right:           Vec[Valid[T]],
-    rightOutFireNum: UInt
+    rightOutFireNum: UInt,
+    flush:           Bool
   ): Unit = {
 
     val size = left.length //also right.length
@@ -65,14 +65,19 @@ object IbfConnectDper {
     })
 
     //rightOutFireNum = first notFire slot's index
+    val inRight = Reg(Vec(size, Valid(gen)))
     List.tabulate(size)(i => {
       when(i.U < stayNum) {
-        right(i).bits  := RegNext(right(i.U + rightOutFireNum).bits)
-        right(i).valid := RegNext(right(i.U + rightOutFireNum).valid)
+        inRight(i).bits  := right(i.U + rightOutFireNum).bits
+        inRight(i).valid := right(i.U + rightOutFireNum).valid
       }.otherwise {
-        right(i).bits  := RegNext(left(i.U - stayNum).bits)
-        right(i).valid := RegNext(left(i.U - stayNum).valid)
+        inRight(i).bits  := left(i.U - stayNum).bits
+        inRight(i).valid := left(i.U - stayNum).valid
       }
     })
+
+    when(flush) { (0 until size).map(i => inRight(i).valid := false.B) }
+    (0 until size).map(i => right(i) := inRight(i))
+
   }
 }

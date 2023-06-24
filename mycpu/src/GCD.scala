@@ -23,7 +23,8 @@ class GCD extends Module {
     x := io.value1
     y := io.value2
   }
+  val t = io.outputGCD
 
-  io.outputGCD   := x
+  t              := x
   io.outputValid := y === 0.U
 }

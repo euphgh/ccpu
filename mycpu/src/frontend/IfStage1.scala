@@ -106,6 +106,12 @@ class BpuUpdateIO extends MycpuBundle {
   val moreData = Output(UInt(1.W)) //TODO:not make sure
 }
 
+class ICacheInstIO extends MycpuBundle {
+  val op    = CacheOp()
+  val taglo = UWord
+  val index = UInt(cacheIndexWidth.W)
+}
+
 /**
   * not connect by pipeline
   * out.pcVal = regEnable(preIFOutIO.npc, fire)
@@ -130,11 +136,6 @@ class BpuUpdateIO extends MycpuBundle {
   * instantiate BPU in this module, let out.bpuout = bpu.out
   */
 class IfStage1 extends MycpuModule {
-  class ICacheInstIO extends MycpuBundle {
-    val op    = CacheOp()
-    val taglo = UWord
-    val index = UInt(cacheIndexWidth.W)
-  }
   val io = IO(new Bundle {
     val in      = Flipped(new PreIfOutIO)
     val out     = Decoupled(new IfStage1OutIO)
@@ -142,7 +143,6 @@ class IfStage1 extends MycpuModule {
     val tlb     = new TLBSearchIO
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
-    val delaySlotOK = Output(Bool()) // only to PreIf
     val icacheInst =
       if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
       else None

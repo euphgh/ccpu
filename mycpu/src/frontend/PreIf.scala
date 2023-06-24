@@ -35,16 +35,12 @@ class FrontRedirctIO extends MycpuBundle {
 class PreIf extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val redirect   = Flipped(new FrontRedirctIO)
-      val fire       = Input(Bool())
-      val pcVal      = Input(UWord)
-      val hasBranch  = Input(Bool())
-      val predictDst = Input(UWord)
-      val dsFetched  = Input(Bool())
+      val redirect = Flipped(new FrontRedirctIO)
+      val fromIf1  = Flipped(new IfStage1ToPreIf)
     }
     val out = new PreIfOutIO
   })
-  val alignPC = Cat(io.in.pcVal(31, 4) + 1.U, "b0000".U)
+  val alignPC = Cat(io.in.fromIf1.pcVal(31, 4) + 1.U, "b0000".U)
   object PreIfState extends ChiselEnum {
     val normal, keepDest = Value
   }
@@ -53,20 +49,20 @@ class PreIf extends MycpuModule {
   val brDestSaved = RegInit(0.U, UWord)
   switch(state) {
     is(normal) {
-      when(io.in.hasBranch && !io.in.dsFetched) {
-        state              := Mux(io.in.fire, keepDest, normal)
+      when(io.in.fromIf1.hasBranch && !io.in.fromIf1.dsFetched) {
+        state              := Mux(io.in.fromIf1.stage1Rdy, keepDest, normal)
         io.out.isDelaySlot := true.B
         io.out.npc         := alignPC
-        brDestSaved        := io.in.predictDst
+        brDestSaved        := io.in.fromIf1.predictDst
       }.otherwise {
         io.out.isDelaySlot := false.B
-        io.out.npc         := Mux(io.in.hasBranch, io.in.predictDst, alignPC)
+        io.out.npc         := Mux(io.in.fromIf1.hasBranch, io.in.fromIf1.predictDst, alignPC)
       }
     }
     is(keepDest) {
       io.out.isDelaySlot := false.B
       io.out.npc         := brDestSaved
-      when(io.in.fire) {
+      when(io.in.fromIf1.stage1Rdy) {
         state := normal
       }
     }

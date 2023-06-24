@@ -46,7 +46,7 @@ class PreIf extends MycpuModule {
   }
   import PreIfState._
   val state       = RegInit(normal)
-  val brDestSaved = RegInit(0.U, UWord)
+  val brDestSaved = RegInit(0.U(vaddrWidth.W))
   switch(state) {
     is(normal) {
       when(io.in.fromIf1.hasBranch && !io.in.fromIf1.dsFetched) {

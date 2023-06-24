@@ -148,25 +148,24 @@ class IfStage1 extends MycpuModule {
       else None
   })
   // stage regs ==========================================
-  val fakeCacheInst = Flipped(Valid(new ICacheInstIO))
+  val fakeCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
   fakeCacheInst.valid := false.B
   val usableCacheInst = io.icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready
   val pc              = RegEnable(io.in.npc, "hbfc00000".U, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
-  io.out.fire := io.out.ready
 
   // use wire io.in direct ================================
   // >> cache =============================================
   val icache1 = Module(new CacheStage1())
-  icache1.in.valid                         := update
-  icache1.in.bits.req.index                := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
-  icache1.in.bits.req.offset               := getOffset(io.in.npc)
-  icache1.in.bits.cacheInst.get.valid      := isCacheInst
-  icache1.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
-  icache1.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
-  io.out.bits.iCache <> icache1.out
+  icache1.io.in.valid                         := update
+  icache1.io.in.bits.req.index                := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
+  icache1.io.in.bits.req.offset               := getOffset(io.in.npc)
+  icache1.io.in.bits.cacheInst.get.valid      := isCacheInst
+  icache1.io.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
+  icache1.io.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
+  io.out.bits.iCache <> icache1.io.out
   // >> bpu ===============================================
   val PCs = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
   // >> >> module ============================================
@@ -242,5 +241,6 @@ class IfStage1 extends MycpuModule {
   )
   io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
 
-  asg(io.toPreIf.stage1Rdy, io.out.ready)
+  asg(io.out.valid, true.B)
+  asg(io.toPreIf.stage1Rdy, io.out.fire)
 }

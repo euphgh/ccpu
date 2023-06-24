@@ -90,11 +90,14 @@ class CacheStage1(
   lineBytes: Int     = 8,
   isDcache:  Boolean = false)
     extends MycpuModule {
-  val in = Flipped(Decoupled(new Bundle {
-    val req       = if (isDcache) new DcacheReq(toCacheStage = 1) else new CacheBasicReq
-    val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
-  }))
-  val out = new CacheStage1OutIO(roads, isDcache)
+  val io = IO(new Bundle {
+    val in = Flipped(Decoupled(new Bundle {
+      val req       = if (isDcache) new DcacheReq(toCacheStage = 1) else new CacheBasicReq
+      val cacheInst = if (enableCacheInst) Some(Valid(new CacheInstBundle)) else None
+    }))
+    val out = new CacheStage1OutIO(roads, isDcache)
+  })
+
 }
 
 /**

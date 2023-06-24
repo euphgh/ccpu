@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.conversions._
 import cache._
+import utils.asg
 
 class BtbOutIO extends MycpuBundle {
   val instType = BranchType()
@@ -240,4 +241,6 @@ class IfStage1 extends MycpuModule {
     )
   )
   io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
+
+  asg(io.toPreIf.stage1Rdy, io.out.ready)
 }

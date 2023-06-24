@@ -93,7 +93,7 @@ class IfStage2 extends Module with MycpuParam {
     //change its preResult
     io.out.bits.predictResult(firNonBrMispre).counter := 0.U
     //redirect frontend
-    asg(io.noBrMispreRedirect.flush, false.B)
+    asg(io.noBrMispreRedirect.flush, true.B)
     asg(io.noBrMispreRedirect.target, io.out.bits.basicInstInfo(firNonBrMispre).pcVal + 4.U)
     //FIXME:update BPU:make btb/pht entry unvalid?
   }

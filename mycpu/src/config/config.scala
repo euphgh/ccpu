@@ -26,8 +26,8 @@ object LoadSel extends ChiselEnum {
 }
 
 object CCAttr extends ChiselEnum {
-  val Cached   = Value("b011".U)
   val Uncached = Value("b010".U)
+  val Cached   = Value("b011".U)
   def isUnCache(attr: UInt) = attr =/= Cached.asUInt
 }
 

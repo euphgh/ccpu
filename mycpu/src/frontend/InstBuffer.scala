@@ -47,6 +47,7 @@ class InstBuffer extends MycpuModule {
     ib.io.push(i).bits.exception     := io.in.bits.exception
   })
   io.in.ready := ib.io.push(0).ready // any number is ok
+
   // >> Assert ========================================================
   val validMask = io.in.bits.validMask.asUInt
   assert(
@@ -57,15 +58,9 @@ class InstBuffer extends MycpuModule {
   assert(ibRdy(0) === ibRdy(1))
   assume(ibRdy(0) === ibRdy(2))
   assert(ibRdy(0) === ibRdy(3))
-  io.out(0).bits.ROBIdx
+
   // output ========================================================
-  (0 until decodeNum).foreach(i => {
-    io.out(i).valid              := ib.io.pop(i).valid
-    ib.io.pop(i).ready           := io.out(i).ready
-    io.out(i).bits.exception     := ib.io.pop(i).bits.exception
-    io.out(i).bits.basic         := ib.io.pop(i).bits.basicInstInfo
-    io.out(i).bits.predictResult := ib.io.pop(i).bits.predictResult
-  })
+  io.out <> ib.io.pop
 
   @MacroDecode
   class IBdecodeOut extends MycpuBundle {

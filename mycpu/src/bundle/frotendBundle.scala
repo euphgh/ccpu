@@ -130,7 +130,6 @@ class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
   val validMask     = Vec(fetchNum, Bool())
-  val validNum      = Output(UInt(log2Up(fetchNum).W))
   val exception     = Output(FrontExcCode())
 }
 

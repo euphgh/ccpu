@@ -1,5 +1,4 @@
 import chisel3._
-import chisel3.experimental.conversions._
 
 /**
   * Compute GCD using subtraction method.
@@ -24,14 +23,8 @@ class GCD extends Module {
     x := io.value1
     y := io.value2
   }
+  val t = io.outputGCD
 
-  io.outputGCD   := x
+  t              := x
   io.outputValid := y === 0.U
-}
-
-class MyModule extends Module {
-  val a, b, c, d = IO(Input(UInt(8.W)))
-  val sel        = IO(Input(Bool()))
-  val y, z       = IO(Output(UInt(8.W)))
-  (y, z) := Mux(sel, (a, b), (c, d))
 }

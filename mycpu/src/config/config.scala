@@ -7,7 +7,8 @@ object FuType extends Enumeration {
   type t = Value
   // 自动赋值枚举成员
   val MainAlu, SubAlu, Lsu, Mdu = Value
-  def needByPass(input: Value) = input == MainAlu || input == SubAlu
+  def needByPassIn(input:  Value) = input == MainAlu || input == SubAlu
+  def needByPassOut(input: Value) = input == MainAlu || input == SubAlu
 }
 
 object BranchType extends ChiselEnum {
@@ -19,10 +20,6 @@ object BranchType extends ChiselEnum {
   def isJump(brType: BranchType.Type) = !brType.asUInt(2).asBool
 }
 
-object ChiselFuType extends ChiselEnum {
-  val MainALU, ALU, LSU, MDU = Value
-}
-
 // I-Cahce stage1 should decode MemType and addr to LoadSel
 object LoadSel extends ChiselEnum {
   val LW, LB, LBU, LH, LHU, LWL0, LWL1, LWL2, LWR1, LWR2, LWR3 = Value
@@ -31,8 +28,13 @@ object LoadSel extends ChiselEnum {
 object CCAttr extends ChiselEnum {
   val Cached   = Value("b011".U)
   val Uncached = Value("b010".U)
+  def isUnCache(attr: UInt) = attr =/= Cached.asUInt
+object MduType extends ChiselEnum {
+  val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ, MTC0, MFC0 = Value
 }
-
+object SpecialType extends ChiselEnum {
+  val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, NON = Value
+}
 object CacheOp extends ChiselEnum {
   val IndexInvalidI          = Value("b00000".U)
   val IndexWriteBackInvalidD = Value("b00001".U)
@@ -65,10 +67,6 @@ object ExcCode extends ChiselEnum {
   val Tr   = Value(0x0d.U)
 }
 
-object MemType extends ChiselEnum {
-  val LW, LB, LBU, LH, LHU, LWL, LWR, SW, SH, SB, SWL, SWR = Value
-}
-
 object FrontExcCode extends ChiselEnum {
   val AdEL, InvalidTLBL, RefillTLBL, NONE = Value
 }
@@ -89,6 +87,7 @@ trait MycpuParam {
   val IcachLineBytes   = 32
   val DcachLineBytes   = 32
   val enableCacheInst  = true
+  val immWidth         = 16
   def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
   def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
 
@@ -111,10 +110,10 @@ trait MycpuParam {
 
   def ARegIdx = UInt(aRegAddrWidth.W)
   def PRegIdx = UInt(pRegAddrWidth.W)
-  val ROBIdx  = UInt(robIndexWidth.W)
+  def ROBIdx  = UInt(robIndexWidth.W)
 
   val tlbIndexWidth = 3
-  val TLBIdx        = UInt(tlbIndexWidth.W)
+  def TLBIdx        = UInt(tlbIndexWidth.W)
 
   val prfReadPortNum = srcDataNum * issueNum
 
@@ -123,7 +122,7 @@ trait MycpuParam {
 
   val aluBypassNum = 2
 
-  def UWord = UInt(vaddrWidth.W)
+  def UWord = UInt(32.W)
   def UByte = UInt(8.W)
   def UHalf = UInt(16.W)
 

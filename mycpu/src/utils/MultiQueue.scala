@@ -30,12 +30,12 @@ import chisel3.util._
   *              false:  it will assert some enq.ready
   */
 
-//TODO:ROB need an out index
 class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, allIn: Boolean = false)
     extends MycpuModule {
   val io = IO(new Bundle {
-    val push = Vec(enqNum, Flipped(Decoupled(gen)))
-    val pop  = Vec(deqNum, Decoupled(gen))
+    val push  = Vec(enqNum, Flipped(Decoupled(gen)))
+    val pop   = Vec(deqNum, Decoupled(gen))
+    val flush = Input(Bool())
   })
   require(isPow2(size))
 
@@ -43,12 +43,12 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   private val ptrWidth     = counterWidth + 1
 
   //ring means "+"
-  private val ringBuffer = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
-  private val headPtr    = RegInit(0.U, UInt(ptrWidth.W))
-  private val tailPtr    = RegInit(0.U, UInt(ptrWidth.W))
+  val ringBuffer         = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
+  val headPtr            = RegInit(UInt(ptrWidth.W), 0.U)
+  val tailPtr            = RegInit(UInt(ptrWidth.W), 0.U)
   private val deqFireNum = PopCount(io.pop.map(_.fire))
-  private def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth + 1) //must look ahead a cycle
-  private def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth + 1) //only considerate current
+  private def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth) //must look ahead a cycle
+  private def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth) //only considerate current
   private val counterMatch = headPtr(counterWidth - 1, 0) === tailPtr(counterWidth - 1, 0)
   private val signMatch    = headPtr(ptrWidth - 1) === tailPtr(ptrWidth - 1)
   val empty                = counterMatch && signMatch
@@ -57,9 +57,9 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   //assume input is 1..0..
   if (allIn) {
     val enqValidNum = PopCount(io.push.map(_.valid))
-    (0 to enqNum).foreach(i => io.push(i).ready := !(overflow(enqValidNum)))
+    (0 until enqNum).foreach(i => io.push(i).ready := !(overflow(enqValidNum)))
   } else {
-    (0 to enqNum).foreach(i => io.push(i).ready := !(overflow(i.U)))
+    (0 until enqNum).foreach(i => io.push(i).ready := !(overflow(i.U)))
   }
   val enqFireNum = PopCount(io.push.map(_.fire))
   List.tabulate(enqNum)(i => {
@@ -70,11 +70,11 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   headPtr := headPtr + enqFireNum
 
   //pop
-  (0 to enqNum).foreach(i => (io.pop(i).valid := !underflow(i.U)))
+  (0 until deqNum).foreach(i => (io.pop(i).valid := !underflow(i.U)))
   tailPtr := tailPtr + deqFireNum
-  List.tabulate(deqNum)(i => {
-    when(io.pop(i).fire) {
-      io.pop(i) := ringBuffer(tailPtr + i.U)
-    }
+  (0 until deqNum).foreach(i => {
+    io.pop(i).bits := ringBuffer(tailPtr + i.U)
   })
+
+  //TODO:flush
 }

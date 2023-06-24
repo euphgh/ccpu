@@ -238,7 +238,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
       val carryout  = Output(Bool())
     }))
     else None
-  val srcData       = Vec(2, Output(UInt(dataWidth.W)))
   val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
   val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }

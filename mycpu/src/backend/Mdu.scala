@@ -55,8 +55,9 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val exeStageIO = new ExeStageIO(FuType.Mdu)
   exeStageIO.out <> io.out
   PipelineConnect(roStage.io.out, exeStageIO.in, exeStageIO.out.fire, io.flush)
-  val exeIn                      = exeStageIO.in.bits
-  val exeOut                     = exeStageIO.out.bits
+  val exeIn  = exeStageIO.in.bits
+  val exeOut = exeStageIO.out.bits
+
   val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.memType)
 
   //unchange connect

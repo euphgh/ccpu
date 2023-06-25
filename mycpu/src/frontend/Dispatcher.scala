@@ -2,12 +2,9 @@ package frontend
 import config._
 import bundle._
 import chisel3._
-import chisel3.util.Decoupled
-import chisel3.util.Valid
-import utils.MultiQueue
-import chisel3.util.log2Up
+import chisel3.util._
 import utils._
-import chisel3.util.Cat
+import chisel3.experimental.conversions._
 
 class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
@@ -193,6 +190,7 @@ class Dispatcher extends MycpuModule {
     val isMispredict = Input(Bool())
 
     //valid when flush(mispredictRetire/exception/eret)
+    // next cycle must be empty
     val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
 
     val out = new Bundle {
@@ -206,21 +204,25 @@ class Dispatcher extends MycpuModule {
 
   //TODO:some inst can go to main/sub alurs;some can only goto sub alurs
   val noInst = (dispatchNum).U
-  def getRsSlot(rsType: UInt): UInt = Mux(
-    (slots(0).inst.whichFu === ChiselFuType(rsType)),
-    0.U,
-    Mux(
-      slots(1).inst.whichFu === ChiselFuType(rsType),
-      1.U,
-      Mux(slots(2).inst.whichFu === ChiselFuType(rsType), 2.U, noInst)
-    )
-  )
+  def getRsSel(rsType: UInt): UInt = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType(rsType)).asUInt
+  def getMainALUSlot(): UInt = {
+    val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
+    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
+    val hasMain  = mainMask.orR
+    Mux(hasMain, PriorityEncoderOH(mainMask), PriorityEncoderOH(subMask))
+  }
+  def getSubALUSlot(): UInt = {
+    val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
+    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
+    val hasMain  = mainMask.orR
+    Mux(hasMain, PriorityEncoderOH(subMask), SecondPriEncoder(subMask))
+  }
 
   val freeListSize = 32
   val freeList = Module(
     new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx, size = freeListSize, allIn = false)
   )
-  val decoder = List(Module(new Decoder), Module(new Decoder), Module(new Decoder))
+  val decoder = List.fill(decodeNum)(Module(new Decoder()))
   val srat    = Module(new SRAT)
   val slots   = Wire(Vec(dispatchNum, new dispatchSlot))
 
@@ -240,54 +242,49 @@ class Dispatcher extends MycpuModule {
   })
 
   //deal with rsReady
-  val mainAluSlot = getRsSlot(ChiselFuType.MainALU.asUInt)
-  val subAluSlot  = getRsSlot(ChiselFuType.SubALU.asUInt)
-  val lsuSlot     = getRsSlot(ChiselFuType.LSU.asUInt)
-  val mduSlot     = getRsSlot(ChiselFuType.MDU.asUInt)
-  val rsSlotSel   = List(mainAluSlot, subAluSlot, lsuSlot, mduSlot)
-  val toRs        = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
-  List.tabulate(rsSlotSel.length)(i => {
-    when(rsSlotSel(i) =/= noInst) {
-      slots(rsSlotSel(i)).rsReady := toRs(i).ready
-    }
+  val mainAluSel = getMainALUSlot()
+  val subAluSel  = getSubALUSlot()
+  val lsuSel     = getRsSel(ChiselFuType.LSU.asUInt)
+  val mduSel     = getRsSel(ChiselFuType.MDU.asUInt)
+  val rsSlotSel  = List(mainAluSel, subAluSel, lsuSel, mduSel)
+  val toRs       = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
+  List.tabulate(dispatchNum)(i => {
+    slots(i).rsReady := Mux1H(rsSlotSel.map(_(i)), toRs.map(_.ready))
   })
 
   //deal with pDestOk
-  val needPdest    = WireInit(VecInit((0 until dispatchNum).map(i => (slots(i).inst.aRegsIdx.dest =/= 0.U))))
-  val cntNeedPdest = Wire(Vec(dispatchNum, UInt(log2Up(dispatchNum + 1).W)))
-  cntNeedPdest(0) := 0.U
-  (1 until dispatchNum).map(i => { cntNeedPdest(i) := cntNeedPdest(i - 1) +& needPdest(i - 1).asUInt })
-  (0 until dispatchNum).map(i =>
-    when(needPdest(i)) {
-      asg(slots(i).pDestOk, freeList.io.pop(cntNeedPdest(i)).valid)
-      asg(slots(i).toRsBasic.destPregAddr, freeList.io.pop(cntNeedPdest(i)).bits)
-    }
-  )
+  val needPdest = WireInit(VecInit((0 until dispatchNum).map(i => (slots(i).inst.aRegsIdx.dest =/= 0.U))))
+  (0 until dispatchNum).map(i => {
+    slots(i).toRsBasic.destAregAddr := Mux1H(
+      CountMask.oneHot(needPdest.asUInt(i, 0)),
+      (0 to i).map(freeList.io.pop(_).bits)
+    )
+    slots(i).pDestOk := Mux1H(CountMask.oneHot(needPdest.asUInt(i, 0)), (0 to i).map(freeList.io.pop(_).valid))
+  })
 
   //blockReg,be aware of priority
   val blockReg      = RegInit(false.B)
-  val pipelineEmpty = io.robEmpty && io.stqEmpty
+  val stqEnpty      = RegNext(io.stqEmpty)
+  val robEmpty      = RegNext(io.recoverSrat.valid)
+  val pipelineEmpty = stqEnpty && robEmpty
   when(io.isMispredict) { blockReg := true.B }
-  when(pipelineEmpty) { blockReg := false.B }
+  when(io.recoverSrat.valid) { blockReg := false.B }
 
   //deal with readyGo
   val firBlkType = decoder(0).io.out.decoded.blockType
   slots(0).readyGo :=
     slots(0).robReady && slots(0).pDestOk && slots(0).rsReady &&
-      !((firBlkType === BlockType.CACHEINST && !pipelineEmpty) || (firBlkType === BlockType.MFC0 && !io.robEmpty)) &&
-      !io.isMispredict &&
-      !(blockReg && !pipelineEmpty)
+      !((firBlkType === BlockType.CACHEINST && !pipelineEmpty) || (firBlkType === BlockType.MFC0 && !robEmpty)) &&
+      !(blockReg && !robEmpty)
   (1 until dispatchNum).map(i => {
     slots(i).readyGo :=
       slots(i).robReady && slots(i).rsReady && slots(i).pDestOk &&
         slots(i - 1).readyGo &&
-        decoder(i).io.out.decoded.blockType === BlockType.NON &&
-        !io.isMispredict &&
-        !(blockReg && pipelineEmpty)
+        decoder(i).io.out.decoded.blockType === BlockType.NON
   })
 
   //io.out.toRob(i).fire === slots(i).out.fire
-  io.outFireNum := List.tabulate(dispatchNum)(i => { io.out.toRob(i).fire }).foldRight(0.U)((sum, i) => sum.asUInt +& i)
+  io.outFireNum := PriorityCount((0 until dispatchNum).map(io.out.toRob(_).fire))
 
   //decoder
   List.tabulate(dispatchNum)(i => {
@@ -320,30 +317,30 @@ class Dispatcher extends MycpuModule {
   })
 
   //to fl
-  val allowFlPopNum =
-    (0 until dispatchNum).map(i => needPdest(i) & io.out.toRob(i).fire).foldRight(0.U)((sum, i) => sum.asUInt +& i)
+  val allowFlPopMask = CountMask.apply((0 until dispatchNum).map(i => needPdest(i) & io.out.toRob(i).fire).asUInt)
   List.tabulate(dispatchNum)(i => {
-    freeList.io.pop(i).ready := (i.U < allowFlPopNum)
+    freeList.io.pop(i).ready := allowFlPopMask(i)
   })
 
   //to rs
   //rs is special
   val rsKind = List(FuType.MainAlu, FuType.SubAlu, FuType.Lsu, FuType.Mdu)
   List.tabulate(toRs.length)(i => {
+    val thisSlot = Mux1H(rsSlotSel(i), (0 to dispatchNum).map(slots(_)))
 
-    toRs(i).valid := false.B //default
-    toRs(i).bits  := 0.U.asTypeOf(new RsOutIO(kind = rsKind(i))) //default
+    toRs(i).valid := false.B //only valid is important
+    when(rsSlotSel(i).orR) {
+      toRs(i).valid := thisSlot.valid & thisSlot.readyGo
+    }
 
-    when(rsSlotSel(i) =/= noInst) {
-      toRs(i).valid      := slots(rsSlotSel(i)).valid & slots(rsSlotSel(i)).readyGo
-      toRs(i).bits.basic := slots(rsSlotSel(i)).toRsBasic
-
-      if (rsKind(i) == FuType.MainAlu) { asg(toRs(i).bits.predictResult.get, slots(mainAluSlot).inst.predictResult) }
-      if (rsKind(i) == FuType.Mdu) {
-        val mduInstr = slots(mduSlot).inst.basic.instr
-        asg(toRs(i).bits.mfc0Addr.get, Cat(mduInstr(15, 11), mduInstr(2, 0)))
-      }
-      //FIXME:immOffset
+    toRs(i).bits.basic := thisSlot.toRsBasic
+    val instr = thisSlot.inst.basic.instr
+    if (rsKind(i) == FuType.MainAlu) { asg(toRs(i).bits.predictResult.get, thisSlot.inst.predictResult) }
+    if (rsKind(i) == FuType.Mdu) {
+      asg(toRs(i).bits.mfc0Addr.get, Cat(instr(15, 11), instr(2, 0)))
+    }
+    if (rsKind(i) == FuType.Lsu) {
+      asg(toRs(i).bits.immOffset.get, instr(15, 0))
     }
   })
 }

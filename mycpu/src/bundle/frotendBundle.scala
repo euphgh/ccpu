@@ -19,11 +19,11 @@ import cache._
 0x0c Ov 算出溢出例外
  */
 class ExceptionInfoBundle extends MycpuBundle {
-  val happen  = Output(Bool())
-  val isBd    = Output(Bool())
-  val excCode = Output(UInt(excCodeWidth.W))
-  val pc      = Output(UWord)
-  val refill  = Output(Bool())
+  val happen  = Bool()
+  val isBd    = Bool()
+  val excCode = UInt(excCodeWidth.W)
+  val pc      = UWord
+  val refill  = Bool()
 }
 
 /*

@@ -3,6 +3,7 @@ import config._
 import bundle._
 import chisel3._
 import chisel3.util._
+import backend.RobEntry
 
 /**
   * all the port should at least be fmt "1..0.."
@@ -32,36 +33,43 @@ import chisel3.util._
 
 class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, allIn: Boolean = false)
     extends MycpuModule {
-  val io = IO(new Bundle {
-    val push  = Vec(enqNum, Flipped(Decoupled(gen)))
-    val pop   = Vec(deqNum, Decoupled(gen))
-    val flush = Input(Bool())
-  })
   require(isPow2(size))
+  val counterWidth = log2Ceil(size)
+  val ptrWidth     = counterWidth + 1
 
-  private val counterWidth = log2Up(size)
-  private val ptrWidth     = counterWidth + 1
+  val io = IO(new Bundle {
+    val push    = Vec(enqNum, Flipped(Decoupled(gen)))
+    val pop     = Vec(deqNum, Decoupled(gen))
+    val flush   = Input(Bool())
+    val tailPtr = Output(UInt(ptrWidth.W))
+    val headPtr = Output(UInt(ptrWidth.W))
+  })
 
   //ring means "+"
-  val ringBuffer         = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
-  val headPtr            = RegInit(UInt(ptrWidth.W), 0.U)
-  val tailPtr            = RegInit(UInt(ptrWidth.W), 0.U)
-  private val deqFireNum = PopCount(io.pop.map(_.fire))
-  private def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth) //must look ahead a cycle
-  private def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth) //only considerate current
-  private val counterMatch = headPtr(counterWidth - 1, 0) === tailPtr(counterWidth - 1, 0)
-  private val signMatch    = headPtr(ptrWidth - 1) === tailPtr(ptrWidth - 1)
-  val empty                = counterMatch && signMatch
-  val full                 = counterMatch && !signMatch
+  val ringBuffer = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
+  val headPtr    = RegInit(UInt(ptrWidth.W), 0.U)
+  val tailPtr    = RegInit(UInt(ptrWidth.W), 0.U)
+  val deqFireNum = PopCount(io.pop.map(_.fire))
+  val enqFireNum = PopCount(io.push.map(_.fire))
+  def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth) //must look ahead a cycle
+  def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth) //only considerate current
+  val nextBasicNum = RegNext(headPtr + enqFireNum - tailPtr - deqFireNum)
+  def overflowR(add:  UInt) = (nextBasicNum + add - deqFireNum)(counterWidth) //must look ahead a cycle
+  def underflowR(sub: UInt) = (nextBasicNum - sub)(counterWidth) //only considerate current
+  val counterMatch = headPtr(counterWidth - 1, 0) === tailPtr(counterWidth - 1, 0)
+  val signMatch    = headPtr(ptrWidth - 1) === tailPtr(ptrWidth - 1)
+  val empty        = counterMatch && signMatch
+  val full         = counterMatch && !signMatch
+  io.headPtr := headPtr
+  io.tailPtr := tailPtr
 
   //assume input is 1..0..
   if (allIn) {
     val enqValidNum = PopCount(io.push.map(_.valid))
-    (0 until enqNum).foreach(i => io.push(i).ready := !(overflow(enqValidNum)))
+    (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(enqValidNum)))
   } else {
-    (0 until enqNum).foreach(i => io.push(i).ready := !(overflow(i.U)))
+    (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(i.U)))
   }
-  val enqFireNum = PopCount(io.push.map(_.fire))
   List.tabulate(enqNum)(i => {
     when(io.push(i).fire) {
       ringBuffer(headPtr + i.U) := io.push(i).bits
@@ -70,7 +78,7 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   headPtr := headPtr + enqFireNum
 
   //pop
-  (0 until deqNum).foreach(i => (io.pop(i).valid := !underflow(i.U)))
+  (0 until deqNum).foreach(i => (io.pop(i).valid := !underflowR(i.U)))
   tailPtr := tailPtr + deqFireNum
   (0 until deqNum).foreach(i => {
     io.pop(i).bits := ringBuffer(tailPtr + i.U)
@@ -78,3 +86,5 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
 
   //TODO:flush
 }
+
+class MyROB extends MultiQueue(3, 4, new RobEntry) {}

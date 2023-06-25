@@ -184,13 +184,17 @@ class Dispatcher extends MycpuModule {
       val fromFuWriteBack = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
       val robIndex        = Input(ROBIdx)
     }
-    val outFireNum   = Output(UInt())
-    val robEmpty     = Input(Bool())
-    val stqEmpty     = Input(Bool())
-    val isMispredict = Input(Bool())
+    val outFireNum = Output(UInt())
+
+    val fromAluMispre = new Bundle {
+      val happen     = Input(Bool())
+      val realTarget = Input(UWord)
+      val robIdx     = Input(ROBIdx)
+    }
+    val fronRedirect = new FrontRedirctIO
 
     //valid when flush(mispredictRetire/exception/eret)
-    // next cycle must be empty
+    // next cycle the backend is empty
     val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
 
     val out = new Bundle {
@@ -262,25 +266,63 @@ class Dispatcher extends MycpuModule {
     slots(i).pDestOk := Mux1H(CountMask.oneHot(needPdest.asUInt(i, 0)), (0 to i).map(freeList.io.pop(_).valid))
   })
 
-  //blockReg,be aware of priority
-  val blockReg      = RegInit(false.B)
-  val stqEnpty      = RegNext(io.stqEmpty)
-  val robEmpty      = RegNext(io.recoverSrat.valid)
-  val pipelineEmpty = stqEnpty && robEmpty
-  when(io.isMispredict) { blockReg := true.B }
-  when(io.recoverSrat.valid) { blockReg := false.B }
+  /**
+    * deal with mispre block
+    *
+    * notice t0 and t1 can ↑ at one cycle
+    *   t0:mispre
+    *     don't block
+    *   t1:ds get into rob
+    *     redirect
+    *     block...
+    *   t2:srat-recoverd
+    *     state back to normal,don't block
+    *     but inst still can't go,because rob won't ready
+    *   t3:fl recoverd
+    */
+  val dsIdxReg      = RegInit(0.U(robIndexWidth.W))
+  val realTargetReg = RegInit(0.U(vaddrWidth.W))
+  asg(io.fronRedirect.flush, false.B) //default
+  asg(io.fronRedirect.target, realTargetReg) //default
+
+  object DispatcherState extends ChiselEnum {
+    val normal, waitDs, block = Value
+  }
+  import DispatcherState._
+  val state  = RegInit(normal)
+  val mispre = io.fromAluMispre
+  switch(state) {
+    is(normal) {
+      when(mispre.happen) {
+        when(io.in.robIndex === mispre.robIdx + 1.U) { //ds not in rob
+          asg(state, waitDs)
+          asg(dsIdxReg, mispre.robIdx + 1.U)
+          asg(realTargetReg, mispre.realTarget)
+        }.otherwise { //ds already in ROB
+          asg(state, block)
+          asg(io.fronRedirect.flush, true.B)
+          asg(io.fronRedirect.target, mispre.realTarget)
+        }
+      }
+    }
+    is(waitDs) {
+      when(io.in.robIndex === dsIdxReg) {
+        asg(state, block)
+        asg(io.fronRedirect.flush, true.B)
+        asg(io.fronRedirect.target, realTargetReg)
+      }
+    }
+    is(block) {
+      when(io.recoverSrat.valid) { asg(state, normal) }
+    }
+  }
 
   //deal with readyGo
-  val firBlkType = decoder(0).io.out.decoded.blockType
-  slots(0).readyGo :=
-    slots(0).robReady && slots(0).pDestOk && slots(0).rsReady &&
-      !((firBlkType === BlockType.CACHEINST && !pipelineEmpty) || (firBlkType === BlockType.MFC0 && !robEmpty)) &&
-      !(blockReg && !robEmpty)
+  slots(0).readyGo := slots(0).robReady && slots(0).pDestOk && slots(0).rsReady && state =/= block
   (1 until dispatchNum).map(i => {
     slots(i).readyGo :=
-      slots(i).robReady && slots(i).rsReady && slots(i).pDestOk &&
-        slots(i - 1).readyGo &&
-        decoder(i).io.out.decoded.blockType === BlockType.NON
+      slots(i).robReady && slots(i).pDestOk && slots(i).rsReady &&
+        slots(i - 1).readyGo
   })
 
   //io.out.toRob(i).fire === slots(i).out.fire

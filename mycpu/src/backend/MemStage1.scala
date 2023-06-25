@@ -38,8 +38,8 @@ class MemStage1 extends MycpuModule {
     val cacheIn = Flipped(Decoupled(new CacheStage1In(true)))
     val tlb     = new TLBSearchIO
 
-    val robEmpty = Input(Bool()) //for uncached load
-    val stqEmpty = Input(Bool()) //for uncached load
+    val robOldestIdx = Input(ROBIdx) //for uncached load
+    val stqEmpty     = Input(Bool()) //for uncached load
   })
   val inBits   = io.in.bits
   val inROplus = io.in.bits.mem1Req.ROplus
@@ -140,7 +140,9 @@ class MemStage1 extends MycpuModule {
   )
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
-  val blkUcLoad = !isWriteReq && CCAttr.isUnCache(tlbRes.ccAttr.asUInt) && !(io.robEmpty && io.stqEmpty)
+  val blkUcLoad = !isWriteReq && CCAttr.isUnCache(
+    tlbRes.ccAttr.asUInt
+  ) && !(io.in.bits.wbInfo.robIndex === io.robOldestIdx && io.stqEmpty)
   toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
   io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, toStoreQ.fire, toMem2.fire)
   toM2Bits.isSQ      := !inBits.isRoStage

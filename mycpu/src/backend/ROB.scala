@@ -107,9 +107,12 @@ class ROB extends MycpuModule {
       })
       //mispredict only FlushBackend
       val mispreFlushBackend = Output(Bool())
+      //for uncache load inst
+      val oldestIdx = Output(ROBIdx)
     }
   })
   val robEntries = Module(new MultiQueue(dispatchNum, retireNum, new RobEntry, robNum))
+  io.out.oldestIdx := robEntries.tailPtr
 
   //RobEnqueue
   //Dontcare means write in WB stage

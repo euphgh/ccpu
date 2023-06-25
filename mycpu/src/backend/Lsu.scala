@@ -12,10 +12,10 @@ import cache.CacheStage1OutIO
 import cache.CacheStage1In
 
 class Lsu extends FuncUnit(FuType.Lsu) {
-  val tlb      = IO(new TLBSearchIO)
-  val dram     = IO(new DramIO)
-  val scommit  = IO(Vec(retireNum, Input(Bool())))
-  val robEmpty = IO(Input(Bool()))
+  val tlb          = IO(new TLBSearchIO)
+  val dram         = IO(new DramIO)
+  val scommit      = IO(Vec(retireNum, Input(Bool())))
+  val robOldestIdx = IO(Input(ROBIdx)) //for uncached load
 
   // module and alias
   val memStage1 = Module(new MemStage1)
@@ -52,8 +52,8 @@ class Lsu extends FuncUnit(FuType.Lsu) {
       sqCacheReq
     }
   )
-  memStage1.io.stqEmpty := storeQ.empty
-  memStage1.io.robEmpty := robEmpty
+  memStage1.io.stqEmpty     := storeQ.empty
+  memStage1.io.robOldestIdx := robOldestIdx
   memStage1.io.tlb <> tlb
   // pipeline connect storeQ/roStage => mem1Stage
   // PipelineConnect(mem1in, memStage1.io.in, memStage1.io.out.fire, io.flush)

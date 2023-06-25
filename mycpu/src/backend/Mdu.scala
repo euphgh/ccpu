@@ -63,7 +63,6 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   //unchange connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-  asg(exeOut.wbRob.takeWord, exeIn.srcData(0)) //only mthi mtlo care
   asg(exeOut.wbRob.isMispredict, false.B) //must set to false,and will not change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
   asg(exeOut.wbRob.exception, exeIn.exception) //no exception happen here

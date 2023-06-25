@@ -7,6 +7,8 @@ import cop._
 import utils.asg
 import chisel3.util.experimental.BoringUtils
 import chisel3.util.Cat
+import chisel3.util.switch
+import chisel3.util._
 
 class SimpleWriteBundle extends MycpuBundle {
   val wen   = Output(Bool())
@@ -46,12 +48,13 @@ class CP0 extends MycpuModule {
       }))
     }
     val out = new Bundle {
-      val mfc0Rdata = Output(UWord) // wire logic of mfc0
-      val redirect  = new ExceptionRedirectBundle
+      val mfc0Rdata      = Output(UWord) //wire logic of mfc0
+      val redirectTarget = Output(UWord) //eret exception redirect target
     }
   })
 
   val cp0Regs = Module(new COPRegs)
+  val exInfo  = io.in.exception.bits
 
   //mtc0 mfc0
   val c0Waddr = io.in.mtc0.waddr
@@ -59,24 +62,42 @@ class CP0 extends MycpuModule {
   when(io.in.mtc0.wen) { cp0Regs.mtc0(sel = c0Waddr(2, 0), rd = c0Waddr(7, 3), data = io.in.mtc0.wdata) }
   asg(io.out.mfc0Rdata, cp0Regs.mfc0(sel = c0Raddr(2, 0), rd = c0Raddr(7, 3)))
 
-  //redirect
-  asg(io.out.redirect.valid, io.in.exception.valid || io.in.eretFlush)
-  asg(io.out.redirect.nextTarget, Mux(io.in.eretFlush, cp0Regs.epcReg.all, 0xbfc00380.U(32.W))) //FIXME:
-
   //eret_flush
   when(io.in.eretFlush) { cp0Regs.statusReg.exl := 0.U }
 
+  //redirect Target
+  //TODO:remember to select from cache inst redirect target in backend
+  val trapBase =
+    Mux(cp0Regs.statusReg.bev === 1.U, 0xbfc00200.U(32.W), (cp0Regs.ebaseReg.eptbase << 12 | 0x80000000.U(32.W)))
+  val trapOffs = 0x180.U(32.W)
+  asg(io.out.redirectTarget, trapBase + trapOffs)
+
   //exception
-  val exInfo = io.in.exception.bits
   when(io.in.exception.valid) {
     cp0Regs.statusReg.exl    := 1.U
     cp0Regs.causeReg.exccode := exInfo.basic.excCode
-    when(exInfo.basic.excCode === ExcCode.AdEL || exInfo.basic.excCode === ExcCode.AdES) {
-      cp0Regs.badvaddrReg := exInfo.badVaddr
+    switch(exInfo.basic.excCode) {
+      is(Seq(ExcCode.TLBL, ExcCode.TLBS, ExcCode.Mod)) {
+        cp0Regs.contextReg.badvpn2 := exInfo.badVaddr(31, 13)
+        cp0Regs.entryhiReg.vpn2    := exInfo.badVaddr(31, 13)
+        cp0Regs.badvaddrReg.all    := exInfo.badVaddr
+      }
+      is(Seq(ExcCode.AdEL, ExcCode.AdES)) {
+        cp0Regs.badvaddrReg.all := exInfo.badVaddr
+      }
     }
-    when(!cp0Regs.statusReg.exl) {
+    when(cp0Regs.statusReg.exl === 0.U) {
       cp0Regs.causeReg.bd := exInfo.basic.isBd
       cp0Regs.epcReg      := Mux(exInfo.basic.isBd, exInfo.basic.pc - 4.U, exInfo.basic.pc)
+      trapOffs := Mux(
+        exInfo.basic.refill,
+        0.U(32.W),
+        (Mux(
+          exInfo.basic.excCode === ExcCode.Int && cp0Regs.causeReg.iv === 1.U && cp0Regs.statusReg.bev === 1.U,
+          0x200.U(32.W),
+          0x180.U(32.W)
+        ))
+      )
     }
   }
 

@@ -19,9 +19,10 @@ object PriorityMask {
     val n = input.getWidth
     val pair = (0 until n).map(i => {
       val left  = "b" + "?" * (n - i - 1) + "1" + "0" * i
-      val right = "b" + "1" * (n - i) + "0"
+      val right = "b" + "1" * (n - i) + "0" * i
       BitPat(left) -> BitPat(right)
     })
-    decoder(input, TruthTable(pair, BitPat("b" + 0 * n)))
+    import chisel3.util.experimental.decode.QMCMinimizer
+    decoder(QMCMinimizer, input, TruthTable(pair, BitPat("b" + "0" * n)))
   }
 }

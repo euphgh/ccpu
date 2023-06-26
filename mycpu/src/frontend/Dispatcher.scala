@@ -196,6 +196,7 @@ class Dispatcher extends MycpuModule {
     //valid when flush(mispredictRetire/exception/eret)
     // next cycle the backend is empty
     val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
+    val dsAllow     = Input(Bool()) //TODO: rob output to it
 
     val out = new Bundle {
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
@@ -302,9 +303,11 @@ class Dispatcher extends MycpuModule {
           asg(state, waitDs)
           asg(dsIdxReg, mispre.robIdx + 1.U)
           asg(realTargetReg, mispre.realTarget)
-        }.otherwise { //ds already in ROB
+        }.elsewhen(io.dsAllow) { //ds already in ROB
           asg(state, block)
           asg(io.fronRedirect.flush, true.B)
+          asg(io.fronRedirect.target, mispre.realTarget)
+        }.otherwise {
           asg(io.fronRedirect.target, mispre.realTarget)
         }
       }

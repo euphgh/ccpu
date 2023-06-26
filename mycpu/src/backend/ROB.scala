@@ -22,11 +22,6 @@ class RobEntry extends MycpuBundle {
   val exception      = new ExceptionInfoBundle
   val isMispredict   = Bool()
   val done           = Bool()
-  def Finish(misPredict: Bool, hasException: ExceptionInfoBundle) = {
-    done         := false.B
-    isMispredict := misPredict
-    exception    := hasException
-  }
 }
 
 /**
@@ -117,10 +112,41 @@ class ROB extends MycpuModule {
       val oldestIdx = Output(ROBIdx)
       // FreeList recover Ports
       val flRecover = Vec(retireNum, Valid(PRegIdx))
-      val flRFinish = Output(Bool())
     }
   })
-  val robEntries = Module(new MultiQueue(dispatchNum, retireNum, new RobEntry, robNum))
+  class ROBQueue extends MultiQueue(dispatchNum, retireNum, new RobEntry, robNum) {
+    val wb = IO(
+      Vec(
+        wBNum,
+        new Bundle {
+          val wen        = Input(Bool())
+          val idx        = Input(UInt())
+          val exception  = Input(new ExceptionInfoBundle)
+          val misPredict = Input(Bool())
+        }
+      )
+    )
+    val headIdx  = IO(Output(UInt(robIndexWidth.W)))
+    val tailIdx  = IO(Output(UInt(robIndexWidth.W)))
+    val isEmpty  = IO(Output(Bool()))
+    val allPDest = IO(Vec(robNum, Output(PRegIdx)))
+    isEmpty := empty
+    headIdx := headPtr
+    tailIdx := tailPtr
+    (0 until wBNum).foreach { i =>
+      {
+        when(wb(i).wen) {
+          ringBuffer(wb(i).idx).done         := true.B
+          ringBuffer(wb(i).idx).exception    := wb(i).exception
+          ringBuffer(wb(i).idx).isMispredict := wb(i).misPredict
+        }
+      }
+    }
+    (0 until robNum).foreach(i => {
+      allPDest(i) := ringBuffer(i).fromDispatcher.currPDest
+    })
+  }
+  val robEntries = Module(new ROBQueue)
   io.out.oldestIdx := robEntries.io.tailPtr
 
   //RobEnqueue
@@ -138,19 +164,15 @@ class ROB extends MycpuModule {
 
   //WB
   val wdata = (0 until wBNum).map(i => io.in.wbRob(i).bits)
-  // 报错1:似乎是寄存器就会报错？FIXME:
-  List.tabulate(wBNum)(i =>
-    when(io.in.wbRob(i).valid) {
-      asg(robEntries.ringBuffer(wdata(i).robIndex).done, true.B)
-      asg(robEntries.ringBuffer(wdata(i).robIndex).exception, wdata(i).exception)
-      asg(robEntries.ringBuffer(wdata(i).robIndex).isMispredict, wdata(i).isMispredict)
-    }
-  )
+  List.tabulate(wBNum)(i => {
+    robEntries.wb(i).wen        := io.in.wbRob(i).valid
+    robEntries.wb(i).idx        := wdata(i).robIndex
+    robEntries.wb(i).exception  := wdata(i).exception
+    robEntries.wb(i).misPredict := wdata(i).isMispredict
+  })
 
-  //out to dper
-  //报错2:似乎是寄存器就会报错？FIXME:
-  asg(io.out.robEmpty, robEntries.empty)
-  asg(io.out.robIndex, robEntries.headPtr(robIndexWidth, 0))
+  io.out.robEmpty := robEntries.isEmpty
+  asg(io.out.robIndex, robEntries.headIdx)
 
   /**
     * retire
@@ -224,7 +246,7 @@ class ROB extends MycpuModule {
   })
 
   List.tabulate(retireNum)(i => { asg(io.out.multiRetire(i).valid, robEntries.io.pop(i).fire) }) //default
-  val retireRdy = VecInit.fill(4)(false.B)
+  val retireRdy = VecInit.fill(retireNum)(false.B)
   (0 until retireNum).foreach(i => { robEntries.io.pop(i).ready := readyRetire(i) })
   asg(io.out.singleRetire.valid, false.B) //default
 
@@ -240,15 +262,22 @@ class ROB extends MycpuModule {
   import utils._
   val normalSel    = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
   val exerMask     = PriorityMask(exerVec.asUInt)
-  val waitNextMask = PriorityMask(waitNextVec.asUInt) << 1
+  val waitNextMask = Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
+
+  // init
+  io.out.eretFlush          := false.B
+  io.out.exception.valid    := false.B
+  io.out.mispreFlushBackend := false.B
+  io.out.flushAll           := false.B
+  io.out.ciRedirect.flush   := false.B
   switch(state) {
     is(normal) {
       when(hasExer && firExEr < firMispredict && firExEr <= firSingle) {
         asg(state, exerFlush) //otherwise, we should delay the exception
-        asg(retireRdy, exerMask)
+        asg(retireRdy, VecInit(exerMask.asBools))
       }.elsewhen(hasWaitNext && firMispredict < firSingle) {
         asg(state, waitNext)
-        asg(retireRdy, waitNextMask)
+        asg(retireRdy, VecInit(waitNextMask.asBools))
       }
     }
     is(waitNext) {
@@ -264,25 +293,26 @@ class ROB extends MycpuModule {
     }
     is(misFlush) {
       asg(state, normal)
-      (0 until retireNum).map(i => asg(retireRdy, false.B))
+      (0 until retireNum).map(i => asg(retireRdy(i), false.B))
       io.out.mispreFlushBackend := true.B
     }
     is(exerFlush) {
       asg(state, normal)
+      (0 until retireNum).map(i => retireRdy(i) := false.B)
+      io.out.flushAll := true.B
+
       when(retireInst(0).exception.happen) {
-        (0 until retireNum).map(i => retireRdy(i) := false.B)
-        io.out.flushAll  := true.B
-        io.out.exception := retireInst(0).exception
-        io.out.eretFlush := retireSpType(0) === SpecialType.ERET
+        io.out.exception.valid := true.B
+      }.elsewhen(retireSpType(0) === SpecialType.CACHEINST) {
+        io.out.eretFlush := true.B
       }.otherwise {
-        io.out.flushAll          := true.B
-        io.out.ciRedirect.flush  := true.B
-        io.out.ciRedirect.target := retireInst(0).fromDispatcher.pc
+        io.out.ciRedirect.flush := true.B
       }
     }
   }
-
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.exception.valid || io.out.eretFlush)
+  asg(io.out.exception.bits.basic, retireInst(0).exception)
+  asg(io.out.ciRedirect.target, retireInst(0).fromDispatcher.pc)
 
   //exception connect
   val oldestInst   = retireInst(0)
@@ -333,7 +363,7 @@ class ROB extends MycpuModule {
     val valid    = Bool()
   }
   // pDest collect Queue
-  val flrQueue   = RegInit(Vec(robNum, PRegIdx))
+  val flrQueue   = Reg(Vec(robNum, PRegIdx))
   val flrHeadPtr = RegInit(0.U(log2Ceil(robNum).W))
   val flrTailPtr = RegInit(0.U(log2Ceil(robNum).W))
   object FreeListRecover extends ChiselEnum {
@@ -343,9 +373,9 @@ class ROB extends MycpuModule {
   val flrState = RegInit(FreeListRecover.idle)
   when(robEntries.io.flush) {
     (0 until robNum).foreach(i => {
-      flrQueue(i) := robEntries.ringBuffer(i).fromDispatcher.currPDest
-      flrHeadPtr  := robEntries.headPtr
-      flrTailPtr  := robEntries.tailPtr
+      flrQueue(i) := robEntries.allPDest(i)
+      flrHeadPtr  := robEntries.headIdx
+      flrTailPtr  := robEntries.tailIdx
     })
     flrState := recover
   }

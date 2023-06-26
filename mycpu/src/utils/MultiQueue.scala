@@ -86,5 +86,3 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
 
   //TODO:flush
 }
-
-class MyROB extends MultiQueue(3, 4, new RobEntry) {}

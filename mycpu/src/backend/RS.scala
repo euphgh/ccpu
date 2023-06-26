@@ -67,21 +67,32 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
       val wPrf           = Vec(wBNum, Flipped(Valid(PRegIdx)))
       val flush          = Input(Bool()) //mispredict retire,exception,eret
     }
-    val out = Decoupled(new RsOutIO(kind = rsKind))
+    val out          = Decoupled(new RsOutIO(kind = rsKind))
+    val oldestRobIdx = Input(ROBIdx)
   })
 
   val rsEntries  = RegInit(VecInit(Seq.fill(rsSize)(0.U.asTypeOf(new RsOutIO(rsKind)))))
   val slotsValid = RegInit(VecInit(Seq.fill(rsSize)(false.B)))
-  val deqSel     = Wire(Vec(rsSize, Bool()))
+  val deqSel     = Wire(Vec(rsSize, Bool())) //one-hot or all-zero
   val enqSlot    = WireInit(0.U(log2Up(rsSize).W)) //default
 
-  val srcsWaken = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B)))))
-  val src1Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(0).inPrf | srcsWaken(i)(0))))
-  val src2Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(1).inPrf | srcsWaken(i)(1))))
-  val slotsRdy  = WireInit(VecInit(List.tabulate(rsSize)(i => src1Rdy(i) & src2Rdy(i) & slotsValid(i))))
+  val srcsWaken   = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B)))))
+  val src1Rdy     = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(0).inPrf | srcsWaken(i)(0))))
+  val src2Rdy     = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(1).inPrf | srcsWaken(i)(1))))
+  val blockVec    = (0 until rsSize).map(i => rsEntries(i).basic.decoded.blockType =/= BlockType.NON)
+  val isOldestVec = (0 until rsSize).map(i => rsEntries(i).basic.robIndex === io.oldestRobIdx)
+  val slotsRdy = WireInit(
+    VecInit(
+      List.tabulate(rsSize)(i => src1Rdy(i) & src2Rdy(i) & slotsValid(i) & !(blockVec(i) & !isOldestVec(i)))
+    )
+  )
 
-  //ageMask:
-  //attention:in and out fire together
+  /**
+    * ageMask:
+    *   attention:in and out fire together
+    *   当outfire时，slotsvalid下一拍才会拉低
+    *   这一拍进来的slot的那一行agemask对应deqslot的那一位需要是false
+    */
   val ageMask = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(rsSize)(false.B)))))
   when(io.in.fromDispatcher.fire) { ageMask(enqSlot) := slotsValid }
   when(io.out.fire) {
@@ -162,10 +173,10 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   asg(io.out.valid, deqSel.asUInt.orR)
 
   if (rsKind == FuType.Mdu || rsKind == FuType.Lsu) {
-    (0 until rsSize).map(i => asg(deqSel(i), !ageMask(i).asUInt.orR))
+    (0 until rsSize).map(i => asg(deqSel(i), !(ageMask(i).asUInt.orR) && slotsRdy(i)))
   }
   if (rsKind == FuType.SubAlu) {
-    (0 until rsSize).map(i => asg(deqSel(i), !((ageMask(i).asUInt & slotsRdy.asUInt).orR)))
+    (0 until rsSize).map(i => asg(deqSel(i), !((ageMask(i).asUInt & slotsRdy.asUInt).orR) && slotsRdy(i)))
   }
   if (rsKind == FuType.MainAlu) {
     val isBranch =
@@ -175,8 +186,8 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     (0 until rsSize).map(i =>
       asg(
         deqSel(i),
-        (!((ageMask(i).asUInt & isBranch.asUInt).orR) & isBranch(i))
-          | (!((ageMask(i).asUInt & slotsRdy.asUInt).orR) & !isBranch(i))
+        ((!((ageMask(i).asUInt & isBranch.asUInt).orR) & isBranch(i))
+          | (!((ageMask(i).asUInt & slotsRdy.asUInt).orR) & !isBranch(i))) && slotsRdy(i)
       )
     )
   }

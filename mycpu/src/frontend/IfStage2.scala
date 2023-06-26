@@ -48,7 +48,7 @@ class IfStage2 extends Module with MycpuParam {
     io.out.bits.exception        := io.in.bits.exception
     asg(
       io.out.bits.basicInstInfo(i).pcVal,
-      Cat(io.in.bits.pcVal(31, 5), io.in.bits.pcVal(4, 2) + i.U, io.in.bits.pcVal)
+      Cat(io.in.bits.pcVal(31, 5), io.in.bits.pcVal(4, 2) + i.U, io.in.bits.pcVal(1, 0))
     )
     asg(io.out.bits.basicInstInfo(i).instr, icache2.io.out.bits.idata.get(i))
     io.out.bits.validMask(i) := io.in.bits.validMask(i)
@@ -122,4 +122,5 @@ class IfStage2 extends Module with MycpuParam {
   //bpuUpdateQ deq
   asg(io.bpuUpdate.valid, bpuUpdateQueue.io.deq.valid)
   asg(bpuUpdateQueue.io.deq.ready, io.bpuUpdate.ready)
+
 }

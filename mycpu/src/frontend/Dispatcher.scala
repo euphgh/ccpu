@@ -206,9 +206,11 @@ class Dispatcher extends MycpuModule {
     }
   })
 
-  //TODO:some inst can go to main/sub alurs;some can only goto sub alurs
+  //some inst can go to main/sub alurs;some can only goto sub aluRs
   val noInst = (dispatchNum).U
-  def getRsSel(rsType: UInt): UInt = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType(rsType)).asUInt
+  def getRsSel(rsType: UInt): UInt = PriorityEncoderOH(
+    (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType(rsType)).asUInt
+  )
   def getMainALUSlot(): UInt = {
     val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
     val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
@@ -253,17 +255,19 @@ class Dispatcher extends MycpuModule {
   val rsSlotSel  = List(mainAluSel, subAluSel, lsuSel, mduSel)
   val toRs       = List(io.out.toMainAluRs, io.out.toSubAluRs, io.out.toLsuRs, io.out.toMduRs)
   List.tabulate(dispatchNum)(i => {
-    slots(i).rsReady := Mux1H(rsSlotSel.map(_(i)), toRs.map(_.ready))
+    slots(i).rsReady := Mux1H(rsSlotSel.map(_(i)), toRs.map(_.ready)) & (rsSlotSel.map(_(i))).asUInt.orR
   })
 
   //deal with pDestOk
   val needPdest = WireInit(VecInit((0 until dispatchNum).map(i => (slots(i).inst.aRegsIdx.dest =/= 0.U))))
   (0 until dispatchNum).map(i => {
-    slots(i).toRsBasic.destAregAddr := Mux1H(
-      CountMask.oneHot(needPdest.asUInt(i, 0)),
-      (0 to i).map(freeList.io.pop(_).bits)
-    )
-    slots(i).pDestOk := Mux1H(CountMask.oneHot(needPdest.asUInt(i, 0)), (0 to i).map(freeList.io.pop(_).valid))
+    when(needPdest(i)) {
+      slots(i).toRsBasic.destPregAddr := Mux1H(
+        CountMask.oneHot(needPdest.asUInt(i, 0)),
+        (0 to i).map(freeList.io.pop(_).bits)
+      )
+      slots(i).pDestOk := Mux1H(CountMask.oneHot(needPdest.asUInt(i, 0)), (0 to i).map(freeList.io.pop(_).valid))
+    }
   })
 
   /**

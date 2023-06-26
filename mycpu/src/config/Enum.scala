@@ -35,17 +35,17 @@ object MemType extends ChiselEnum {
   val LWR = Value("b0100".U)
   val SWR = Value("b0101".U)
   // group byte0
-  val LB  = Value("b0100".U)
-  val LBU = Value("b0101".U)
-  val SB  = Value("b0110".U)
+  val LB  = Value("b1000".U)
+  val LBU = Value("b1001".U)
+  val SB  = Value("b1010".U)
   // group half
-  val LH  = Value("b1000".U)
-  val LHU = Value("b1001".U)
-  val SH  = Value("b1010".U)
+  val LH  = Value("b1100".U)
+  val LHU = Value("b1101".U)
+  val SH  = Value("b1110".U)
 
   def wordPat  = BitPat("b000?")
   def leftPat  = BitPat("b001?")
   def rightPat = BitPat("b010?")
-  def bytePat  = BitPat("b01??")
-  def halfPat  = BitPat("b10??")
+  def bytePat  = BitPat("b10??")
+  def halfPat  = BitPat("b11??")
 }

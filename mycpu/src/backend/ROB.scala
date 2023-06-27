@@ -6,9 +6,7 @@ import chisel3.util._
 import frontend._
 import utils.MultiQueue
 import utils.asg
-import chisel3.util.experimental.BoringUtils
-
-//0619:meet 3 debug...
+import chisel3.util.experimental.BoringUtils._
 
 class SingleRetireBundle extends MycpuBundle {
   val muldiv = Output(Bool())
@@ -149,6 +147,8 @@ class ROB extends MycpuModule {
     (0 until robNum).foreach(i => {
       allPDest(i) := ringBuffer(i).fromDispatcher.currPDest
     })
+    val ds = ringBuffer(mispreIdx + 1.U)
+    dsAllow := ds.done || ds.fromDispatcher.specialType =/= SpecialType.CACHEINST
   }
   val robEntries = Module(new ROBQueue)
   io.out.oldestIdx     := robEntries.io.tailPtr
@@ -198,7 +198,6 @@ class ROB extends MycpuModule {
     *             else retire it,send mispreFlush next cycle
     */
 
-  //报错3:可以不解决(这一句会报错说：ready没有被init)
   val retireInst   = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
   val readyRetire  = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).valid && retireInst(i).done)))
   val retireSpType = WireInit(VecInit((0 until retireNum).map(i => retireInst(i).fromDispatcher.specialType)))
@@ -269,13 +268,20 @@ class ROB extends MycpuModule {
   val normalSel    = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
   val exerMask     = PriorityMask(exerVec.asUInt)
   val waitNextMask = Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
+  // JMP HB =======================================================
+  val findHBinRob  = RegInit(false.B)
+  val dstHBFromAlu = Flipped(Valid(UWord))
+  addSink(dstHBFromAlu, "hbdest")
+  val dstHB = Module(new Mark(UWord))
+  dstHB.start <> dstHBFromAlu
+  dstHB.end := io.out.flushAll
 
   // init
   io.out.eretFlush          := false.B
   io.out.exception.valid    := false.B
   io.out.mispreFlushBackend := false.B
   io.out.flushAll           := false.B
-  io.out.ciRedirect.flush   := false.B
+  io.out.robRedirect.flush  := false.B
   switch(state) {
     is(normal) {
       when(hasExer && firExEr < firMispredict && firExEr <= firSingle) {
@@ -284,6 +290,7 @@ class ROB extends MycpuModule {
       }.elsewhen(hasWaitNext && firMispredict < firSingle) {
         asg(state, waitNext)
         asg(retireRdy, VecInit(waitNextMask.asBools))
+        asg(findHBinRob, retireSpType(firMispredict) === SpecialType.HB)
       }
     }
     is(waitNext) {
@@ -301,6 +308,11 @@ class ROB extends MycpuModule {
       asg(state, normal)
       (0 until retireNum).map(i => asg(retireRdy(i), false.B))
       io.out.mispreFlushBackend := true.B
+      when(findHBinRob) {
+        io.out.flushAll          := true.B
+        io.out.robRedirect.flush := true.B
+        findHBinRob              := false.B
+      }
     }
     is(exerFlush) {
       asg(state, normal)
@@ -312,13 +324,13 @@ class ROB extends MycpuModule {
       }.elsewhen(retireSpType(0) === SpecialType.CACHEINST) {
         io.out.eretFlush := true.B
       }.otherwise {
-        io.out.ciRedirect.flush := true.B
+        io.out.robRedirect.flush := true.B
       }
     }
   }
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.exception.valid || io.out.eretFlush)
   asg(io.out.exception.bits.basic, retireInst(0).exception)
-  asg(io.out.ciRedirect.target, retireInst(0).fromDispatcher.pc)
+  asg(io.out.robRedirect.target, Mux(state === exerFlush, retireInst(0).fromDispatcher.pc, dstHB.value.bits))
 
   //exception connect
   val oldestInst = retireInst(0)

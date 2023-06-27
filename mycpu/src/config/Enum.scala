@@ -18,7 +18,7 @@ object MduType extends ChiselEnum {
   val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ, MTC0, MFC0 = Value
 }
 object SpecialType extends ChiselEnum {
-  val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, CACHEINST, NON = Value
+  val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, CACHEINST, HB, NON = Value
 }
 object BlockType extends ChiselEnum {
   val CACHEINST, MFC0, NON = Value

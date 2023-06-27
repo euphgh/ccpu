@@ -268,15 +268,16 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val cat = Cat(preCnt, genTaken)
     asg(pht.valid, brValid && cat.andR =/= cat.orR)
     asg(pht.bits, Mux(genTaken, pht.bits + 1.U, pht.bits - 1.U))
-    /*==================== MisPre Signal to Dper ====================*/
+    /*==================== MisPre Signal to Dper/ROB ====================*/
     val mispre     = IO(new MispreSignal)
     val takenWrong = genTaken ^ preCnt(1)
     val destWrong  = genTaken && inBrInfo.realTarget =/= predict.target
-    asg(mispre.happen, brValid && (takenWrong || destWrong))
+    asg(mispre.happen, brValid && (takenWrong || destWrong || brType === BranchType.JRHB))
     asg(mispre.realTarget, inBrInfo.realTarget)
     asg(mispre.robIdx, exeIn.robIndex)
     when(brValid && (takenWrong || destWrong)) { asg(mispreBlkReg, true.B) }
     when(io.flush) { asg(mispreBlkReg, false.B) }
+    BoringUtils.addSource(inBrInfo.realTarget, "realTarget")
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
   }

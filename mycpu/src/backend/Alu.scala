@@ -10,6 +10,7 @@ import chisel3.util.switch
 import chisel3.util.experimental.BoringUtils
 import frontend.BpuUpdateIO
 import frontend.MispreSignal
+import chisel3.util.Valid
 
 class Adder extends MycpuModule {
   val io = IO(new Bundle {
@@ -277,7 +278,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     asg(mispre.robIdx, exeIn.robIndex)
     when(brValid && (takenWrong || destWrong)) { asg(mispreBlkReg, true.B) }
     when(io.flush) { asg(mispreBlkReg, false.B) }
-    BoringUtils.addSource(inBrInfo.realTarget, "realTarget")
+    BoringUtils.addSource(Valid(inBrInfo.realTarget), "realTarget")
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
   }

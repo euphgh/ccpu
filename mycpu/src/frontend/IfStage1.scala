@@ -231,6 +231,7 @@ class IfStage1 extends MycpuModule {
   )
   // >> tlb ================
   io.tlb.req                 := pc
+  io.tlb.req.valid           := true.B
   io.out.bits.tagOfInstGroup := io.tlb.res.pTag
   io.out.bits.exception := MuxCase(
     FrontExcCode.NONE,
@@ -240,6 +241,12 @@ class IfStage1 extends MycpuModule {
     )
   )
   io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
+  if (enableCacheInst) {
+    val ci = io.icacheInst.get
+    // index type cache instr should not require tlb
+    // becasue, way infomation is in tag
+    io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
+  }
 
   asg(io.out.valid, true.B)
   asg(io.toPreIf.stage1Rdy, io.out.fire)

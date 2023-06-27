@@ -27,7 +27,7 @@ class TLBSearchRes extends MycpuBundle {
 }
 
 class TLBSearchIO extends MycpuBundle {
-  val req = Output(UWord)
+  val req = Valid(UWord)
   val res = Input(new TLBSearchRes)
 }
 

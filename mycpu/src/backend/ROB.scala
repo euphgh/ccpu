@@ -83,7 +83,8 @@ class ROB extends MycpuModule {
         dispatchNum,
         Flipped(Decoupled(new DispatchToRobBundle))
       )
-      val wbRob = Vec(wBNum, Flipped(Valid(new WbRobBundle)))
+      val wbRob         = Vec(wBNum, Flipped(Valid(new WbRobBundle)))
+      val misPredictIdx = Input(ROBIdx)
     }
     val out = new Bundle {
       val robIndex = Output(ROBIdx) //to dper
@@ -107,7 +108,8 @@ class ROB extends MycpuModule {
       //mispredict only FlushBackend
       val mispreFlushBackend = Output(Bool())
       val flushAll           = Output(Bool()) //serve as recover rat and hilo
-      val ciRedirect         = Output(new FrontRedirctIO) //serve as recover rat and hilo
+      val robRedirect        = Output(new FrontRedirctIO) //serve as recover rat and hilo
+      val dsAllow            = Output(Bool())
       //for uncache load inst
       val oldestIdx = Output(ROBIdx)
       // FreeList recover Ports
@@ -126,10 +128,12 @@ class ROB extends MycpuModule {
         }
       )
     )
-    val headIdx  = IO(Output(UInt(robIndexWidth.W)))
-    val tailIdx  = IO(Output(UInt(robIndexWidth.W)))
-    val isEmpty  = IO(Output(Bool()))
-    val allPDest = IO(Vec(robNum, Output(PRegIdx)))
+    val headIdx   = IO(Output(UInt(robIndexWidth.W)))
+    val tailIdx   = IO(Output(UInt(robIndexWidth.W)))
+    val isEmpty   = IO(Output(Bool()))
+    val allPDest  = IO(Vec(robNum, Output(PRegIdx)))
+    val mispreIdx = IO(Input(ROBIdx))
+    val dsAllow   = IO(Output(Bool()))
     isEmpty := empty
     headIdx := headPtr
     tailIdx := tailPtr
@@ -147,7 +151,9 @@ class ROB extends MycpuModule {
     })
   }
   val robEntries = Module(new ROBQueue)
-  io.out.oldestIdx := robEntries.io.tailPtr
+  io.out.oldestIdx     := robEntries.io.tailPtr
+  robEntries.mispreIdx := io.in.misPredictIdx
+  io.out.dsAllow       := robEntries.dsAllow
 
   //RobEnqueue
   //Dontcare means write in WB stage

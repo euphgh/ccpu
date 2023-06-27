@@ -68,9 +68,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
   //alu special
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
-    val srcType = inUop.srcType
     val aluType = inUop.aluType
-    val needSa  = AluType.isSll(aluType) || AluType.isSra(aluType) || AluType.isSrl(aluType)
     //bypass
     val bypass = io.datasFromBypass.get
     val pSrcs  = inBasic.srcPregs
@@ -84,8 +82,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     //subAlu：(imm as src2)|(sa as src1)
     if (fuKind == FuType.SubAlu) {
       val imm = inBits.immOffset.get
-      when(srcType === SRCType.RS) { asg(outSrcs(1), imm) }
-      when(needSa) { asg(outSrcs(0), imm(10, 6)) }
+      when(AluType.useImm(aluType)) { asg(outSrcs(1), imm) }
+      when(AluType.needSa(aluType)) { asg(outSrcs(0), imm(10, 6)) }
     }
     //mainAlu：(imm as src2)|(sa as src1)|(linkAddr as src2)|(extra take)
     if (fuKind == FuType.MainAlu) {
@@ -98,13 +96,13 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
       val jDest             = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
       val jrDest            = outSrcs(0)
-      //select target,connect preRes
+      //extra take:select target,connect preRes
       val outBranch = outBits.branch.get
       asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
       asg(outBranch.predictResult, maExtraIn.predictResult)
-      //srcs：注意AL指令中也有srctype===RS的，但是它们选择的依然是link addr，所以这里的顺序不能变
-      when(srcType === SRCType.RS) { asg(outSrcs(1), imm) }
-      when(needSa) { asg(outSrcs(0), imm(10, 6)) }
+      //srcs select
+      when(AluType.useImm(aluType)) { asg(outSrcs(1), imm) }
+      when(AluType.needSa(aluType)) { asg(outSrcs(0), imm(10, 6)) }
       when(isAl) { asg(outSrcs(1), maExtraIn.dsPcVal + 4.U) }
     }
   }

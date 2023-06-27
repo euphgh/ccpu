@@ -6,6 +6,7 @@ import chisel3._
 import utils._
 import chisel3.util.Cat
 import chisel3.util.MuxCase
+import chisel3.util.switch
 
 class Adder extends MycpuModule {
   val io = IO(new Bundle {
@@ -22,16 +23,16 @@ class Adder extends MycpuModule {
   /*====================  op  ====================*/
   val (src1, src2, op) = (io.in.src1, io.in.src2, io.in.op)
   assert(io.in.op.length == 4)
-  val isAdd  = op(3)
-  val isSub  = op(2)
-  val isSlt  = op(1)
-  val isSltu = op(0)
+  val useAdd  = op(3)
+  val useSub  = op(2)
+  val useSlt  = op(1)
+  val useSltu = op(0)
   /*====================Function Code====================*/
-  val cin   = Mux((isSub | isSlt | isSltu), 1.U, 0.U)
+  val cin   = Mux((useSub | useSlt | useSltu), 1.U, 0.U)
   val dataA = src1
-  val dataB = Mux((isSub | isSlt | isSltu), ~src2, src2)
-  val topA  = Mux(isSltu, 0.U(1.W), dataA(31))
-  val topB  = Mux(isSltu, 0.U(1.W), dataB(31))
+  val dataB = Mux((useSub | useSlt | useSltu), ~src2, src2)
+  val topA  = Mux(useSltu, 0.U(1.W), dataA(31))
+  val topB  = Mux(useSltu, 0.U(1.W), dataB(31))
   val res33 = Wire(UInt(33.W))
   asg(res33, Cat(0.U(1.W), dataA) + Cat(0.U(1.W), dataB) + cin)
   val carry     = res33(32)
@@ -46,13 +47,13 @@ class Adder extends MycpuModule {
     MuxCase(
       0.U(dataWidth.W),
       Seq(
-        (isAdd || isSub) -> addSubRes,
-        isSlt            -> sltRes,
-        isSltu           -> sltuRes
+        (useAdd || useSub) -> addSubRes,
+        useSlt             -> sltRes,
+        useSltu            -> sltuRes
       )
     )
   )
-  /*====================Access Code====================*/
+  /*==================== Access Code ====================*/
   def access(src1: UInt, src2: UInt, op: Vec[Bool]) = {
     asg(io.in.src1, src1)
     asg(io.in.src2, src2)
@@ -69,24 +70,25 @@ class AluComponent extends MycpuModule {
       val op   = Input(AluType())
     }
     val out = new Bundle {
-      val mayOverflow = Output(Bool())
-      val res         = Output(UWord)
+      val overflow = Output(Bool())
+      val res      = Output(UWord)
     }
   })
   /*====================  op  ====================*/
   val (src1, src2, op) = (io.in.src1, io.in.src2, io.in.op)
-  val isAdd            = AluType.isAdd(op)
-  val isSub            = AluType.isSub(op)
-  val isAnd            = AluType.isAnd(op)
-  val isOr             = AluType.isOr(op)
-  val isNor            = AluType.isNor(op)
-  val isXor            = AluType.isXor(op)
-  val isSlt            = AluType.isSlt(op)
-  val isSltu           = AluType.isSltu(op)
-  val isSll            = AluType.isSll(op) || AluType.isSllv(op)
-  val isSrl            = AluType.isSrl(op) || AluType.isSrlv(op)
-  val isSra            = AluType.isSra(op) || AluType.isSrav(op)
-  val isLui            = AluType.isLui(op)
+  val useAdd           = AluType.useAdd(op)
+  val useSub           = AluType.useSub(op)
+  val useAnd           = AluType.useAnd(op)
+  val useOr            = AluType.useOr(op)
+  val useNor           = AluType.useNor(op)
+  val useXor           = AluType.useXor(op)
+  val useSlt           = AluType.useSlt(op)
+  val useSltu          = AluType.useSltu(op)
+  val useSll           = AluType.useSll(op)
+  val useSrl           = AluType.useSrl(op)
+  val useSra           = AluType.useSra(op)
+  val useLui           = AluType.useLui(op)
+  val mayOfInst        = AluType.mayOverflow(op)
   /*====================Function Code====================*/
   //与、或、或非、异或、逻辑左移右移、算数右移、高位置数
   val andRes = src1 & src2
@@ -100,33 +102,80 @@ class AluComponent extends MycpuModule {
   val luiRes = Cat(src2(15, 0), 0.U(16.W))
   //加减、无符号比较、有符号比较
   val adder    = Module(new Adder)
-  val adderOp  = VecInit(isAdd, isSub, isSlt, isSltu)
+  val adderOp  = VecInit(useAdd, useSub, useSlt, useSltu)
   val adderOut = adder.access(src1, src2, adderOp)
   //整理计算结果
-  asg(io.out.mayOverflow, adderOut.overflow)
+  asg(io.out.overflow, adderOut.overflow && mayOfInst)
   asg(
     io.out.res,
     MuxCase(
       0.U(dataWidth.W),
       Seq(
         adderOp.asUInt.orR -> adderOut.res,
-        isAnd              -> andRes,
-        isOr               -> orRes,
-        isNor              -> norRes,
-        isXor              -> xorRes,
-        isSll              -> sllRes,
-        isSrl              -> srlRes,
-        isSra              -> sraRes,
-        isLui              -> luiRes
+        useAnd             -> andRes,
+        useOr              -> orRes,
+        useNor             -> norRes,
+        useXor             -> xorRes,
+        useSll             -> sllRes,
+        useSrl             -> srlRes,
+        useSra             -> sraRes,
+        useLui             -> luiRes
       )
     )
   )
-  /*====================Access Code====================*/
+  /*==================== Access Code ====================*/
   def access(src1: UInt, src2: UInt, op: AluType.Type) = {
     asg(io.in.src1, src1)
     asg(io.in.src2, src2)
     asg(io.in.op, op)
     io.out
+  }
+}
+
+class BrCondGen extends MycpuModule {
+  val io = IO(new Bundle {
+    val in = new Bundle {
+      val src1 = Input(UWord)
+      val src2 = Input(UWord)
+      val op   = Input(BranchType())
+    }
+    val out = new Bundle {
+      val taken = Output(Bool())
+    }
+  })
+  /*====================  op  ====================*/
+  val (src1, src2, op) = (io.in.src1, io.in.src2, io.in.op)
+  val eq               = BranchType.eq(op)
+  val ne               = BranchType.ne(op)
+  val gez              = BranchType.gez(op)
+  val gtz              = BranchType.gtz(op)
+  val lez              = BranchType.lez(op)
+  val ltz              = BranchType.ltz(op)
+  val noCond           = BranchType.noCond(op)
+  /*====================  select cond  ====================*/
+  val negtive = src1(31)
+  val zero    = src1 === 0.U(32.W)
+  asg(
+    io.out.taken,
+    MuxCase(
+      false.B,
+      Seq(
+        eq     -> (src1 === src2),
+        ne     -> (src1 =/= src2),
+        gez    -> !negtive,
+        lez    -> (negtive || zero),
+        ltz    -> negtive,
+        gtz    -> !(negtive || zero),
+        noCond -> true.B
+      )
+    )
+  )
+  /*==================== Access Code ====================*/
+  def access(src1: UInt, src2: UInt, op: BranchType.Type) = {
+    asg(io.in.src1, src1)
+    asg(io.in.src2, src2)
+    asg(io.in.op, op)
+    io.out.taken
   }
 }
 
@@ -145,9 +194,10 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   exeStageIO.out.valid := exeStageIO.in.valid && exeStageReadyGo
   exeStageIO.in.ready  := !exeStageIO.in.valid || exeStageIO.out.ready && exeStageReadyGo
 
-  //unchange signal
+  //simple connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
+  asg(exeOut.wPrf.wmask, 15.U(4.W))
   asg(exeOut.wbRob.takeWord, exeIn.srcData(1)) //only mtc0 care
   asg(exeOut.wbRob.isMispredict, false.B) //default,mainAlu may change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
@@ -160,6 +210,20 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     *   2.wRob.exception
     *   3.wRob.isMispredict(for mainAlu)
     */
-  val srcs = exeIn.srcData
-  //...
+  val srcs    = exeIn.srcData
+  val uOp     = exeIn.decoded
+  val aluType = uOp.aluType
+  val brType  = uOp.brType
+
+  //alu and overflow
+  val aluComponent = Module(new AluComponent)
+  val aluCpOut     = aluComponent.access(srcs(0), srcs(1), aluType)
+  asg(exeOut.wPrf.result, aluCpOut.res) //default,in mAlu may change it("AL")
+
+  //bru
+  if (main) {
+    val brCondGen = Module(new BrCondGen)
+    val taken     = brCondGen.access(srcs(0), srcs(1), brType)
+
+  }
 }

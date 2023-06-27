@@ -71,7 +71,8 @@ class DecodeInstInfoBundle extends MycpuBundle {
   val mduType     = MduType()
   val specialType = SpecialType()
   val aluType     = AluType()
-  val srcType     = SRCType()
+
+  val srcType = SRCType()
 }
 
 //no need a wen,pDest===0 means !wen
@@ -273,22 +274,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     }))
     else None
 }
-
-/**
-  * wbRob
-  *       change:exception and memReqVaddr
-  *       robIndex keep
-  *       isMispredict=DontCare
-  *
-  * destPregAddr is for Wprf/srat
-  * destAregAddr is for srat
-  *
-  * decoded is for mem2:deal with loadData
-  *
-  * tagOfMemReqPaddr is for mem2:hitOrMiss detect
-  *
-  * take dCacheReq to dcache2
-  */
 
 //------------------------------------------------------------------------------------------------------
 

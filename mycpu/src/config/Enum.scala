@@ -36,44 +36,58 @@ object MemType extends ChiselEnum {
   val LWR = Value("b0100".U)
   val SWR = Value("b0101".U)
   // group byte0
-  val LB  = Value("b0100".U)
-  val LBU = Value("b0101".U)
-  val SB  = Value("b0110".U)
+  val LB  = Value("b1000".U)
+  val LBU = Value("b1001".U)
+  val SB  = Value("b1010".U)
   // group half
-  val LH  = Value("b1000".U)
-  val LHU = Value("b1001".U)
-  val SH  = Value("b1010".U)
+  val LH  = Value("b1100".U)
+  val LHU = Value("b1101".U)
+  val SH  = Value("b1110".U)
 
   def wordPat  = BitPat("b000?")
   def leftPat  = BitPat("b001?")
   def rightPat = BitPat("b010?")
-  def bytePat  = BitPat("b01??")
-  def halfPat  = BitPat("b10??")
+  def bytePat  = BitPat("b10??")
+  def halfPat  = BitPat("b11??")
 }
 object BranchType extends ChiselEnum {
   val BEQ, BNE, BGEZ, BLEZ, BLTZ, BGTZ, BLTZAL, BGEZAL, J, JAL, JR, JALR, JRHB, NON = Value
-  def isB(op: BranchType.Type): Bool =
+  def isJr(op: BranchType.Type): Bool = op === JR || op === JALR || op === JRHB
+  def isJ(op:  BranchType.Type): Bool = op === J || op === JAL
+  def isB(op:  BranchType.Type): Bool =
     op === BEQ || op === BNE || op === BGEZ || op === BLEZ || op === BLTZ || op === BGTZ || op === BLTZAL || op === BGEZAL
   def isAL(op: BranchType.Type): Bool =
     op === BLTZAL || op === BGEZAL || op === JAL || op === JALR
-  def isJr(op: BranchType.Type): Bool = op === JR || op === JALR
-  def isJ(op:  BranchType.Type): Bool = op === J || op === JAL
+  //cond
+  def eq(op:     BranchType.Type): Bool = op === BEQ
+  def ne(op:     BranchType.Type): Bool = op === BNE
+  def gez(op:    BranchType.Type): Bool = op === BGEZ || op === BGEZAL
+  def gtz(op:    BranchType.Type): Bool = op === BGTZ
+  def lez(op:    BranchType.Type): Bool = op === BLEZ
+  def ltz(op:    BranchType.Type): Bool = op === BLTZ || op === BLTZAL
+  def noCond(op: BranchType.Type): Bool = isJ(op) || isJr(op)
 }
 object AluType extends ChiselEnum {
-  val ADD, SUB, AND, OR, NOR, XOR, SLT, SLTU, SLL, SRL, SRA, SLLV, SRLV, SRAV, LUI = Value
-  def isAdd(op:  AluType.Type): Bool = op === ADD
-  def isSub(op:  AluType.Type): Bool = op === SUB
-  def isAnd(op:  AluType.Type): Bool = op === AND
-  def isOr(op:   AluType.Type): Bool = op === OR
-  def isNor(op:  AluType.Type): Bool = op === NOR
-  def isXor(op:  AluType.Type): Bool = op === XOR
-  def isSlt(op:  AluType.Type): Bool = op === SLT
-  def isSltu(op: AluType.Type): Bool = op === SLTU
-  def isSll(op:  AluType.Type): Bool = op === SLL
-  def isSrl(op:  AluType.Type): Bool = op === SRL
-  def isSra(op:  AluType.Type): Bool = op === SRA
-  def isSllv(op: AluType.Type): Bool = op === SLLV
-  def isSrlv(op: AluType.Type): Bool = op === SRLV
-  def isSrav(op: AluType.Type): Bool = op === SRAV
-  def isLui(op:  AluType.Type): Bool = op === LUI
+  val ADD, ADDI, ADDU, ADDIU, SUB, SUBU, AND, ANDI, OR, ORI, XOR, XORI, NOR, SLT, SLTI, SLTU, SLTIU, SLL, SRL, SRA,
+    SLLV, SRLV, SRAV, LUI, NON = Value
+  def useAdd(op:  AluType.Type): Bool = op === ADD || op === ADDI || op === ADDU || op === ADDIU
+  def useSub(op:  AluType.Type): Bool = op === SUB || op === SUBU
+  def useAnd(op:  AluType.Type): Bool = op === AND || op === ANDI
+  def useOr(op:   AluType.Type): Bool = op === OR || op === ORI
+  def useXor(op:  AluType.Type): Bool = op === XOR || op === XORI
+  def useNor(op:  AluType.Type): Bool = op === NOR
+  def useSlt(op:  AluType.Type): Bool = op === SLT || op === SLTI
+  def useSltu(op: AluType.Type): Bool = op === SLTU || op === SLTIU
+  def useSll(op:  AluType.Type): Bool = op === SLL || op === SLLV
+  def useSrl(op:  AluType.Type): Bool = op === SRL || op === SRLV
+  def useSra(op:  AluType.Type): Bool = op === SRA || op === SRAV
+  def useLui(op:  AluType.Type): Bool = op === LUI
+
+  def useImm(op: AluType.Type): Bool =
+    op === ADDI || op === ADDIU || op === ANDI || op === ORI || op === XORI || op === SLTI || op === SLTIU || op === LUI
+  def mayOverflow(op: AluType.Type): Bool = op === ADD || op === ADDI || op === SUB
+  def isSll(op:       AluType.Type): Bool = op === SLL
+  def isSrl(op:       AluType.Type): Bool = op === SRL
+  def isSra(op:       AluType.Type): Bool = op === SRA
+  def needSa(op:      AluType.Type): Bool = isSll(op) || isSrl(op) || isSra(op)
 }

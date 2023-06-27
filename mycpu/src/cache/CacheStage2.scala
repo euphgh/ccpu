@@ -114,7 +114,6 @@ class CacheStage2[T <: Data](
   val ucState      = RegInit(ucIdel)
   val writeBuffer  = Reg(Vec(wordNum, UWord))
   val readBuffer   = Reg(Vec(wordNum, UWord))
-  val selectedRoad = RegInit(VecInit.fill(4)(false.B))
   val readCounter  = Counter(wordNum)
   val writeCounter = Counter(wordNum)
   val r1data       = Vec(roads, new DPReadBus(UWord, lineNum))
@@ -237,8 +236,11 @@ class CacheStage2[T <: Data](
       (0 to roads).map(i => {
         r1data(i).req.valid := false.B
       })
-      // tell writeBuffer start work
-      writeState := wReq
+      // when victim is dirty, tell writeBuffer start work
+      val validDirty =
+        if (isDcache) VecInit((0 until roads).map(i => stage1.meta(i).dirty.get && stage1.meta(i).valid)).asUInt
+        else 0.U(roads.W)
+      writeState := Mux(validDirty(victimRoad), wReq, wIdel)
       assert(writeState === wIdel)
     }
     is(readDram) {

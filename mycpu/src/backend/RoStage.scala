@@ -35,28 +35,45 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   io.in.ready  := !io.in.valid || io.out.ready && readyGo
 
   //simple connect
-  asg(io.out.bits.decoded, io.in.bits.basic.decoded)
-  asg(io.out.bits.destPregAddr, io.in.bits.basic.destPregAddr)
-  asg(io.out.bits.destAregAddr, io.in.bits.basic.destAregAddr)
-  asg(io.out.bits.exception, io.in.bits.basic.exception)
-  asg(io.out.bits.robIndex, io.in.bits.basic.robIndex)
+  val outBits = io.out.bits
+  val inBits  = io.in.bits
+  val inBasic = inBits.basic
+  val inUop   = inBasic.decoded
+  asg(outBits.decoded, inBasic.decoded)
+  asg(outBits.destPregAddr, inBasic.destPregAddr)
+  asg(outBits.destAregAddr, inBasic.destAregAddr)
+  asg(outBits.exception, inBasic.exception)
+  asg(outBits.robIndex, inBasic.robIndex)
 
   /**
     * select srcs:
-    *   default:read from prf
-    *     num_0 will get 0,dontcare
+    *   default:read from prf,num_0 will get 0
+    *   mdu:
+    *     mfc0/mtc0：c0Addr -> src1(7,0)
+    *   lsu:
+    *     default
     *   mAlu/sAlu:
-    *     should consider bypass
-    *     I-inst(RS):src2 should be imm(这里ldst的src2不用被选成imm)
-    *     SLL/SRA/SRL(RSRT):src1 should be sa
-    *   mAlu:"AL"(RS) should take link addr in src2
+    *     bypass
+    *     I-inst(RS)：imm -> src2
+    *     SLL/SRA/SRL(RSRT)：sa -> src1
+    *   mAlu:
+    *     "AL"(RS): link addr -> src2
+    *
+    * extra take:
+    *     mAlu:take predictRes and realTarget
+    *     lsu:take "mem" bundle
     */
-  val outSrcs = io.out.bits.srcData
+  val outSrcs = outBits.srcData
   (0 until srcDataNum).map(i => asg(outSrcs(i), io.datasFromPrf(i))) //default
+
+  //alu special
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
+    val srcType = inUop.srcType
+    val aluType = inUop.aluType
+    val needSa  = AluType.isSll(aluType) || AluType.isSra(aluType) || AluType.isSrl(aluType)
     //bypass
     val bypass = io.datasFromBypass.get
-    val pSrcs  = io.in.bits.basic.srcPregs
+    val pSrcs  = inBasic.srcPregs
     List.tabulate(srcDataNum)(i =>
       List.tabulate(aluBypassNum)(j =>
         when(bypass(j).valid && bypass(j).bits.pDest === pSrcs(i).pIdx && pSrcs(i).pIdx =/= 0.U) {
@@ -64,60 +81,60 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
         }
       )
     )
-    //select (imm as src2)|(sa as src1)
-    val srcType = io.in.bits.basic.decoded.srcType
-    val aluType = io.in.bits.basic.decoded.aluType
-    val needSa  = AluType.isSll(aluType) || AluType.isSra(aluType) || AluType.isSrl(aluType)
+    //subAlu：(imm as src2)|(sa as src1)
     if (fuKind == FuType.SubAlu) {
-      val imm = io.in.bits.immOffset.get
+      val imm = inBits.immOffset.get
       when(srcType === SRCType.RS) { asg(outSrcs(1), imm) }
       when(needSa) { asg(outSrcs(0), imm(10, 6)) }
     }
+    //mainAlu：(imm as src2)|(sa as src1)|(linkAddr as src2)|(extra take)
     if (fuKind == FuType.MainAlu) {
-      val maExtraIn = io.in.bits.mAluExtra.get
+      val maExtraIn = inBits.mAluExtra.get
       val low26     = maExtraIn.low26
       val imm       = low26(15, 0)
       //count target
-      val brType = io.in.bits.basic.decoded.brType
-      val isJr   = BranchType.isJr(brType)
-      val isJ    = BranchType.isJ(brType)
-      val isAl   = BranchType.isAL(brType)
-      val bDest  = SignExt(Cat(imm, 0.U(2.W)), 32)
-      val jDest  = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
-      val jrDest = outSrcs(0)
+      val brType            = inUop.brType
+      val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
+      val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
+      val jDest             = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
+      val jrDest            = outSrcs(0)
       //select target,connect preRes
-      val outBranch = io.out.bits.branch.get
+      val outBranch = outBits.branch.get
       asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
       asg(outBranch.predictResult, maExtraIn.predictResult)
-      //srcs
+      //srcs：注意AL指令中也有srctype===RS的，但是它们选择的依然是link addr，所以这里的顺序不能变
       when(srcType === SRCType.RS) { asg(outSrcs(1), imm) }
       when(needSa) { asg(outSrcs(0), imm(10, 6)) }
       when(isAl) { asg(outSrcs(1), maExtraIn.dsPcVal + 4.U) }
     }
   }
 
-  /**
-    */
-  if (fuKind == FuType.Mdu) { asg(io.out.bits.mfc0Addr.get, io.in.bits.mfc0Addr.get) }
+  //mdu special
+  if (fuKind == FuType.Mdu) {
+    val op = inBasic.decoded.mduType
+    when(MduType.isC0Inst(op)) {
+      asg(outSrcs(0), ZeroExt(inBits.c0Addr.get, 32))
+    }
+  }
 
-  //wake up
+  //lsu special
+  if (fuKind == FuType.Lsu) {
+    val outMem    = outBits.mem.get
+    val addrL12sb = inBits.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
+    outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(cacheOffsetWidth - 1, 0)
+    outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, cacheOffsetWidth)
+    outMem.immOffset                      := inBits.immOffset.get
+    outMem.carryout                       := addrL12sb(12)
+  }
+
+  //wake up others
   val wakeUpSource = Wire(Valid(PRegIdx))
-  asg(wakeUpSource.bits, io.out.bits.destPregAddr)
+  asg(wakeUpSource.bits, outBits.destPregAddr)
   asg(wakeUpSource.valid, io.out.fire)
   if (fuKind == FuType.MainAlu) {
     BoringUtils.addSource(wakeUpSource, "mAluRoWakeUp")
   }
   if (fuKind == FuType.SubAlu) {
     BoringUtils.addSource(wakeUpSource, "sAluRoWakeUp")
-  }
-
-  //for lsu
-  if (fuKind == FuType.Lsu) {
-    val outMem    = io.out.bits.mem.get
-    val addrL12sb = io.in.bits.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
-    outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(cacheOffsetWidth - 1, 0)
-    outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, cacheOffsetWidth)
-    outMem.immOffset                      := io.in.bits.immOffset.get
-    outMem.carryout                       := addrL12sb(12)
   }
 }

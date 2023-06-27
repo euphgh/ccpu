@@ -186,7 +186,7 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val basic = new RsBasicEntry
   //val decoded=new(DecodeInstInfoBundle(kind))TODO:
   val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
-  val mfc0Addr  = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
+  val c0Addr    = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
   val mAluExtra =
     if (kind == FuType.MainAlu) Some(new Bundle {
       val dsPcVal       = Output(UWord)
@@ -242,11 +242,16 @@ class FunctionUnitOutIO extends MycpuBundle {
   *   wStrb:load dont care/actually store dont care at this stage
   *
   * the branch is for branch in mAlu
+  *
+  * special:
+  *   link addr->src2
+  *   imm->src2
+  *   sa->src1
+  *   {0.U(24.W),c0Addr}->src1
   */
 class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
-  val robIndex  = Output(UInt(robIndexWidth.W))
-  val exception = new ExceptionInfoBundle
-
+  val robIndex     = Output(UInt(robIndexWidth.W))
+  val exception    = new ExceptionInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
@@ -267,8 +272,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
       val carryout  = Output(Bool())
     }))
     else None
-
-  val mfc0Addr = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
 }
 
 /**

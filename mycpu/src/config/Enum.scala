@@ -16,6 +16,7 @@ object ChiselFuType extends ChiselEnum {
 
 object MduType extends ChiselEnum {
   val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ, MTC0, MFC0 = Value
+  def isC0Inst(op: MduType.Type): Bool = op === MTC0 || op === MFC0
 }
 object SpecialType extends ChiselEnum {
   val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, NON = Value

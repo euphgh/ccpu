@@ -352,7 +352,7 @@ class Dispatcher extends MycpuModule {
       }
       if (rsKind(i) == FuType.Mdu) {
         val mduInstr = slots(mduSlot).inst.basic.instr
-        asg(toRs(i).bits.mfc0Addr.get, Cat(mduInstr(15, 11), mduInstr(2, 0)))
+        asg(toRs(i).bits.c0Addr.get, Cat(mduInstr(15, 11), mduInstr(2, 0)))
       }
       if (rsKind(i) == FuType.Lsu || rsKind(i) == FuType.SubAlu) {
         val imm = slots(rsSlotSel(i)).inst.basic.instr(15, 0)

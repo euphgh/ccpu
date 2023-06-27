@@ -59,24 +59,20 @@ class CacheStage2[T <: Data](
   })
   val lineNum = math.pow(2, cacheIndexWidth).toInt
   val wordNum = lineBytes / 4
-  class RAWBuffer extends MycpuBundle {
-    val data  = UWord
-    val addr  = UWord
-    val valid = Bool()
-  }
   // alias ============================================================
-  val inBits  = io.in.bits
-  val outBits = io.out.bits
-  val stage1  = inBits.fromStage1
-  val lowAddr = if (isDcache) stage1.dCacheReq.get.lowAddr else stage1.iCacheReq.get
-  val dram    = io.dram
-  val ar      = io.dram.ar
-  val r       = io.dram.r
-  val aw      = io.dram.aw
-  val w       = io.dram.w
-  val b       = io.dram.b
-  val dreq    = stage1.dCacheReq.get
-  val id      = if (isDcache) "b01".U else "b10".U
+  val inBits      = io.in.bits
+  val outBits     = io.out.bits
+  val stage1      = inBits.fromStage1
+  val lowAddr     = if (isDcache) stage1.dCacheReq.get.lowAddr else stage1.iCacheReq.get
+  val dram        = io.dram
+  val ar          = io.dram.ar
+  val r           = io.dram.r
+  val aw          = io.dram.aw
+  val w           = io.dram.w
+  val b           = io.dram.b
+  val dreq        = stage1.dCacheReq.get
+  val id          = if (isDcache) "b01".U else "b10".U
+  val isCacheInst = stage1.cacheInst.fold(false.B)(_.valid)
   // HIT Logic =================================================================
   val hitMask = VecInit((0 until roads).map(i => {
     val meta = stage1.meta(i)
@@ -101,9 +97,10 @@ class CacheStage2[T <: Data](
   // Road Select Module ============================================================
   val roadSelector = ReplacementPolicy.fromString("plru", roads)
   // automat =======================================================================
-  val run :: miss :: readDram :: refill :: uncache :: Nil                    = Enum(5)
-  val wIdel :: wReq :: wData :: waitwBack :: Nil                             = Enum(4)
-  val ucIdel :: ucAReq :: ucRWait :: ucAWReq :: ucWData :: ucWaitBack :: Nil = Enum(6)
+  val run :: miss :: readDram :: refill :: uncache :: instr :: Nil                                  = Enum(6)
+  val wIdel :: wReq :: wData :: waitwBack :: Nil                                                    = Enum(4)
+  val ucIdel :: ucAReq :: ucRWait :: ucAWReq :: ucWData :: ucWaitBack :: Nil                        = Enum(6)
+  val instrIdle :: decode :: idxStTag :: hitInv :: idxInv :: fake :: waitWauto :: waitRetire :: Nil = Enum(7)
   // run -> miss: not hit, waiting
   // miss -> readDram:  ARvalid = 1
   // readDram -> refill:  RReady = 1
@@ -112,7 +109,8 @@ class CacheStage2[T <: Data](
   val mainState    = RegInit(run)
   val writeState   = RegInit(wIdel)
   val ucState      = RegInit(ucIdel)
-  val writeBuffer  = Reg(Vec(wordNum, UWord))
+  val instrState   = RegInit(ucIdel)
+  val wbBuffer     = Reg(Vec(wordNum, UWord))
   val readBuffer   = Reg(Vec(wordNum, UWord))
   val readCounter  = Counter(wordNum)
   val writeCounter = Counter(wordNum)
@@ -120,9 +118,12 @@ class CacheStage2[T <: Data](
   val w1data       = Vec(roads, new DPWriteBus(UWord, lineNum))
   val w1meta       = Vec(roads, new DPWriteBus(new CacheMeta(isDcache), lineNum))
   val victimRoad   = RegInit(0.U)
-  val oldWord      = Mux1H(hitMask, stage1.ddata.get)
-  val oldLine      = Mux(mainState === refill, writeBuffer, Mux1H(hitMask, stage1.dataline.get))
-  val newWord      = maskWord(dreq.wWord, dreq.wStrb).asUInt | maskWord(oldWord, ~dreq.wStrb).asUInt
+  val validDirty =
+    if (isDcache) VecInit((0 until roads).map(i => stage1.meta(i).dirty.get && stage1.meta(i).valid)).asUInt
+    else 0.U(roads.W)
+  val oldWord = Mux1H(hitMask, stage1.ddata.get)
+  val oldLine = Mux(mainState === refill, wbBuffer, Mux1H(hitMask, stage1.dataline.get))
+  val newWord = maskWord(dreq.wWord, dreq.wStrb).asUInt | maskWord(oldWord, ~dreq.wStrb).asUInt
   val newLine = LookupUInt(
     lowAddr.offset >> 2,
     (0 until wordNum).map(i => {
@@ -177,6 +178,7 @@ class CacheStage2[T <: Data](
   w.bits.id   := id
   w.bits.strb := "b1111".U
 
+  val firstMissCycle = RegInit(false.B)
   switch(mainState) {
     is(run) {
       // set refill write sram valid = false.B
@@ -186,7 +188,9 @@ class CacheStage2[T <: Data](
       io.in.ready  := io.out.ready
       io.out.valid := io.in.valid
       when(!inBits.cancel && io.in.valid) {
-        when(inBits.isUncached) {
+        when(isCacheInst) {
+          mainState := instr
+        }.elsewhen(inBits.isUncached) {
           mainState := uncache
           // Uncache automachine change
           assert(ucState === ucIdel)
@@ -205,8 +209,9 @@ class CacheStage2[T <: Data](
               w1data(i).req.valid := hitMask(i) && dreq.isWrite
             })
           }
-        }.otherwise {
-          mainState := miss
+        }.elsewhen(!stage1.cacheInst.get.valid) {
+          mainState      := miss
+          firstMissCycle := true.B
           // block when not hit
           io.out.valid := false.B
           io.in.ready  := false.B
@@ -225,7 +230,7 @@ class CacheStage2[T <: Data](
       victimRoad := roadSelector.way
       // read 4(roads) cachelines for replace
       asg(
-        readBuffer,
+        wbBuffer,
         LookupUInt(
           victimRoad,
           (0 until roads).map(i => {
@@ -237,10 +242,11 @@ class CacheStage2[T <: Data](
         r1data(i).req.valid := false.B
       })
       // when victim is dirty, tell writeBuffer start work
-      val validDirty =
-        if (isDcache) VecInit((0 until roads).map(i => stage1.meta(i).dirty.get && stage1.meta(i).valid)).asUInt
-        else 0.U(roads.W)
-      writeState := Mux(validDirty(victimRoad), wReq, wIdel)
+      // must on first cycle, can only write one times
+      when(firstMissCycle) {
+        writeState     := Mux(validDirty(victimRoad), wReq, wIdel)
+        firstMissCycle := false.B
+      }
       assert(writeState === wIdel)
     }
     is(readDram) {
@@ -305,6 +311,10 @@ class CacheStage2[T <: Data](
         mainState := Mux(io.out.ready, run, uncache)
       }
     }
+    is(instr) {
+      instrState := decode
+      // not return run there, until instrState set mainState to run
+    }
   }
   assert(io.in.valid || mainState === run)
   assert(io.in.ready === false.B || mainState === run)
@@ -319,13 +329,13 @@ class CacheStage2[T <: Data](
     is(wData) {
       w.bits.last := writeCounter.value === (wordNum - 1).U
       dram.whenWfire {
-        asg(w.bits.data, writeBuffer(writeCounter.value))
+        asg(w.bits.data, wbBuffer(writeCounter.value))
         writeState := Mux(w.bits.last, waitwBack, wData)
       }
     }
     is(waitwBack) {
       dram.whenBfire {
-        writeBuffer := wIdel
+        wbBuffer := wIdel
       }
     }
   }
@@ -393,6 +403,122 @@ class CacheStage2[T <: Data](
         ucState := ucIdel
       }
       if (!isDcache) assert(false.B)
+    }
+  }
+  // Cache Inst ======================================================
+  if (enableCacheInst) {
+    def unvalidMeta(meta: CacheMeta) = {
+      val newMeta = meta
+      newMeta.valid := false.B
+      newMeta
+    }
+    def selectMetasByWay(way: UInt) = {
+      LookupUInt(
+        way,
+        (0 until roads).map(i => {
+          i.U -> stage1.meta(i)
+        })
+      )
+    }
+    def invalidWriteBack(way: UInt, isWB: Bool) = {
+      // unvalid tag meta
+      w1meta(way).req.valid     := true.B
+      w1meta(way).req.bits.data := unvalidMeta(selectMetasByWay(way))
+      // Dcache condition write back
+      if (isDcache) {
+        // load cache line data to wb buffer
+        asg(
+          wbBuffer,
+          LookupUInt(
+            way,
+            (0 until roads).map(i => {
+              i.U -> r1data(i).resp.data
+            })
+          )
+        )
+        // start write back automation conditionally
+        val needWriteBack = validDirty(way) && isWB
+        writeState := Mux(needWriteBack, wReq, wIdel)
+        assert(writeState === wIdel)
+        instrState := Mux(needWriteBack, waitWauto, waitRetire)
+      } else instrState := waitRetire // ICache instr not wait write back
+    }
+
+    val tagWay            = inBits.ptag(cacheIndexWidth + log2Ceil(roads) - 1, cacheIndexWidth)
+    val ciOp              = io.in.bits.fromStage1.cacheInst.get.bits.op
+    val iCacheFinishInstr = Bool() // for reflect icache finish to dcache
+    if (isDcache) {
+      addSink(iCacheFinishInstr, "iCacheFinishInstr")
+    }
+    if (!isDcache) {
+      addSource(io.cacheInst.finish.get, "iCacheFinishInstr")
+    }
+    io.cacheInst.finish.get := false.B
+    assert(io.in.valid || instrState === instrIdle)
+    switch(instrState) {
+      is(decode) {
+        if (isDcache) {
+          instrState := MuxCase(
+            ciOp,
+            Seq(
+              CacheOp.isIdxInv(ciOp)      -> idxInv,
+              CacheOp.isIdxStoreTag(ciOp) -> idxStTag,
+              CacheOp.isHitInv(ciOp)      -> hitInv,
+              CacheOp.isIop(ciOp)         -> fake
+            )
+          )
+        } else {
+          assert(CacheOp.isIop(ciOp))
+          instrState := MuxCase(
+            ciOp,
+            Seq(
+              CacheOp.isIdxInv(ciOp)      -> idxInv,
+              CacheOp.isIdxStoreTag(ciOp) -> idxStTag,
+              CacheOp.isHitInv(ciOp)      -> hitInv
+            )
+          )
+        }
+        // perpare data for write back instr
+        (0 until roads).foreach(r1data(_).req.valid := true.B)
+      }
+      is(idxInv) {
+        invalidWriteBack(tagWay, true.B)
+        assert(ciOp === CacheOp.IndexInvalidI || ciOp === CacheOp.IndexWriteBackInvalidD)
+      }
+      is(hitInv) {
+        //defualt not hit
+        instrState := instrIdle
+        when(hit) {
+          invalidWriteBack(OHToUInt(hitMask), ciOp === CacheOp.HitWriteBackInvalidD)
+        }
+        assert(ciOp === CacheOp.HitInvalidD || ciOp === CacheOp.HitInvalidI || ciOp === CacheOp.HitWriteBackInvalidD)
+      }
+      is(idxStTag) {
+        // unvalid tag meta
+        w1meta(tagWay).req.valid     := true.B
+        w1meta(tagWay).req.bits.data := 0.U.asTypeOf(new CacheMeta(isDcache))
+        instrState                   := waitRetire
+        assert(ciOp === CacheOp.IndexStoreTagI || ciOp === CacheOp.IndexStoreTagD)
+      }
+      is(waitWauto) {
+        instrState := Mux(writeState === waitRetire, instrIdle, waitWauto)
+      }
+      is(waitRetire) {
+        io.cacheInst.finish.get := true.B
+        when(io.cacheInst.redirect.get) {
+          mainState  := run
+          instrState := instrIdle
+        }
+      }
+      is(fake) { // when Dcache recieve ICache Instr, it should listen
+        assert(isDcache)
+        if (isDcache) {
+          io.cacheInst.finish.get := iCacheFinishInstr
+          when(iCacheFinishInstr) {
+            instrState := waitRetire
+          }
+        }
+      }
     }
   }
 }

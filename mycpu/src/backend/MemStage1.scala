@@ -145,10 +145,10 @@ class MemStage1 extends MycpuModule {
   toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
-  cache1.io.in <> io.cacheIn
+  cache1.io.in.bits <> io.cacheIn.bits
+  cache1.io.in.valid := io.cacheIn.valid && io.in.ready
   toM2Bits.toCache2 <> cache1.io.out
   when(inBits.isRoStage) {
     toM2Bits.toCache2.dCacheReq.get.size := lsSize
   }
-  //TODO: must make sure io.in.ready when cache ready
 }

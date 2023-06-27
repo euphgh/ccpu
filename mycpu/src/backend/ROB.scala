@@ -321,15 +321,18 @@ class ROB extends MycpuModule {
   asg(io.out.ciRedirect.target, retireInst(0).fromDispatcher.pc)
 
   //exception connect
-  val oldestInst   = retireInst(0)
-  val oldestType   = oldestInst.fromDispatcher.specialType
-  val memReqVaddr  = Wire(UWord)
-  val memException = Wire(Bool())
-  //TODO:addsource
-  // BoringUtils.addSink(memReqVaddr, "badMemVaddrReg")
-  // BoringUtils.addSink(memException, "MemExceptionReg") //无法通过exccode区分开load的取指/访存例外
-  memReqVaddr  := 0.U
-  memException := 0.U
+  val oldestInst = retireInst(0)
+  val oldestType = oldestInst.fromDispatcher.specialType
+  // Mem badAddress =========================================
+  val memReqVaddr     = Wire(UWord)
+  val memException    = Wire(Bool())
+  val badAddrFromMem1 = Flipped(Valid(UWord))
+  addSink(badAddrFromMem1, "mem1BadAddr")
+  val badAddr = Module(new Mark(UWord))
+  badAddr.start <> badAddrFromMem1
+  badAddr.end  := io.out.flushAll
+  memReqVaddr  := badAddr.value.bits
+  memException := badAddr.value.valid
   asg(
     io.out.exception.bits.badVaddr,
     Mux(

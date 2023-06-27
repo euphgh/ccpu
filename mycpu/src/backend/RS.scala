@@ -170,7 +170,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   if (rsKind == FuType.MainAlu) {
     val isBranch =
       WireInit(
-        VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.decoded.brType =/= BranchType.non))
+        VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.decoded.brType =/= BranchType.NON))
       )
     (0 until rsSize).map(i =>
       asg(

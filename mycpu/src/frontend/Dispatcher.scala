@@ -8,6 +8,7 @@ import utils.MultiQueue
 import chisel3.util.log2Up
 import utils._
 import chisel3.util.Cat
+import chisel3.util.experimental.decode.QMCMinimizer
 
 class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
@@ -136,7 +137,7 @@ class SRAT extends MycpuModule {
 class Decoder extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val inst      = Input(UWord)
+      val instr     = Input(UWord)
       val exception = Input(FrontExcCode())
     }
     val out = new Bundle {
@@ -144,6 +145,7 @@ class Decoder extends MycpuModule {
       val exception = new ExceptionInfoBundle
     }
   })
+  io.out.decoded.decode(io.in.instr, AllInsts(), AllInsts.default(), QMCMinimizer)
 }
 
 class dispatchSlot extends MycpuBundle {
@@ -291,7 +293,7 @@ class Dispatcher extends MycpuModule {
 
   //decoder
   List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in.inst        := slots(i).inst.basic.instr
+    decoder(i).io.in.instr       := slots(i).inst.basic.instr
     decoder(i).io.in.exception   := slots(i).inst.exception
     slots(i).toRsBasic.decoded   := decoder(i).io.out.decoded
     slots(i).toRsBasic.exception := decoder(i).io.out.exception
@@ -338,12 +340,24 @@ class Dispatcher extends MycpuModule {
       toRs(i).valid      := slots(rsSlotSel(i)).valid & slots(rsSlotSel(i)).readyGo
       toRs(i).bits.basic := slots(rsSlotSel(i)).toRsBasic
 
-      if (rsKind(i) == FuType.MainAlu) { asg(toRs(i).bits.predictResult.get, slots(mainAluSlot).inst.predictResult) }
+      if (rsKind(i) == FuType.MainAlu) {
+        //val maExtra = io.out.toMainAluRs.bits.
+        val maExtra = toRs(i).bits.mAluExtra.get
+        val maInst  = slots(mainAluSlot).inst
+        val basic   = maInst.basic
+        val preRes  = maInst.predictResult
+        asg(maExtra.dsPcVal, basic.pcVal + 4.U)
+        asg(maExtra.low26, basic.instr(25, 0))
+        asg(maExtra.predictResult, preRes)
+      }
       if (rsKind(i) == FuType.Mdu) {
         val mduInstr = slots(mduSlot).inst.basic.instr
         asg(toRs(i).bits.mfc0Addr.get, Cat(mduInstr(15, 11), mduInstr(2, 0)))
       }
-      //FIXME:immOffset
+      if (rsKind(i) == FuType.Lsu || rsKind(i) == FuType.SubAlu) {
+        val imm = slots(rsSlotSel(i)).inst.basic.instr(15, 0)
+        asg(toRs(i).bits.immOffset.get, imm)
+      }
     }
   })
 }

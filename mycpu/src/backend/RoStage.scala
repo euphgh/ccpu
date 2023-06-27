@@ -16,8 +16,6 @@ import utils._
   * since we only care about the rob num in the bypass,we do not need to name bypass:
   *        (0) is for extern
   *        (1) is for inside
-  *
-  * cal 12 bit index+offset for lsu(dcache1.io.in)
   */
 
 class RoStage(fuKind: FuType.t) extends MycpuModule {
@@ -36,29 +34,71 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   io.out.valid := io.in.valid && readyGo
   io.in.ready  := !io.in.valid || io.out.ready && readyGo
 
-  //unchange signal
+  //simple connect
   asg(io.out.bits.decoded, io.in.bits.basic.decoded)
   asg(io.out.bits.destPregAddr, io.in.bits.basic.destPregAddr)
   asg(io.out.bits.destAregAddr, io.in.bits.basic.destAregAddr)
   asg(io.out.bits.exception, io.in.bits.basic.exception)
   asg(io.out.bits.robIndex, io.in.bits.basic.robIndex)
-  if (fuKind == FuType.MainAlu) { asg(io.out.bits.predictResult.get, io.in.bits.predictResult.get) }
-  //TODO:immOffest
-  if (fuKind == FuType.Mdu) { asg(io.out.bits.mfc0Addr.get, io.in.bits.mfc0Addr.get) }
 
-  //select srcData
-  val pSrcs = io.in.bits.basic.srcPregs
-  (0 until srcDataNum).map(i => asg(io.out.bits.srcData(i), io.datasFromPrf(i))) //default
+  /**
+    * select srcs:
+    *   default:read from prf
+    *     num_0 will get 0,dontcare
+    *   mAlu/sAlu:
+    *     should consider bypass
+    *     I-inst(RS):src2 should be imm(这里ldst的src2不用被选成imm)
+    *     SLL/SRA/SRL(RSRT):src1 should be sa
+    *   mAlu:"AL"(RS) should take link addr in src2
+    */
+  val outSrcs = io.out.bits.srcData
+  (0 until srcDataNum).map(i => asg(outSrcs(i), io.datasFromPrf(i))) //default
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
+    //bypass
     val bypass = io.datasFromBypass.get
+    val pSrcs  = io.in.bits.basic.srcPregs
     List.tabulate(srcDataNum)(i =>
       List.tabulate(aluBypassNum)(j =>
-        when(bypass(j).valid && bypass(j).bits.pDest === pSrcs(i).pIdx) {
-          asg(io.out.bits.srcData(i), bypass(j).bits.result)
+        when(bypass(j).valid && bypass(j).bits.pDest === pSrcs(i).pIdx && pSrcs(i).pIdx =/= 0.U) {
+          asg(outSrcs(i), bypass(j).bits.result)
         }
       )
     )
+    //select (imm as src2)|(sa as src1)
+    val srcType = io.in.bits.basic.decoded.srcType
+    val aluType = io.in.bits.basic.decoded.aluType
+    val needSa  = AluType.isSll(aluType) || AluType.isSra(aluType) || AluType.isSrl(aluType)
+    if (fuKind == FuType.SubAlu) {
+      val imm = io.in.bits.immOffset.get
+      when(srcType === SRCType.RS) { asg(outSrcs(1), imm) }
+      when(needSa) { asg(outSrcs(0), imm(10, 6)) }
+    }
+    if (fuKind == FuType.MainAlu) {
+      val maExtraIn = io.in.bits.mAluExtra.get
+      val low26     = maExtraIn.low26
+      val imm       = low26(15, 0)
+      //count target
+      val brType = io.in.bits.basic.decoded.brType
+      val isJr   = BranchType.isJr(brType)
+      val isJ    = BranchType.isJ(brType)
+      val isAl   = BranchType.isAL(brType)
+      val bDest  = SignExt(Cat(imm, 0.U(2.W)), 32)
+      val jDest  = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
+      val jrDest = outSrcs(0)
+      //select target,connect preRes
+      val outBranch = io.out.bits.branch.get
+      asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
+      asg(outBranch.predictResult, maExtraIn.predictResult)
+      //srcs
+      when(srcType === SRCType.RS) { asg(outSrcs(1), imm) }
+      when(needSa) { asg(outSrcs(0), imm(10, 6)) }
+      when(isAl) { asg(outSrcs(1), maExtraIn.dsPcVal + 4.U) }
+    }
   }
+
+  /**
+    */
+  if (fuKind == FuType.Mdu) { asg(io.out.bits.mfc0Addr.get, io.in.bits.mfc0Addr.get) }
 
   //wake up
   val wakeUpSource = Wire(Valid(PRegIdx))
@@ -74,7 +114,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   //for lsu
   if (fuKind == FuType.Lsu) {
     val outMem    = io.out.bits.mem.get
-    val addrL12sb = io.in.bits.immOffset.get(11, 0) +& io.out.bits.srcData(0)(11, 0)
+    val addrL12sb = io.in.bits.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
     outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(cacheOffsetWidth - 1, 0)
     outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, cacheOffsetWidth)
     outMem.immOffset                      := io.in.bits.immOffset.get

@@ -12,19 +12,11 @@ class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
   val pDest = PRegIdx
 }
-
-/**
-  * wb is used to update inPrf bit
-  * need check SRAT(wbADest).pIdx === wbPDest
-  * if same, write inPrf := true in next cycle, else not change.
-  * if same, and at this cycle src(of a renaming inst) = this AReg,
-  * SRAT should return inPrf === true
-  *
-  * //Q:not need condition "if same?"
-  * if same, and at this cycle dest(of a renaming inst) = this AReg,
-  * next cycle inPrf := false
-  * in total,  src < wb < dest
-  */
+class MispreSignal extends MycpuBundle {
+  val happen     = Output(Bool())
+  val realTarget = Output(UWord)
+  val robIdx     = Output(ROBIdx)
+}
 
 /**
   * WAW
@@ -189,12 +181,8 @@ class Dispatcher extends MycpuModule {
     }
     val outFireNum = Output(UInt())
 
-    val fromAluMispre = new Bundle {
-      val happen     = Input(Bool())
-      val realTarget = Input(UWord)
-      val robIdx     = Input(ROBIdx)
-    }
-    val fronRedirect = new FrontRedirctIO
+    val fromAluMispre = Flipped(new MispreSignal)
+    val fronRedirect  = new FrontRedirctIO
 
     //valid when flush(mispredictRetire/exception/eret)
     // next cycle the backend is empty

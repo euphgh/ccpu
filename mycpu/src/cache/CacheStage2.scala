@@ -77,22 +77,6 @@ class CacheStage2[T <: Data](
   val b       = io.dram.b
   val dreq    = stage1.dCacheReq.get
   val id      = if (isDcache) "b01".U else "b10".U
-  // Default Bus Assign ========================================================
-  // >> AR channel =============================================================
-  ar.bits.addr  := Cat(inBits.ptag, lowAddr.index, 0.U(cacheOffsetWidth.W))
-  ar.bits.burst := BurstType.INCR //TODO: key word first
-  ar.bits.size  := SizeType.Word
-  ar.bits.len   := (wordNum - 1).U
-  ar.bits.id    := id
-  // >> AW channel ==============================================================
-  aw.bits.addr  := Cat(inBits.ptag, lowAddr.index, 0.U(cacheOffsetWidth.W))
-  aw.bits.burst := BurstType.INCR
-  aw.bits.size  := SizeType.Word
-  aw.bits.len   := (wordNum - 1).U
-  ar.bits.id    := id
-  // >> W channel ==============================================================
-  w.bits.id   := id
-  w.bits.strb := "b1111".U
   // HIT Logic =================================================================
   val hitMask = VecInit((0 until roads).map(i => {
     val meta = stage1.meta(i)
@@ -170,6 +154,30 @@ class CacheStage2[T <: Data](
     asg(w1meta(i).req.bits.setIdx, lowAddr.index)
     asg(w1data(i).req.bits.data, newLine)
   })
+  // Default Bus Assign ========================================================
+  // >> AR channel =============================================================
+  asg(ar.bits.addr, Cat(inBits.ptag, lowAddr.index, 0.U(cacheOffsetWidth.W)))
+  asg(ar.bits.burst, BurstType.INCR) //TODO: key word first
+  asg(ar.bits.size, SizeType.Word)
+  asg(ar.bits.len, (wordNum - 1).U)
+  asg(ar.bits.id, id)
+  // >> AW channel ==============================================================
+  asg(
+    aw.bits.addr,
+    Cat(
+      LookupUInt(victimRoad, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
+      lowAddr.index,
+      0.U(cacheOffsetWidth.W)
+    )
+  )
+  asg(aw.bits.burst, BurstType.INCR)
+  asg(aw.bits.size, SizeType.Word)
+  asg(aw.bits.len, (wordNum - 1).U)
+  asg(ar.bits.id, id)
+  // >> W channel ==============================================================
+  w.bits.id   := id
+  w.bits.strb := "b1111".U
+
   switch(mainState) {
     is(run) {
       // set refill write sram valid = false.B
@@ -298,10 +306,7 @@ class CacheStage2[T <: Data](
   }
   assert(io.in.valid || mainState === run)
   assert(io.in.ready === false.B || mainState === run)
-  asg(
-    aw.bits.addr,
-    Cat(Mux1H(selectedRoad, VecInit((0 until roads).map(stage1.meta(_).tag))), lowAddr.index, 0.U(cacheOffsetWidth.W))
-  )
+
   switch(writeState) {
     is(wReq) {
       dram.whenAWfire {

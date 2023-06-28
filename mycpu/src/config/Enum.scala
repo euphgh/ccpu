@@ -43,6 +43,8 @@ object MemType extends ChiselEnum {
   val LH  = Value("b1100".U)
   val LHU = Value("b1101".U)
   val SH  = Value("b1110".U)
+  //cacheinst
+  val CACHEINST = Value("b0110".U)
 
   def wordPat  = BitPat("b000?")
   def leftPat  = BitPat("b001?")

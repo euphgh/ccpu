@@ -39,7 +39,6 @@ class BasicInstInfoBundle extends MycpuBundle {
   */
 @MacroDecode
 class DecodeInstInfoBundle extends MycpuBundle {
-  val blockType   = BlockType() //TODO:不要了
   val specialType = SpecialType() //带有Non，ROB里啥都有
   val brType      = BranchType() //带有Non，因为mALU里不止走branch
   val aluType     = AluType() //带有Non，因为mAlu里不止走aluInst

@@ -21,7 +21,7 @@ import cache._
 class ExceptionInfoBundle extends MycpuBundle {
   val happen  = Output(Bool())
   val isBd    = Output(Bool())
-  val excCode = Output(UInt(excCodeWidth.W))
+  val excCode = Output(ExcCode())
   val pc      = Output(UWord)
   val refill  = Output(Bool())
 }
@@ -82,7 +82,6 @@ class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
   val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
-  val takeWord     = Output(UWord) //for ldst it's memReqVaddr,for mtxx it's wdata
 }
 
 class RetireBundle extends MycpuBundle {

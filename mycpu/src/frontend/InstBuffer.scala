@@ -36,11 +36,14 @@ class InstBuffer extends MycpuModule {
   val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 32, true))
   // input ========================================================
   (0 until fetchNum).foreach(i => {
-    ib.io.push(i).valid              := io.in.bits.validMask(i) && io.in.valid
-    ib.io.push(i).bits.basicInstInfo := io.in.bits.basicInstInfo(i)
-    ib.io.push(i).bits.predictResult := io.in.bits.predictResult(i)
-    ib.io.push(i).bits.exception     := io.in.bits.exception(i)
-    ib.io.push(i).bits.realBrType    := io.in.bits.realBrType(i)
+    val pushBits = ib.io.push(i).bits
+    val inBits   = io.in.bits
+    ib.io.push(i).valid    := inBits.validMask(i) && io.in.valid
+    pushBits.basicInstInfo := inBits.basicInstInfo(i)
+    pushBits.predictResult := inBits.predictResult(i)
+    pushBits.exception     := inBits.exception(i)
+    pushBits.realBrType    := inBits.realBrType(i)
+    pushBits.isBd          := inBits.isBd(i)
   })
   io.in.ready := ib.io.push(0).ready // any number is ok
 
@@ -63,6 +66,7 @@ class InstBuffer extends MycpuModule {
     outBits.exception     := ibPop.exception
     outBits.predictResult := ibPop.predictResult
     outBits.realBrType    := ibPop.realBrType
+    outBits.isBd          := ibPop.isBd
     io.out(i).valid       := ib.io.pop(i).valid
     ib.io.pop(i).ready    := io.out(i).ready
   })

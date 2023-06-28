@@ -216,19 +216,24 @@ class IfStage1 extends MycpuModule {
   io.toPreIf.pcVal  := pc
   io.out.bits.pcVal := pc
   import chisel3.util.experimental.decode._
-  val alignMask = decoder(
-    inst4to2,
-    TruthTable(
-      Seq(
-        BitPat("b?00") -> BitPat("b1111"),
-        BitPat("b100") -> BitPat("b1111"),
-        BitPat("b101") -> BitPat("b0111"),
-        BitPat("b110") -> BitPat("b0011"),
-        BitPat("b111") -> BitPat("b0001")
-      ),
-      BitPat("b1111")
+  val alignMask = Mux(
+    isDelaySlot,
+    "b0001".U,
+    decoder(
+      inst4to2,
+      TruthTable(
+        Seq(
+          BitPat("b?00") -> BitPat("b1111"),
+          BitPat("b100") -> BitPat("b1111"),
+          BitPat("b101") -> BitPat("b0111"),
+          BitPat("b110") -> BitPat("b0011"),
+          BitPat("b111") -> BitPat("b0001")
+        ),
+        BitPat("b1111")
+      )
     )
   )
+
   // >> tlb ================
   io.tlb.req                 := pc
   io.tlb.req.valid           := true.B

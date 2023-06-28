@@ -72,6 +72,7 @@ class IfStage2 extends Module with MycpuParam {
   }
   import chisel3.util.experimental.decode.QMCMinimizer
   val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
+  val validBr        = Wire(Vec(fetchNum, Bool()))
   val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
   val firNonBrMispre = WireDefault(0.U(log2Up(retireNum).W))
   val bpuUpdateQueue = Module(new Queue(gen = new BpuUpdateIO, entries = 4))
@@ -86,15 +87,16 @@ class IfStage2 extends Module with MycpuParam {
   (0 until fetchNum).foreach(i => {
     val instr     = io.out.bits.basicInstInfo(i).instr
     val preRes    = io.out.bits.predictResult(i)
-    val take      = preRes.counter > 1.U
-    val instValid = io.out.bits.validMask(i)
+    val preTake   = preRes.counter > 1.U
+    val instValid = io.out.bits.validMask(i) && io.in.valid
     preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
     val realBrType = preDecoder(i).brType
-    nonBrMisPreVec(i) := (realBrType === BranchType.NON && take && instValid)
+    nonBrMisPreVec(i) := (realBrType === BranchType.NON && preTake && instValid) //注意io.in.valid
     asg(io.out.bits.realBrType(i), realBrType)
+    asg(validBr(i), realBrType =/= BranchType.NON && instValid) //注意io.in.valid
   })
 
-  when(nonBrMisPreVec.asUInt.orR) {
+  when(nonBrMisPreVec.asUInt.orR && io.in.valid) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val misPc     = io.out.bits.basicInstInfo(firNonBrMispre).pcVal
     val misPreRes = io.out.bits.predictResult(firNonBrMispre)
@@ -121,9 +123,27 @@ class IfStage2 extends Module with MycpuParam {
     asg(updatePht.valid, true.B)
     asg(updatePht.bits, 0.U(2.W))
   }
-
   //bpuUpdateQ deq
   asg(io.bpuUpdate.valid, bpuUpdateQueue.io.deq.valid)
   asg(bpuUpdateQueue.io.deq.ready, io.bpuUpdate.ready)
 
+  /**
+    * is延迟槽
+    *   目前放在IF2段处理
+    *   PRE-IF那还不太一样，如果分支没被预测跳转，是不会进入单走延迟槽的状态的
+    */
+  val validMask = io.in.bits.validMask
+  val dsReg     = RegInit(false.B)
+  val lastDs    = WireInit(0.U(log2Up(fetchNum).W))
+  val validNum  = PriorityCount(validMask.asUInt)
+  when(validMask(0) && io.in.valid) { dsReg := false.B } //注意io.in.valid
+  when(validBr.asUInt.orR && io.in.valid) {
+    asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
+    when(lastDs >= validNum) {
+      dsReg := true.B
+    }
+  }
+  val isBd = io.out.bits.isBd
+  (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
+  asg(isBd(0), dsReg)
 }

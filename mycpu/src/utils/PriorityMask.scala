@@ -5,7 +5,7 @@ import chisel3.util.experimental.decode.decoder
 import chisel3.util.experimental.decode.TruthTable
 import chisel3.util.PriorityEncoderOH
 import chisel3.util.experimental.decode.QMCMinimizer
-
+import chisel3.util.PriorityEncoder
 
 object PriorityVec {
   def apply(inputs: Vec[UInt]): UInt = {

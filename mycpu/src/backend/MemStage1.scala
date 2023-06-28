@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import cache._
 import utils._
+import chisel3.util.experimental.BoringUtils._
 
 /**
   * for now,no load inst wake up
@@ -50,7 +51,8 @@ class MemStage1 extends MycpuModule {
   val toMem2   = io.out.toMem2
   val toM2Bits = toMem2.bits
   toSQbits.rwReq := inBits.mem1Req.rwReq
-  val l2sb       = inBits.mem1Req.rwReq.lowAddr.offset(1, 0)
+  val lowAddr    = inBits.mem1Req.rwReq.lowAddr
+  val l2sb       = lowAddr.offset(1, 0)
   val leftSize   = LookupUIntDefault(l2sb, 2.U, Seq(0.U -> 0.U, 1.U -> 1.U))
   val rightSize  = LookupUIntDefault(l2sb, 2.U, Seq(3.U -> 0.U, 2.U -> 1.U))
   val lsSize     = Wire(UInt(2.W))
@@ -120,6 +122,10 @@ class MemStage1 extends MycpuModule {
       MemType.LHU -> (l2sb(0) =/= "b0".U)
     )
   )
+  val badAddr = Valid(UWord)
+  badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exception.happen
+  badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
+  addSource(badAddr, "mem1BadAddr")
   when(tlbExp || addrErrExp) {
     toM2Bits.exception.happen  := true.B
     toM2Bits.exception.excCode := Mux(tlbExp, tlbExcCode, Mux(isWriteReq, ExcCode.AdES, ExcCode.AdEL))

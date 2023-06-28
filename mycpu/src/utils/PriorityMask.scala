@@ -6,12 +6,21 @@ import chisel3.util.experimental.decode.TruthTable
 import chisel3.util.PriorityEncoderOH
 import chisel3.util.experimental.decode.QMCMinimizer
 
+object PriorityVec {
+  def apply(inputs: Vec[UInt]): UInt = {
+    val or    = inputs.foldRight(0.U)(_ | _)
+    val inPri = inputs.map(PriorityEncoder(_))
+    val orPri = PriorityEncoder(or)
+    VecInit((0 until inputs.size).map(inPri(_) === orPri)).asUInt
+  }
+}
+
 object PriorityMask {
   def apply(input: UInt): UInt = {
     val n = input.getWidth
     val pair = (0 until n).map(i => {
       val left  = "b" + "?" * (n - i - 1) + "1" + "0" * i
-      val right = "b" + "1" * (n - i) + "0"
+      val right = "b" + "1" * (n - i) + "0" * i
       BitPat(left) -> BitPat(right)
     })
     decoder(QMCMinimizer, input, TruthTable(pair, BitPat("b" + "1" * n)))

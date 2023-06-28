@@ -135,7 +135,41 @@ class Decoder extends MycpuModule {
       val exception = new DetectExInfoBundle
     }
   })
-  io.out.decoded.decode(io.in.instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+
+  //decode
+  val instr   = io.in.instr
+  val decoder = new DecodeInstInfoBundle
+  decoder.decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+  asg(io.out.decoded, decoder)
+
+  /**
+    * exception handle
+    *   note that input is frontExcCode，output is detectExInfoBundle
+    *   here we detect 系统调用/保留指令
+    *   priority:前面的fetch/tlbl > 保留指令例外 > 系统调用/BREAK
+    */
+  val deExType  = decoder.decodeExcType
+  val ri        = deExType === DeExType.RI //TODO:保留指令例外
+  val syscall   = deExType === DeExType.SYS
+  val break     = deExType === DeExType.BP
+  val inExcCode = io.in.exception
+  val inIsEx    = FrontExcCode.happen(inExcCode)
+  val outEx     = io.out.exception
+  //connect
+  asg(outEx.happen, inIsEx || ri || syscall || break)
+  asg(outEx.refill, FrontExcCode.isRefill(inExcCode))
+  asg(
+    outEx.excCode,
+    MuxCase(
+      ExcCode.AdEL, //dontcare,no exception happen
+      Seq(
+        inIsEx  -> FrontExcCode.trans(inExcCode),
+        ri      -> ExcCode.RI,
+        syscall -> ExcCode.Sys,
+        break   -> ExcCode.Bp
+      )
+    )
+  )
 }
 
 class dispatchSlot extends MycpuBundle {
@@ -148,10 +182,10 @@ class dispatchSlot extends MycpuBundle {
 
   val readyGo = Output(Bool())
 
-  //  exception    decoder-Rs
-  //  destPregAddr freelist-Rs&Rob
-  //  srcPregs     srat-Rs
-  //  robIndex     Rs
+  //  exceptDetect    decoder-Rs
+  //  destPregAddr    freelist-Rs & Rob
+  //  srcPregs        srat-Rs
+  //  robIndex        Rs
   val toRsBasic = new RsBasicEntry
   val decoded   = new DecodeInstInfoBundle
   //srat-Rob
@@ -348,11 +382,14 @@ class Dispatcher extends MycpuModule {
 
   //to rob
   List.tabulate(dispatchNum)(i => {
-    val toRobBits = io.out.toRob(i).bits
-    val toRobUop  = toRobBits.uOp
+    val toRobBits    = io.out.toRob(i).bits
+    val toRobUop     = toRobBits.uOp
+    val toRobExBasic = toRobBits.basicExInfo
     asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
-    asg(toRobBits.basicExInfo.pc, slots(i).inst.basicInstInfo.pcVal)
-    //TODO:isbd
+    //exception:pc and isBd
+    asg(toRobExBasic.pc, slots(i).inst.basicInstInfo.pcVal)
+    asg(toRobExBasic.isBd, slots(i).inst.isBd)
+    //uOp
     asg(toRobUop.prevPDest, slots(i).prevPDest)
     asg(toRobUop.currADest, slots(i).inst.aRegsIdx.dest)
     asg(toRobUop.currPDest, slots(i).toRsBasic.destPregAddr)

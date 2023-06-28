@@ -43,10 +43,11 @@ class BasicInstInfoBundle extends MycpuBundle {
   */
 @MacroDecode
 class DecodeInstInfoBundle extends MycpuBundle {
-  val specialType = SpecialType() //带有Non，ROB里啥都有
-  val aluType     = AluType() //带有Non，因为mAlu里不止走aluInst
-  val memType     = MemType() //不带Non
-  val mduType     = MduType() //不带Non
+  val specialType   = SpecialType() //带有Non，ROB里啥都有
+  val aluType       = AluType() //带有Non，因为mAlu里不止走aluInst
+  val memType       = MemType() //不带Non
+  val mduType       = MduType() //不带Non
+  val decodeExcType = DeExType() //靠解码就可以得到的例外，需要NON
 }
 
 //no need a wen,pDest===0 means !wen
@@ -66,7 +67,7 @@ class WbRobBundle extends MycpuBundle {
 
 class PreIfOutIO extends MycpuBundle {
   val npc         = Output(UInt(vaddrWidth.W))
-  val isDelaySlot = Output(Bool()) // tell stage1 alignMask should be b1000
+  val isDelaySlot = Output(Bool()) // tell stage1 alignMask should be b0001
   val flush       = Output(Bool())
 }
 
@@ -91,6 +92,7 @@ class IfStage1OutIO extends MycpuBundle {
 }
 
 class IfStage2OutIO extends MycpuBundle {
+  val isBd          = Vec(fetchNum, Bool())
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val realBrType    = Vec(fetchNum, BranchType())
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
@@ -103,9 +105,10 @@ class InstARegsIdxBundle extends MycpuBundle {
 }
 class InstBufferEntry extends MycpuBundle {
   val predictResult = new PredictResultBundle
-  val realBrType    = Vec(fetchNum, BranchType())
+  val realBrType    = BranchType()
   val basicInstInfo = new BasicInstInfoBundle
   val exception     = FrontExcCode()
+  val isBd          = Output(Bool())
 }
 class InstBufferOutIO extends InstBufferEntry {
   val whichFu  = ChiselFuType()

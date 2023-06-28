@@ -191,8 +191,9 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   val exeStageIO = new ExeStageIO(FuType.MainAlu)
   exeStageIO.out <> io.out
   PipelineConnect(roStage.io.out, exeStageIO.in, exeStageIO.out.fire, io.flush)
-  val exeIn  = exeStageIO.in.bits
-  val exeOut = exeStageIO.out.bits
+  val exeIn     = exeStageIO.in.bits
+  val exeOut    = exeStageIO.out.bits
+  val instValid = exeStageIO.in.valid
 
   //注意，这里的in.valid已经代表着pipex_valid
   val exeStageReadyGo = true.B
@@ -233,7 +234,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val brType       = uOp.brType.get
     val isBr         = brType =/= BranchType.NON
     val mispreBlkReg = RegInit(false.B)
-    val brValid      = isBr && !mispreBlkReg
+    val brValid      = isBr && !mispreBlkReg && instValid
     //predict and gen
     val inBrInfo  = exeIn.branch.get
     val predict   = inBrInfo.predict
@@ -266,7 +267,10 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     asg(mispre.robIdx, exeIn.robIndex)
     when(brValid && (takenWrong || destWrong)) { asg(mispreBlkReg, true.B) }
     when(io.flush) { asg(mispreBlkReg, false.B) }
-    BoringUtils.addSource(Valid(inBrInfo.realTarget), "realTarget")
+    //special:jrhb
+    val jrhbValid = brValid && brType === BranchType.JRHB
+    BoringUtils.addSource(inBrInfo.realTarget, "JRHBTARGET")
+    BoringUtils.addSource(jrhbValid, "JRHBVALID")
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
   }
@@ -274,7 +278,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   /**
     * deal with exception
     *   priority:
-    *   overflow < 保留指令例外 < 取指例外 < 中断
+    *   overflow < 保留指令例外/BP/SYS(DPER) < 取指TLB(IF1) < 中断
     */
   when(!inExDetect.happen && aluCpOut.overflow) {
     asg(outExDetect.happen, true.B)
@@ -283,7 +287,6 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
   //attach interrupt to SubAlu to prevent(mispre & exception)when retire
   //p172：中断是电平输入信号
-
   if (!main) {
     val hasInt = Wire(Bool())
     BoringUtils.addSink(hasInt, "hasInterrupt")

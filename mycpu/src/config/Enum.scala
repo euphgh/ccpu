@@ -105,3 +105,6 @@ object AluType extends ChiselEnum {
   def isSra(op:       AluType.Type): Bool = op === SRA
   def needSa(op:      AluType.Type): Bool = isSll(op) || isSrl(op) || isSra(op)
 }
+object DeExType extends ChiselEnum {
+  val RI, SYS, BP, NON = Value
+}

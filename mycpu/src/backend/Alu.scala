@@ -4,9 +4,9 @@ import backend._
 import bundle._
 import chisel3._
 import utils._
+import chisel3.util.experimental.BoringUtils
 
 class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
-  val extInt = if (main) Some(IO(UInt(6.W))) else None
 
   //stage connect
   val exeStageIO = new ExeStageIO(FuType.MainAlu)
@@ -23,9 +23,12 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   //unchange signal
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-  asg(exeOut.wbRob.takeWord, exeIn.srcData(1)) //only mtc0 care
-  asg(exeOut.wbRob.isMispredict, false.B) //default,mainAlu may change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
+
+  //may change signal
+  val outExInfo = exeOut.wbRob.exception
+  asg(outExInfo, exeIn.exception) //when exception occur,may change it
+  asg(exeOut.wbRob.isMispredict, false.B) //mainAlu may change it
 
   /**
     * real alu logic:mainAlu/SubAlu
@@ -37,4 +40,20 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     */
   val srcs = exeIn.srcData
   //...
+
+  /**
+    * deal with interrupt
+    *   int has highest priority
+    *   attach it to a non-BR inst to prevent(mispre & exception)when retire
+    *   实战p172
+    */
+  if (!main) {
+    val hasInt = Wire(Bool())
+    BoringUtils.addSink(hasInt, "hasInterrupt")
+    when(hasInt) {
+      asg(outExInfo.excCode, ExcCode.Int)
+      asg(outExInfo.happen, true.B)
+      asg(outExInfo.refill, false.B)
+    }
+  }
 }

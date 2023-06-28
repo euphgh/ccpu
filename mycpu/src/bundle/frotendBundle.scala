@@ -19,11 +19,11 @@ import cache._
 0x0c Ov 算出溢出例外
  */
 class ExceptionInfoBundle extends MycpuBundle {
-  val happen  = Bool()
-  val isBd    = Bool()
-  val excCode = UInt(excCodeWidth.W)
-  val pc      = UWord
-  val refill  = Bool()
+  val happen  = Output(Bool())
+  val isBd    = Output(Bool())
+  val excCode = Output(ExcCode())
+  val pc      = Output(UWord)
+  val refill  = Output(Bool())
 }
 
 /*
@@ -82,7 +82,6 @@ class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
   val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
-  val takeWord     = Output(UWord) //for ldst it's memReqVaddr,for mtxx it's wdata
 }
 
 class RetireBundle extends MycpuBundle {
@@ -130,7 +129,6 @@ class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
   val validMask     = Vec(fetchNum, Bool())
-  val validNum      = Output(UInt(log2Up(fetchNum).W))
   val exception     = Output(FrontExcCode())
 }
 

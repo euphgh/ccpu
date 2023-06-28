@@ -20,6 +20,9 @@ class Multiplier extends MycpuModule {
   val readyGo = Wire(Bool())
   io.in.ready  := !io.in.valid || readyGo && io.out.ready
   io.out.valid := io.in.valid && readyGo
+
+  // asg(readyGo, true.B)
+  // asg(io.out.bits, 0.U(64.W))
 }
 class Divider extends MycpuModule {
   val io = IO(new MulDivIO)
@@ -27,6 +30,9 @@ class Divider extends MycpuModule {
   val readyGo = Wire(Bool())
   io.in.ready  := !io.in.valid || readyGo && io.out.ready
   io.out.valid := io.in.valid && readyGo
+
+  // asg(readyGo, true.B)
+  // asg(io.out.bits, 0.U(64.W))
 }
 class CountLeadZeor extends MycpuModule {
   val io = IO(new Bundle {
@@ -37,12 +43,15 @@ class CountLeadZeor extends MycpuModule {
   val readyGo = Wire(Bool())
   io.in.ready  := !io.in.valid || readyGo && io.out.ready
   io.out.valid := io.in.valid && readyGo
+
+  // asg(readyGo, true.B)
+  // asg(io.out.bits, 0.U(32.W))
 }
 
 // automat for status change when madd and msub
 class Mdu extends FuncUnit(FuType.Mdu) {
 
-  val fromRob = IO(Flipped(Valid(new SingleRetireBundle)))
+  val robRetire = IO(Flipped(Valid(new SingleRetireBundle)))
   val c0Inst = IO(new Bundle {
     val mtc0 = (new Mtc0Bundle)
     val mfc0 = new Bundle {
@@ -52,18 +61,17 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   })
 
   //stage connect
-  val exeStageIO = new ExeStageIO(FuType.Mdu)
+  val exeStageIO = Wire(new ExeStageIO(FuType.Mdu))
   exeStageIO.out <> io.out
   PipelineConnect(roStage.io.out, exeStageIO.in, exeStageIO.out.fire, io.flush)
   val exeIn  = exeStageIO.in.bits
   val exeOut = exeStageIO.out.bits
 
-  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.memType)
+  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
 
   //unchange connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-  asg(exeOut.wbRob.takeWord, exeIn.srcData(0)) //only mthi mtlo care
   asg(exeOut.wbRob.isMispredict, false.B) //must set to false,and will not change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
   asg(exeOut.wbRob.exception, exeIn.exception) //no exception happen here
@@ -88,9 +96,12 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val isMfc0 = (mduType === MduType.MFC0) && instValid
 
   //TODO:dataQ size
-  val data64Q   = new Queue(gen = UInt(64.W), entries = 4, hasFlush = true) //muldiv
-  val data32Q   = new Queue(gen = UWord, entries = 8, hasFlush = true) //mtc0 mthi mtlo
-  val mtc0AddrQ = new Queue(gen = CP0Idx, entries = 4, hasFlush = true) //mtc0 addr
+  val data64Q   = Module(new Queue(gen = UInt(64.W), entries = 4, hasFlush = true)) //muldiv
+  val data32Q   = Module(new Queue(gen = UWord, entries = 8, hasFlush = true)) //mtc0 mthi mtlo
+  val mtc0AddrQ = Module(new Queue(gen = CP0Idx, entries = 4, hasFlush = true)) //mtc0 addr
+  asg(data64Q.io.flush.get, io.flush)
+  asg(data32Q.io.flush.get, io.flush)
+  asg(mtc0AddrQ.io.flush.get, io.flush)
 
   /**
     * speculative:<exeStage>
@@ -127,8 +138,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val archLo       = RegInit(UWord, 0.U)
   val commitData64 = data64Q.io.deq.bits
   val commitData32 = data32Q.io.deq.bits
-  val commit       = fromRob.bits
-  when(fromRob.valid) {
+  val commit       = robRetire.bits
+  when(robRetire.valid) {
     when(commit.muldiv) {
       asg(archHi, commitData64(63, 32))
       asg(archLo, commitData64(31, 0))
@@ -136,13 +147,13 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     when(commit.mthi) { asg(archHi, commitData32) }
     when(commit.mtlo) { asg(archLo, commitData32) }
   }
-  asg(c0Inst.mtc0.wen, fromRob.valid && commit.mtc0)
+  asg(c0Inst.mtc0.wen, robRetire.valid && commit.mtc0)
   asg(c0Inst.mtc0.wdata, commitData32)
   asg(c0Inst.mtc0.waddr, mtc0AddrQ.io.deq.bits)
 
-  asg(data32Q.io.deq.ready, fromRob.valid && (commit.mthi || commit.mtlo || commit.mtc0))
-  asg(data64Q.io.deq.ready, fromRob.valid && commit.muldiv)
-  asg(mtc0AddrQ.io.deq.ready, fromRob.valid && commit.mtc0)
+  asg(data32Q.io.deq.ready, robRetire.valid && (commit.mthi || commit.mtlo || commit.mtc0))
+  asg(data64Q.io.deq.ready, robRetire.valid && commit.muldiv)
+  asg(mtc0AddrQ.io.deq.ready, robRetire.valid && commit.mtc0)
 
   /**
     * recover specHiLo when flush
@@ -165,8 +176,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   //deal with fu.in.valid and fu.out.ready
   val isMtMf = isHi | isLo | isMfc0 | isMtc0 //1 cycle inst
   val fuSel  = VecInit(isMult, isDiv, isClz, isMtMf, !instValid)
-  val fuIn   = VecInit(mul.io.in, div.io.in, clz.io.in)
-  val fuOut  = VecInit(mul.io.out, div.io.out, clz.io.out)
+  val fuIn   = List(mul.io.in, div.io.in, clz.io.in)
+  val fuOut  = List(mul.io.out, div.io.out, clz.io.out)
   (0 to 2).map(i => {
     asg(fuIn(i).valid, fuSel(i))
     asg(fuOut(i).ready, exeStageIO.out.ready)
@@ -205,7 +216,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val rdata = Mux(isHi, specHi, Mux(isLo, specLo, c0Rdata))
   asg(
     exeOut.wPrf.result,
-    Mux1H(fuSel, VecInit(fuOut(0).bits, fuOut(1).bits, fuOut(2).bits, rdata, rdata))
+    Mux(isClz, clz.io.out.bits, rdata)
   )
+  asg(exeOut.wPrf.wmask, 15.U(4.W))
 
 }

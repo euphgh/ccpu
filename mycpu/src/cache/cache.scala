@@ -82,8 +82,10 @@ class CacheStage1(
   lineBytes: Int     = 8,
   isDcache:  Boolean = false)
     extends MycpuModule {
-  val in  = Flipped(Decoupled(new CacheStage1In(isDcache)))
-  val out = new CacheStage1OutIO(roads, isDcache)
+  val io = IO(new Bundle {
+    val in = Flipped(Decoupled(new CacheStage1In(isDcache)))
+    val out = new CacheStage1OutIO(roads, isDcache)
+  })
 }
 
 /**

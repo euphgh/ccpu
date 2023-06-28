@@ -4,10 +4,15 @@ import bundle._
 import config._
 import chisel3.util._
 
+/**
+  * flush:
+  *      exception/eret-----<retire>
+  *      mispredict occur-----<exe>
+  *      no-branch mispredict-----<if2>
+  */
 class FrontRedirctIO extends MycpuBundle {
   val target = Output(UInt(vaddrWidth.W))
   val flush  = Output(Bool())
-  // need addsink to if-stage1 and if-stage2
 }
 
 /**
@@ -30,38 +35,34 @@ class FrontRedirctIO extends MycpuBundle {
 class PreIf extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val redirect   = Flipped(new FrontRedirctIO)
-      val fire       = Input(Bool())
-      val pcVal      = Input(UWord)
-      val hasBranch  = Input(Bool())
-      val predictDst = Input(UWord)
-      val dsFetched  = Input(Bool())
+      val redirect = Flipped(new FrontRedirctIO)
+      val fromIf1  = Flipped(new IfStage1ToPreIf)
     }
     val out = new PreIfOutIO
   })
-  val alignPC = Cat(io.in.pcVal(31, 4) + 1.U, "b0000".U)
+  val alignPC = Cat(io.in.fromIf1.pcVal(31, 4) + 1.U, "b0000".U)
   object PreIfState extends ChiselEnum {
     val normal, keepDest = Value
   }
   import PreIfState._
   val state       = RegInit(normal)
-  val brDestSaved = RegInit(0.U, UWord)
+  val brDestSaved = RegInit(0.U(vaddrWidth.W))
   switch(state) {
     is(normal) {
-      when(io.in.hasBranch && !io.in.dsFetched) {
-        state              := Mux(io.in.fire, keepDest, normal)
+      when(io.in.fromIf1.hasBranch && !io.in.fromIf1.dsFetched) {
+        state              := Mux(io.in.fromIf1.stage1Rdy, keepDest, normal)
         io.out.isDelaySlot := true.B
         io.out.npc         := alignPC
-        brDestSaved        := io.in.predictDst
+        brDestSaved        := io.in.fromIf1.predictDst
       }.otherwise {
         io.out.isDelaySlot := false.B
-        io.out.npc         := Mux(io.in.hasBranch, io.in.predictDst, alignPC)
+        io.out.npc         := Mux(io.in.fromIf1.hasBranch, io.in.fromIf1.predictDst, alignPC)
       }
     }
     is(keepDest) {
       io.out.isDelaySlot := false.B
       io.out.npc         := brDestSaved
-      when(io.in.fire) {
+      when(io.in.fromIf1.stage1Rdy) {
         state := normal
       }
     }

@@ -60,10 +60,8 @@ class MemStage1 extends MycpuModule {
   val wWord      = Wire(UInt(32.W))
   val byteStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0010".U, 2.U -> "b0100".U, 3.U -> "b1000".U))
   val halfStrob  = LookupUInt(l2sb, Seq(0.U -> "b0011".U, 2.U -> "b1100".U))
-  val leftStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0001".U, 2.U -> "b0001".U, 3.U -> "b0011".U))
+  val leftStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0011".U, 2.U -> "b0111".U, 3.U -> "b1111".U))
   val rightStrob = LookupUInt(l2sb, Seq(0.U -> "b1111".U, 1.U -> "b1110".U, 2.U -> "b1100".U, 3.U -> "b1000".U))
-  val leftWord   = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0001".U, 2.U -> "b0001".U, 3.U -> "b0011".U))
-  val rightWord  = LookupUInt(l2sb, Seq(0.U -> "b1111".U, 1.U -> "b1110".U, 2.U -> "b1100".U, 3.U -> "b1000".U))
   val validBytes = BytesWordUtils.word2Bytes(inBits.mem1Req.rwReq.wWord)
   val swl = LookupUInt(
     l2sb,
@@ -150,17 +148,16 @@ class MemStage1 extends MycpuModule {
     tlbRes.ccAttr.asUInt
   ) && !(io.in.bits.wbInfo.robIndex === io.robOldestIdx && io.stqEmpty)
   toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
-  io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, toStoreQ.fire, toMem2.fire)
+  io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.ready)
   toM2Bits.isSQ      := !inBits.isRoStage
   toM2Bits.wbInfo    := inBits.wbInfo
   toM2Bits.pTag      := tlbRes.pTag
   toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
-  cache1.in <> io.cacheIn
-  toM2Bits.toCache2 <> cache1.out
+  cache1.io.in <> io.cacheIn
+  toM2Bits.toCache2 <> cache1.io.out
   when(inBits.isRoStage) {
     toM2Bits.toCache2.dCacheReq.get.size := lsSize
   }
-  //TODO: must make sure io.in.ready when cache ready
 }

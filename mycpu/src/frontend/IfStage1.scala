@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.experimental.conversions._
 import cache._
+import utils.asg
 
 class BtbOutIO extends MycpuBundle {
   val instType = BranchType()
@@ -105,6 +106,12 @@ class BpuUpdateIO extends MycpuBundle {
   val moreData = Output(UInt(1.W)) //TODO:not make sure
 }
 
+class ICacheInstIO extends MycpuBundle {
+  val op    = CacheOp()
+  val taglo = UWord
+  val index = UInt(cacheIndexWidth.W)
+}
+
 /**
   * not connect by pipeline
   * out.pcVal = regEnable(preIFOutIO.npc, fire)
@@ -129,11 +136,6 @@ class BpuUpdateIO extends MycpuBundle {
   * instantiate BPU in this module, let out.bpuout = bpu.out
   */
 class IfStage1 extends MycpuModule {
-  class ICacheInstIO extends MycpuBundle {
-    val op    = CacheOp()
-    val taglo = UWord
-    val index = UInt(cacheIndexWidth.W)
-  }
   val io = IO(new Bundle {
     val in      = Flipped(new PreIfOutIO)
     val out     = Decoupled(new IfStage1OutIO)
@@ -141,31 +143,29 @@ class IfStage1 extends MycpuModule {
     val tlb     = new TLBSearchIO
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
-    val delaySlotOK = Output(Bool()) // only to PreIf
     val icacheInst =
       if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
       else None
   })
   // stage regs ==========================================
-  val fakeCacheInst = Flipped(Valid(new ICacheInstIO))
+  val fakeCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
   fakeCacheInst.valid := false.B
   val usableCacheInst = io.icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready
   val pc              = RegEnable(io.in.npc, "hbfc00000".U, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
-  io.out.fire := io.out.ready
 
   // use wire io.in direct ================================
   // >> cache =============================================
   val icache1 = Module(new CacheStage1())
-  icache1.in.valid                         := update
-  icache1.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
-  icache1.in.bits.ifReq.get.offset         := getOffset(io.in.npc)
-  icache1.in.bits.cacheInst.get.valid      := isCacheInst
-  icache1.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
-  icache1.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
-  io.out.bits.iCache <> icache1.out
+  icache1.io.in.valid                         := update
+  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
+  icache1.io.in.bits.ifReq.get.offset         := getOffset(io.in.npc)
+  icache1.io.in.bits.cacheInst.get.valid      := isCacheInst
+  icache1.io.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
+  icache1.io.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
+  io.out.bits.iCache <> icache1.io.out
   // >> bpu ===============================================
   val PCs = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
   // >> >> module ============================================
@@ -240,4 +240,7 @@ class IfStage1 extends MycpuModule {
     )
   )
   io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
+
+  asg(io.out.valid, true.B)
+  asg(io.toPreIf.stage1Rdy, io.out.fire)
 }

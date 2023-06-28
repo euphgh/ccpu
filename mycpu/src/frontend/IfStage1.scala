@@ -8,7 +8,7 @@ import cache._
 import utils.asg
 
 class BtbOutIO extends MycpuBundle {
-  val instType = BranchType()
+  val instType = BtbType()
   val target   = UWord
 }
 
@@ -54,7 +54,7 @@ class BranchTargetBuffer extends MycpuModule {
       res := entry.data
     }.otherwise {
       res.target   := address
-      res.instType := BranchType.non
+      res.instType := BtbType.non
     }
     res
   }
@@ -193,8 +193,8 @@ class IfStage1 extends MycpuModule {
   val takeMask    = Wire(UInt(fetchNum.W))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
   (0 until fetchNum).foreach(i => {
-    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).brType === BranchType.b
-    val isTakeJp = BranchType.isJump(bpuout(i).brType)
+    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).brType === BtbType.b
+    val isTakeJp = BtbType.isJump(bpuout(i).brType)
     takeMask(i)    := isTakeJp || isTakeBr
     validBranch(i) := takeMask(i) && alignMask(i)
   })

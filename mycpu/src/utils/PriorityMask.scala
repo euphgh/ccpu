@@ -6,6 +6,7 @@ import chisel3.util.experimental.decode.TruthTable
 import chisel3.util.PriorityEncoderOH
 import chisel3.util.experimental.decode.QMCMinimizer
 
+
 object PriorityVec {
   def apply(inputs: Vec[UInt]): UInt = {
     val or    = inputs.foldRight(0.U)(_ | _)

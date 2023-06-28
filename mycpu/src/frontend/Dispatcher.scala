@@ -4,25 +4,19 @@ import bundle._
 import chisel3._
 import chisel3.util._
 import utils._
+import chisel3.util.Cat
+import chisel3.util.experimental.decode.QMCMinimizer
 import chisel3.experimental.conversions._
 
 class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
   val pDest = PRegIdx
 }
-
-/**
-  * wb is used to update inPrf bit
-  * need check SRAT(wbADest).pIdx === wbPDest
-  * if same, write inPrf := true in next cycle, else not change.
-  * if same, and at this cycle src(of a renaming inst) = this AReg,
-  * SRAT should return inPrf === true
-  *
-  * //Q:not need condition "if same?"
-  * if same, and at this cycle dest(of a renaming inst) = this AReg,
-  * next cycle inPrf := false
-  * in total,  src < wb < dest
-  */
+class MispreSignal extends MycpuBundle {
+  val happen     = Output(Bool())
+  val realTarget = Output(UWord)
+  val robIdx     = Output(ROBIdx)
+}
 
 /**
   * WAW
@@ -133,7 +127,7 @@ class SRAT extends MycpuModule {
 class Decoder extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val inst      = Input(UWord)
+      val instr     = Input(UWord)
       val exception = Input(FrontExcCode())
     }
     val out = new Bundle {
@@ -141,6 +135,7 @@ class Decoder extends MycpuModule {
       val exception = new ExceptionInfoBundle
     }
   })
+  io.out.decoded.decode(io.in.instr, AllInsts(), AllInsts.default(), QMCMinimizer)
 }
 
 class dispatchSlot extends MycpuBundle {
@@ -186,12 +181,8 @@ class Dispatcher extends MycpuModule {
     }
     val outFireNum = Output(UInt())
 
-    val fromAluMispre = new Bundle {
-      val happen     = Input(Bool())
-      val realTarget = Input(UWord)
-      val robIdx     = Input(ROBIdx)
-    }
-    val fronRedirect = new FrontRedirctIO
+    val fromAluMispre = Flipped(new MispreSignal)
+    val fronRedirect  = new FrontRedirctIO
 
     //valid when flush(mispredictRetire/exception/eret)
     // next cycle the backend is empty
@@ -337,7 +328,7 @@ class Dispatcher extends MycpuModule {
 
   //decoder
   List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in.inst        := slots(i).inst.basic.instr
+    decoder(i).io.in.instr       := slots(i).inst.basic.instr
     decoder(i).io.in.exception   := slots(i).inst.exception
     slots(i).toRsBasic.decoded   := decoder(i).io.out.decoded
     slots(i).toRsBasic.exception := decoder(i).io.out.exception
@@ -377,19 +368,28 @@ class Dispatcher extends MycpuModule {
   List.tabulate(toRs.length)(i => {
     val thisSlot = Mux1H(rsSlotSel(i), (0 to dispatchNum).map(slots(_)))
 
-    toRs(i).valid := false.B //only valid is important
+    toRs(i).valid      := false.B //only valid is important
+    toRs(i).bits.basic := thisSlot.toRsBasic
+
     when(rsSlotSel(i).orR) {
       toRs(i).valid := thisSlot.valid & thisSlot.readyGo
-    }
-
-    toRs(i).bits.basic := thisSlot.toRsBasic
-    val instr = thisSlot.inst.basic.instr
-    if (rsKind(i) == FuType.MainAlu) { asg(toRs(i).bits.predictResult.get, thisSlot.inst.predictResult) }
-    if (rsKind(i) == FuType.Mdu) {
-      asg(toRs(i).bits.mfc0Addr.get, Cat(instr(15, 11), instr(2, 0)))
-    }
-    if (rsKind(i) == FuType.Lsu) {
-      asg(toRs(i).bits.immOffset.get, instr(15, 0))
+      if (rsKind(i) == FuType.MainAlu) {
+        val maExtra = toRs(i).bits.mAluExtra.get
+        val maInst  = thisSlot.inst
+        val basic   = maInst.basic
+        val preRes  = maInst.predictResult
+        asg(maExtra.dsPcVal, basic.pcVal + 4.U)
+        asg(maExtra.low26, basic.instr(25, 0))
+        asg(maExtra.predictResult, preRes)
+      }
+      if (rsKind(i) == FuType.Mdu) {
+        val instr = thisSlot.inst.basic.instr
+        asg(toRs(i).bits.c0Addr.get, Cat(instr(15, 11), instr(2, 0)))
+      }
+      if (rsKind(i) == FuType.Lsu || rsKind(i) == FuType.SubAlu) {
+        val imm = thisSlot.inst.basic.instr(15, 0)
+        asg(toRs(i).bits.immOffset.get, imm)
+      }
     }
   })
 }

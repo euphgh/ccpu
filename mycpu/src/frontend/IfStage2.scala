@@ -68,7 +68,7 @@ class IfStage2 extends Module with MycpuParam {
 
   @MacroDecode
   class IF2PreDecodeOut extends MycpuBundle {
-    val brType = BranchType()
+    val brType = BtbType()
   }
 
   import chisel3.util.experimental.decode.QMCMinimizer
@@ -89,7 +89,7 @@ class IfStage2 extends Module with MycpuParam {
     val take      = preRes.counter > 1.U
     val instValid = io.out.bits.validMask(i)
     preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
-    nonBrMisPreVec(i) := (preDecoder(i).brType === BranchType.non && take && instValid)
+    nonBrMisPreVec(i) := (preDecoder(i).brType === BtbType.non && take && instValid)
   })
 
   when(nonBrMisPreVec.asUInt.orR) {
@@ -112,7 +112,7 @@ class IfStage2 extends Module with MycpuParam {
     val updateBtb = bpuUpdateEnq.btb
     asg(updateBtb.valid, true.B)
     asg(updateBtb.bits.target, misPreRes.target) //Dontcare
-    asg(updateBtb.bits.instType, BranchType.non)
+    asg(updateBtb.bits.instType, BtbType.non)
     //pht
     val updatePht = bpuUpdateEnq.pht
     asg(updatePht.valid, true.B)

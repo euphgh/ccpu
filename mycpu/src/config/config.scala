@@ -11,13 +11,13 @@ object FuType extends Enumeration {
   def needByPassOut(input: Value) = input == MainAlu || input == SubAlu
 }
 
-object BranchType extends ChiselEnum {
+object BtbType extends ChiselEnum {
   val jcall  = Value("b000".U)
   val jret   = Value("b001".U)
   val jmp    = Value("b010".U)
   val jr     = Value("b011".U)
   val b, non = Value
-  def isJump(brType: BranchType.Type) = !brType.asUInt(2).asBool
+  def isJump(brType: BtbType.Type) = !brType.asUInt(2).asBool
 }
 
 // I-Cahce stage1 should decode MemType and addr to LoadSel

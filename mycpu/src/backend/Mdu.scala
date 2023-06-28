@@ -67,7 +67,10 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val exeIn  = exeStageIO.in.bits
   val exeOut = exeStageIO.out.bits
 
-  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
+
+   val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
+  val c0Addr                     = srcs(0)(7, 0)
+
 
   //unchange connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
@@ -115,7 +118,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
 
   asg(data64Q.io.enq.bits, Mux(isDiv, divRes, multRes))
   asg(data32Q.io.enq.bits, Mux(isMtc0, srcs(1), srcs(0))) //mtc0:rt mthilo:rs
-  asg(mtc0AddrQ.io.enq.bits, exeIn.mfc0Addr.get)
+  asg(mtc0AddrQ.io.enq.bits, c0Addr)
 
   val wdata64 = data64Q.io.enq.bits
   val wdata32 = data32Q.io.enq.bits
@@ -171,7 +174,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     asg(mdIOlist(i).in.bits.srcs, srcs)
   })
   asg(clz.io.in.bits, srcs(0))
-  asg(c0Inst.mfc0.addr, exeIn.mfc0Addr.get)
+  asg(c0Inst.mfc0.addr, c0Addr)
 
   //deal with fu.in.valid and fu.out.ready
   val isMtMf = isHi | isLo | isMfc0 | isMtc0 //1 cycle inst

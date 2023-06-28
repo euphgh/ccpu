@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import config._
 import cache._
+import decodemacro.MacroDecode
 
 /* 一些基本的bundle，尽量做到解耦 */
 
@@ -38,7 +39,7 @@ class MisPredictRedirectBundle extends MycpuBundle {
   val realTarget    = Output(UInt(vaddrWidth.W))
   val realDirection = Output(Bool())
   val valid         = Output(Bool())
-  val brType        = Output(BranchType())
+  val brType        = Output(BtbType())
 }
 
 //Gen nextTarget in ROB
@@ -54,7 +55,7 @@ class ExceptionRedirectBundle extends MycpuBundle {
   */
 class PredictResultBundle extends MycpuBundle {
   val counter = UInt(2.W)
-  val brType  = BranchType()
+  val brType  = BtbType()
   val target  = UInt(vaddrWidth.W)
 }
 class BasicInstInfoBundle extends MycpuBundle {
@@ -62,13 +63,16 @@ class BasicInstInfoBundle extends MycpuBundle {
   val pcVal = Output(UInt(vaddrWidth.W))
 }
 
-//TODO:@
+@MacroDecode
 class DecodeInstInfoBundle extends MycpuBundle {
   val blockType   = BlockType()
   val brType      = BranchType()
   val memType     = MemType()
   val mduType     = MduType()
   val specialType = SpecialType()
+  val aluType     = AluType()
+
+  val srcType = SRCType()
 }
 
 //no need a wen,pDest===0 means !wen
@@ -164,20 +168,38 @@ class RsBasicEntry extends MycpuBundle {
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
 }
+
+/**
+  * Lsu/sAlu extra:imm
+  *   sAlu:may select as src2
+  *   ldst:count addr(take to mem1)
+  *
+  * mAlu extra:
+  *   branch:dsPC,low26,predictRes
+  *     predictRes take to EXE
+  *     dsPc and low26 count a target,take to EXE
+  *     for "AL" branch,we notice that it don't need src2
+  *       so we can take the link addr in src2
+  *   notice that for I-inst,it should take low16 bit of low26 as its src2
+  */
 class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val basic = new RsBasicEntry
   //val decoded=new(DecodeInstInfoBundle(kind))TODO:
-  val immOffset     = if (kind == FuType.Lsu) Some(Output(UInt(immWidth.W))) else None
-  val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
-  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
+  val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
+  val c0Addr    = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
+  val mAluExtra =
+    if (kind == FuType.MainAlu) Some(new Bundle {
+      val dsPcVal       = Output(UWord)
+      val low26         = Output(UInt(26.W)) //携带有immoffset
+      val predictResult = new PredictResultBundle
+    })
+    else None
 }
 class DispatchToRobBundle extends MycpuBundle {
-
-  val pc        = UWord // difftest check execution flow
-  val prevPDest = PRegIdx // free when retire
-  val currPDest = PRegIdx // updata A-RAT when retire
-  val currADest = ARegIdx // updata A-RAT when retire
-
+  val pc          = UWord // difftest check execution flow
+  val prevPDest   = PRegIdx // free when retire
+  val currPDest   = PRegIdx // updata A-RAT when retire
+  val currADest   = ARegIdx // updata A-RAT when retire
   val specialType = SpecialType()
 }
 
@@ -212,49 +234,45 @@ class FunctionUnitOutIO extends MycpuBundle {
   *
   * srcDatas:=mux(pregData,Bypass)
   *
-  * the dcachereq is for lsu
+  * the mem is for lsu
   *   index/offset:12 bit cal
   *   memType:take from decode
   *   wWord:load dont care/store read src
-  *
   *   size:gen in Rostage
   *   wStrb:load dont care/actually store dont care at this stage
+  *
+  * the branch is for branch in mAlu
+  *
+  * special:
+  *   link addr->src2
+  *   imm->src2
+  *   sa->src1
+  *   {0.U(24.W),c0Addr}->src1
   */
 class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
-  val robIndex  = Output(UInt(robIndexWidth.W))
-  val exception = new ExceptionInfoBundle
-
+  val robIndex     = Output(UInt(robIndexWidth.W))
+  val exception    = new ExceptionInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
   val decoded      = new DecodeInstInfoBundle
 
   val srcData = Vec(2, Output(UInt(dataWidth.W)))
+
+  val branch =
+    if (kind == FuType.MainAlu) Some(new Bundle {
+      val realTarget    = Output(UWord)
+      val predictResult = new PredictResultBundle
+    })
+    else None
+
   val mem =
     if (kind == FuType.Lsu) Some(Output(new Bundle {
-      val cache     = Output(new CacheStage1In(true))
+      val cache     = Output(new CacheStage1In(true)) //cache.rwReq.wWord is just src2?
       val immOffset = Output(UInt(16.W))
       val carryout  = Output(Bool())
     }))
     else None
-  val mfc0Addr      = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
-  val predictResult = if (kind == FuType.MainAlu) Some(new PredictResultBundle) else None
 }
-
-/**
-  * wbRob
-  *       change:exception and memReqVaddr
-  *       robIndex keep
-  *       isMispredict=DontCare
-  *
-  * destPregAddr is for Wprf/srat
-  * destAregAddr is for srat
-  *
-  * decoded is for mem2:deal with loadData
-  *
-  * tagOfMemReqPaddr is for mem2:hitOrMiss detect
-  *
-  * take dCacheReq to dcache2
-  */
 
 //------------------------------------------------------------------------------------------------------
 

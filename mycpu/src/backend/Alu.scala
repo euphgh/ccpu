@@ -4,6 +4,7 @@ import backend._
 import bundle._
 import chisel3._
 import utils._
+
 import chisel3.util.Cat
 import chisel3.util.MuxCase
 import chisel3.util.switch
@@ -196,6 +197,7 @@ class BrHandler extends MycpuModule {
   }
 }
 
+
 class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
   //stage connect
@@ -213,11 +215,14 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   //unchange signal
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
+
   asg(exeOut.wPrf.wmask, 15.U(4.W))
+
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
 
   //may change signal
   val outExInfo = exeOut.wbRob.exception
+
   val inExInfo  = exeIn.exception
   asg(outExInfo, inExInfo) //when exception occur,may change it
   asg(exeOut.wbRob.isMispredict, false.B) //mainAlu may change it
@@ -295,6 +300,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
   //attach interrupt to SubAlu to prevent(mispre & exception)when retire
   //p172：中断是电平输入信号
+
   if (!main) {
     val hasInt = Wire(Bool())
     BoringUtils.addSink(hasInt, "hasInterrupt")

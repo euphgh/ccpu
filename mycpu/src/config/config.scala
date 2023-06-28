@@ -39,6 +39,21 @@ object CacheOp extends ChiselEnum {
   val HitInvalidI            = Value("b10000".U)
   val HitInvalidD            = Value("b10001".U)
   val HitWriteBackInvalidD   = Value("b10101".U)
+  def isDop(op: CacheOp.Type) = {
+    op.asUInt(4) || (op.asUInt === 1.U)
+  }
+  def isIop(op: CacheOp.Type) = {
+    !isDop(op)
+  }
+  def isIdxInv(op: CacheOp.Type) = {
+    op.asUInt < 2.U
+  }
+  def isIdxStoreTag(op: CacheOp.Type) = {
+    op.asUInt(4, 1) === "b0100".U
+  }
+  def isHitInv(op: CacheOp.Type) = {
+    op.asUInt(4)
+  }
 }
 
 class ExcCode extends MycpuBundle {

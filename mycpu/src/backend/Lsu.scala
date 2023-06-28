@@ -7,20 +7,18 @@ import chisel3._
 import utils._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils._
-import cache.CacheStage1
-import cache.CacheStage1OutIO
-import cache.CacheStage1In
 
 class Lsu extends FuncUnit(FuType.Lsu) {
-  val tlb     = IO(new TLBSearchIO)
-  val dram    = IO(new DramIO)
-  val scommit = IO(Vec(retireNum, Input(Bool())))
+  val tlb          = IO(new TLBSearchIO)
+  val dram         = IO(new DramIO)
+  val scommit      = IO(Vec(retireNum, Input(Bool())))
+  val robOldestIdx = IO(Input(ROBIdx)) //for uncached load
 
   // module and alias
   val memStage1 = Module(new MemStage1)
   val memStage2 = Module(new MemStage2)
   val storeQ    = Module(new StoreQueue(8))
-  val mem1in    = Decoupled(new MemStage1InIO)
+  val mem1in    = memStage1.io.in
   val deqSQ     = storeQ.io.deq.req
   val selSQ     = !roStage.io.out.valid || storeQ.full
   val roOutBits = roStage.io.out.bits
@@ -41,6 +39,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1in.bits.mem1Req.ROplus.carryout, roOutBits.mem.get.carryout)
   asg(mem1in.bits.mem1Req.SQplus.pTag, deqSQ.bits.pTag)
   asg(mem1in.bits.mem1Req.SQplus.cAttr, deqSQ.bits.cAttr)
+  // do not care cache ready, because it's same with mem1 ready
   memStage1.io.cacheIn.valid := mem1in.valid
   memStage1.io.cacheIn.bits := Mux(
     !selSQ,
@@ -51,6 +50,9 @@ class Lsu extends FuncUnit(FuType.Lsu) {
       sqCacheReq
     }
   )
+  memStage1.io.stqEmpty     := storeQ.empty
+  memStage1.io.robOldestIdx := robOldestIdx
+  memStage1.io.tlb <> tlb
   // pipeline connect storeQ/roStage => mem1Stage
   // PipelineConnect(mem1in, memStage1.io.in, memStage1.io.out.fire, io.flush)
   // pipeline connect mem1Stage => mem2Stage

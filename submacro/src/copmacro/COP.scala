@@ -23,7 +23,7 @@ object MacroCOP {
       val defList = fields
         .map(attr => {
           val (fieldName, msb, lsb, initValue, writable) = attr
-          q"val $fieldName = chisel3.UInt(($msb - $lsb).W)"
+          q"val $fieldName = chisel3.UInt(($msb - $lsb+1).W)"
         })
 
       val initStr = fields

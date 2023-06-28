@@ -44,9 +44,9 @@ class MemStage2 extends MycpuModule {
   val coutBit = cache2.io.out.bits
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
-  asg(cinBit.isException, inBits.exception.happen)
+  asg(cinBit.cancel, inBits.exception.happen)
   asg(cinBit.isUncached, inBits.isUncache)
-  asg(cinBit.sqCancel, io.querySQ.res.memMask === 0.U) // storeQ find
+  asg(cinBit.cancel, io.querySQ.res.memMask === 0.U) // storeQ find
   cache2.io.in.valid := io.in.valid
   cache2.io.in.valid := io.in.valid
   io.dmem <> cache2.io.dram

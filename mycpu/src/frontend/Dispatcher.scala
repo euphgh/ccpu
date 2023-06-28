@@ -366,8 +366,8 @@ class Dispatcher extends MycpuModule {
   //rs is special
   val rsKind = List(FuType.MainAlu, FuType.SubAlu, FuType.Lsu, FuType.Mdu)
   List.tabulate(toRs.length)(i => {
-
     val thisSlot = Mux1H(rsSlotSel(i), (0 to dispatchNum).map(slots(_)))
+
     toRs(i).valid      := false.B //only valid is important
     toRs(i).bits.basic := thisSlot.toRsBasic
 
@@ -391,6 +391,5 @@ class Dispatcher extends MycpuModule {
         asg(toRs(i).bits.immOffset.get, imm)
       }
     }
-
   })
 }

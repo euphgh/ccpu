@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import cache._
 import utils._
+import chisel3.util.experimental.BoringUtils._
 
 /**
   * for now,no load inst wake up
@@ -37,6 +38,9 @@ class MemStage1 extends MycpuModule {
     }
     val cacheIn = Flipped(Decoupled(new CacheStage1In(true)))
     val tlb     = new TLBSearchIO
+
+    val robOldestIdx = Input(ROBIdx) //for uncached load
+    val stqEmpty     = Input(Bool()) //for uncached load
   })
   val inBits   = io.in.bits
   val inROplus = io.in.bits.mem1Req.ROplus
@@ -47,7 +51,8 @@ class MemStage1 extends MycpuModule {
   val toMem2   = io.out.toMem2
   val toM2Bits = toMem2.bits
   toSQbits.rwReq := inBits.mem1Req.rwReq
-  val l2sb       = inBits.mem1Req.rwReq.lowAddr.offset(1, 0)
+  val lowAddr    = inBits.mem1Req.rwReq.lowAddr
+  val l2sb       = lowAddr.offset(1, 0)
   val leftSize   = LookupUIntDefault(l2sb, 2.U, Seq(0.U -> 0.U, 1.U -> 1.U))
   val rightSize  = LookupUIntDefault(l2sb, 2.U, Seq(3.U -> 0.U, 2.U -> 1.U))
   val lsSize     = Wire(UInt(2.W))
@@ -55,10 +60,8 @@ class MemStage1 extends MycpuModule {
   val wWord      = Wire(UInt(32.W))
   val byteStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0010".U, 2.U -> "b0100".U, 3.U -> "b1000".U))
   val halfStrob  = LookupUInt(l2sb, Seq(0.U -> "b0011".U, 2.U -> "b1100".U))
-  val leftStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0001".U, 2.U -> "b0001".U, 3.U -> "b0011".U))
+  val leftStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0011".U, 2.U -> "b0111".U, 3.U -> "b1111".U))
   val rightStrob = LookupUInt(l2sb, Seq(0.U -> "b1111".U, 1.U -> "b1110".U, 2.U -> "b1100".U, 3.U -> "b1000".U))
-  val leftWord   = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0001".U, 2.U -> "b0001".U, 3.U -> "b0011".U))
-  val rightWord  = LookupUInt(l2sb, Seq(0.U -> "b1111".U, 1.U -> "b1110".U, 2.U -> "b1100".U, 3.U -> "b1000".U))
   val validBytes = BytesWordUtils.word2Bytes(inBits.mem1Req.rwReq.wWord)
   val swl = LookupUInt(
     l2sb,
@@ -103,8 +106,9 @@ class MemStage1 extends MycpuModule {
   val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
   val tlbRes = io.tlb.res
   asg(io.tlb.req, Cat(vTag, 0.U(22.W)))
-  toSQbits.pTag  := tlbRes.pTag
-  toSQbits.cAttr := tlbRes.ccAttr
+  io.tlb.req.valid := true.B
+  toSQbits.pTag    := tlbRes.pTag
+  toSQbits.cAttr   := tlbRes.ccAttr
   //===================== Exception ===================================
   // only from RoStage has Exception, fromSQ no exception
   val isWriteReq = inBits.mem1Req.rwReq.isWrite
@@ -119,6 +123,10 @@ class MemStage1 extends MycpuModule {
       MemType.LHU -> (l2sb(0) =/= "b0".U)
     )
   )
+  val badAddr = Valid(UWord)
+  badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exception.happen
+  badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
+  addSource(badAddr, "mem1BadAddr")
   when(tlbExp || addrErrExp) {
     toM2Bits.exception.happen  := true.B
     toM2Bits.exception.excCode := Mux(tlbExp, tlbExcCode, Mux(isWriteReq, ExcCode.AdES, ExcCode.AdEL))
@@ -127,28 +135,39 @@ class MemStage1 extends MycpuModule {
   when(!inBits.isRoStage) {
     toM2Bits.exception.happen := false.B
   }
-  val isLaterMem = (isWriteReq || CCAttr.isUnCache(tlbRes.ccAttr.asUInt))
+
   val lateMemRdy = toStoreQ.ready && toMem2.ready
   // if cache Inst isWriteReq will not set, cacheInst goto mem2
   toStoreQ.valid := io.in.valid && Mux(
     inBits.isRoStage,
-    Mux(isLaterMem, lateMemRdy, false.B),
+    Mux(isWriteReq, lateMemRdy, false.B),
     false.B
   )
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
-  toMem2.valid       := io.in.valid && (Mux(isLaterMem, lateMemRdy, true.B) || !inBits.isRoStage)
-  io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, toStoreQ.ready, toMem2.ready)
+  val blkUcLoad = !isWriteReq && CCAttr.isUnCache(
+    tlbRes.ccAttr.asUInt
+  ) && !(io.in.bits.wbInfo.robIndex === io.robOldestIdx && io.stqEmpty)
+  toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
+  io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.ready)
   toM2Bits.isSQ      := !inBits.isRoStage
   toM2Bits.wbInfo    := inBits.wbInfo
   toM2Bits.pTag      := tlbRes.pTag
   toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
-  cache1.io.in <> io.cacheIn
+  cache1.io.in.bits <> io.cacheIn.bits
+  cache1.io.in.valid := io.cacheIn.valid && io.in.ready
   toM2Bits.toCache2 <> cache1.io.out
   when(inBits.isRoStage) {
     toM2Bits.toCache2.dCacheReq.get.size := lsSize
   }
-  //TODO: must make sure io.in.ready when cache ready
+
+  if (enableCacheInst) {
+    val ci = cache1.io.out.cacheInst.get
+    // index type cache instr should not require tlb
+    // becasue, way infomation is in tag
+    io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
+  }
+
 }

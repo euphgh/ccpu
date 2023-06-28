@@ -22,7 +22,7 @@ import decodemacro.MacroDecode
 class ExceptionInfoBundle extends MycpuBundle {
   val happen  = Output(Bool())
   val isBd    = Output(Bool())
-  val excCode = Output(UInt(excCodeWidth.W))
+  val excCode = Output(ExcCode())
   val pc      = Output(UWord)
   val refill  = Output(Bool())
 }
@@ -86,7 +86,6 @@ class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
   val exception    = new ExceptionInfoBundle
   val isMispredict = Output(Bool())
-  val takeWord     = Output(UWord) //for ldst it's memReqVaddr,for mtxx it's wdata
 }
 
 class RetireBundle extends MycpuBundle {
@@ -126,7 +125,7 @@ class IfStage1OutIO extends MycpuBundle {
   val tagOfInstGroup = Output(UInt(tagWidth.W))
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
-  val iCache         = new CacheStage1OutIO(IcachRoads, false)
+  val iCache         = new CacheStage1OutIO(IcachRoads, 8, false)
   val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
 }
 

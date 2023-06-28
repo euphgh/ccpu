@@ -51,7 +51,7 @@ class CountLeadZeor extends MycpuModule {
 // automat for status change when madd and msub
 class Mdu extends FuncUnit(FuType.Mdu) {
 
-  val fromRob = IO(Flipped(Valid(new SingleRetireBundle)))
+  val robRetire = IO(Flipped(Valid(new SingleRetireBundle)))
   val c0Inst = IO(new Bundle {
     val mtc0 = (new Mtc0Bundle)
     val mfc0 = new Bundle {
@@ -67,13 +67,14 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val exeIn  = exeStageIO.in.bits
   val exeOut = exeStageIO.out.bits
 
-  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.memType)
+
+   val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
   val c0Addr                     = srcs(0)(7, 0)
+
 
   //unchange connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-  asg(exeOut.wbRob.takeWord, exeIn.srcData(0)) //only mthi mtlo care
   asg(exeOut.wbRob.isMispredict, false.B) //must set to false,and will not change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
   asg(exeOut.wbRob.exception, exeIn.exception) //no exception happen here
@@ -140,8 +141,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val archLo       = RegInit(UWord, 0.U)
   val commitData64 = data64Q.io.deq.bits
   val commitData32 = data32Q.io.deq.bits
-  val commit       = fromRob.bits
-  when(fromRob.valid) {
+  val commit       = robRetire.bits
+  when(robRetire.valid) {
     when(commit.muldiv) {
       asg(archHi, commitData64(63, 32))
       asg(archLo, commitData64(31, 0))
@@ -149,13 +150,13 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     when(commit.mthi) { asg(archHi, commitData32) }
     when(commit.mtlo) { asg(archLo, commitData32) }
   }
-  asg(c0Inst.mtc0.wen, fromRob.valid && commit.mtc0)
+  asg(c0Inst.mtc0.wen, robRetire.valid && commit.mtc0)
   asg(c0Inst.mtc0.wdata, commitData32)
   asg(c0Inst.mtc0.waddr, mtc0AddrQ.io.deq.bits)
 
-  asg(data32Q.io.deq.ready, fromRob.valid && (commit.mthi || commit.mtlo || commit.mtc0))
-  asg(data64Q.io.deq.ready, fromRob.valid && commit.muldiv)
-  asg(mtc0AddrQ.io.deq.ready, fromRob.valid && commit.mtc0)
+  asg(data32Q.io.deq.ready, robRetire.valid && (commit.mthi || commit.mtlo || commit.mtc0))
+  asg(data64Q.io.deq.ready, robRetire.valid && commit.muldiv)
+  asg(mtc0AddrQ.io.deq.ready, robRetire.valid && commit.mtc0)
 
   /**
     * recover specHiLo when flush

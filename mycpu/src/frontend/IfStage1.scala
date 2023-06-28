@@ -211,7 +211,7 @@ class IfStage1 extends MycpuModule {
 
   // use regs in, only combinatorial logic ================
   // >> output ================
-  val inst4to2  = pc(3, 2)
+  val inst4to2  = pc(4, 2)
   val addrError = pc(1, 0).orR
   io.toPreIf.pcVal  := pc
   io.out.bits.pcVal := pc

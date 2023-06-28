@@ -6,19 +6,9 @@ import config._
 import cache._
 import decodemacro.MacroDecode
 
-/* 一些基本的bundle，尽量做到解耦 */
+/*==================== SOME BASIC BUNDLE ====================*/
 
-/*
- * need more data to address exception
- * like bad address
-0x00 Int 中断
-0x04 AdEL 地址错例外（读数据或取指令）  IF2
-0x05 AdES 地址错例外（写数据）
-0x08 Sys 系统调用例外 ID
-0x09 Bp 断点例外  ID
-0x0a RI 保留指令例外  ID
-0x0c Ov 算出溢出例外
- */
+//decoupled with badVaddr
 class ExceptionInfoBundle extends MycpuBundle {
   val happen  = Output(Bool())
   val isBd    = Output(Bool())
@@ -27,52 +17,43 @@ class ExceptionInfoBundle extends MycpuBundle {
   val refill  = Output(Bool())
 }
 
-/*
-frontend:pre-decode in IfStage2IO
-  J:direction
-  pc-relative:target
-backend:exeStage
-  B:direction
-  indirect:target
- */
-class MisPredictRedirectBundle extends MycpuBundle {
-  val realTarget    = Output(UInt(vaddrWidth.W))
-  val realDirection = Output(Bool())
-  val valid         = Output(Bool())
-  val brType        = Output(BtbType())
-}
-
-//Gen nextTarget in ROB
-//when eret_flush:c0_epc
-//when exception :
-class ExceptionRedirectBundle extends MycpuBundle {
-  val nextTarget = Output(UInt(vaddrWidth.W))
-  val valid      = Output(Bool())
-}
-
-/**
-  * bpu info for per inst
-  */
+//bpu info for per inst
 class PredictResultBundle extends MycpuBundle {
   val counter = UInt(2.W)
   val brType  = BtbType()
   val target  = UInt(vaddrWidth.W)
 }
+
 class BasicInstInfoBundle extends MycpuBundle {
   val instr = Output(UInt(instrWidth.W))
   val pcVal = Output(UInt(vaddrWidth.W))
 }
 
+/**
+  * blkType ->  [Rs]  lsu/mdu
+  * brType  ->  [Rs][Ro][Exe]  mAlu
+  * aluType ->  [Rs][RO][Exe]  mAlu sAlu
+  * memType ->  [Rs][Ro][Mem1][Mem2] lsu
+  * mduType ->  [Rs][Ro][Exe]mdu
+  * specialType -> ROB
+  */
 @MacroDecode
 class DecodeInstInfoBundle extends MycpuBundle {
-  val blockType   = BlockType()
-  val brType      = BranchType()
-  val memType     = MemType()
-  val mduType     = MduType()
-  val specialType = SpecialType()
-  val aluType     = AluType()
+  val blockType   = BlockType() //TODO:不要了
+  val specialType = SpecialType() //带有Non，ROB里啥都有
+  val brType      = BranchType() //带有Non，因为mALU里不止走branch
+  val aluType     = AluType() //带有Non，因为mAlu里不止走aluInst
+  val memType     = MemType() //不带Non
+  val mduType     = MduType() //不带Non
+}
 
-  val srcType = SRCType()
+//uOps是给FU流水级用的
+//直接写到RsOutIO和RoOut中
+class UOps(kind: FuType.t) extends MycpuBundle {
+  val brType  = if (kind == FuType.MainAlu) Some(Output(BranchType())) else None
+  val aluType = if (kind == FuType.MainAlu || kind == FuType.SubAlu) Some(Output(AluType())) else None
+  val memType = if (kind == FuType.Lsu) Some(Output(MemType())) else None
+  val mduType = if (kind == FuType.Mdu) Some(Output(MduType())) else None
 }
 
 //no need a wen,pDest===0 means !wen
@@ -88,16 +69,7 @@ class WbRobBundle extends MycpuBundle {
   val isMispredict = Output(Bool())
 }
 
-class RetireBundle extends MycpuBundle {
-  val exception        = new ExceptionInfoBundle //exception flush all
-  val flushBackend     = Output(Bool()) //mispredict only flushBackend
-  val destAregAddr     = Output(ARegIdx) //to a-rat
-  val prevDestPregAddr = Output(PRegIdx) //to freeList
-  val destPregAddr     = Output(PRegIdx) //to a-rat
-}
-
-//------------------------------------------------------------------------------------------------------
-/* 各流水级的OUT接口，这些接口不带valid-rdy */
+/*==================== 流水级OUT接口，不带valid-rdy ====================*/
 
 class PreIfOutIO extends MycpuBundle {
   val npc         = Output(UInt(vaddrWidth.W))
@@ -105,9 +77,7 @@ class PreIfOutIO extends MycpuBundle {
   val flush       = Output(Bool())
 }
 
-/**
-  * should be fast, because in one cycle
-  */
+//should be fast, because in one cycle
 class IfStage1ToPreIf extends MycpuBundle {
   val stage1Rdy  = Output(Bool())
   val pcVal      = Output(UInt(vaddrWidth.W))
@@ -116,9 +86,7 @@ class IfStage1ToPreIf extends MycpuBundle {
   val predictDst = Output(UWord)
 }
 
-/**
-  * can be slow, register will stage them
-  */
+//can be slow, register will stage them
 class IfStage1OutIO extends MycpuBundle {
   val validMask      = Output(Vec(fetchNum, Bool()))
   val pcVal          = Output(UInt(vaddrWidth.W))
@@ -147,19 +115,12 @@ class InstBufferOutIO extends MycpuBundle {
   val aRegsIdx      = new InstARegsIdxBundle
 }
 
-/**
-  * not solve WAW/RAW conflict
-  * only read/write data by index
-  */
 class SRATEntry extends MycpuBundle {
   val pIdx  = Output(PRegIdx)
   val inPrf = Output(Bool())
 }
 
-/**
-  * rsBasicEntry < rsOutIO(also use as InIO,may with pre) < rsEntry(with Valid)
-  * in "dispatcher" , already connect RsInPorts(4) use <rsOutIO>
-  */
+//rsBasicEntry < rsOutIO(each rs may has extra)
 class RsBasicEntry extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
   val decoded      = new DecodeInstInfoBundle //TODO:delete this and fix other place
@@ -204,8 +165,6 @@ class DispatchToRobBundle extends MycpuBundle {
 }
 
 /**
-  * use as alu/mdu exeStage.OutIO and mdu memStage2.OutIO!!!!
-  *
   * to rob
   *  robIndex
   *  exception
@@ -215,10 +174,10 @@ class DispatchToRobBundle extends MycpuBundle {
   *   dest
   *   wen
   *   data(alu/mdu:cal load:load store:DontCare)
+  *   wmask:only load care
   * to srat
   *   destAregAddr
   *   destPregAddr
-  *   TODO:combine destAregAddr and wPrf.dest as wbSrat Bundle in "Backend"
   */
 class FunctionUnitOutIO extends MycpuBundle {
   val wbRob        = new WbRobBundle
@@ -254,7 +213,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
-  val decoded      = new DecodeInstInfoBundle
+  val decoded      = new DecodeInstInfoBundle //TODO:Uops
 
   val srcData = Vec(2, Output(UInt(dataWidth.W)))
 
@@ -264,7 +223,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
       val predictResult = new PredictResultBundle
     })
     else None
-
   val mem =
     if (kind == FuType.Lsu) Some(Output(new Bundle {
       val cache     = Output(new CacheStage1In(true)) //cache.rwReq.wWord is just src2?
@@ -273,8 +231,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     }))
     else None
 }
-
-//------------------------------------------------------------------------------------------------------
 
 //just use to instantiate exeStageIO in alu/mdu
 class ExeStageIO(fuKind: FuType.t) extends MycpuBundle {

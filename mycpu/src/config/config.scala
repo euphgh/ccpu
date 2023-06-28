@@ -123,7 +123,8 @@ trait MycpuParam {
   def PRegIdx = UInt(pRegAddrWidth.W)
   def ROBIdx  = UInt(robIndexWidth.W)
 
-  val tlbIndexWidth = 3
+  val tlbEntriesNum = 8
+  val tlbIndexWidth = log2Ceil(tlbEntriesNum)
   def TLBIdx        = UInt(tlbIndexWidth.W)
 
   val prfReadPortNum = srcDataNum * issueNum

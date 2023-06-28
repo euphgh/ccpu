@@ -38,8 +38,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   val outBits = io.out.bits
   val inBits  = io.in.bits
   val inBasic = inBits.basic
-  val inUop   = inBasic.decoded
-  asg(outBits.decoded, inBasic.decoded)
+  val inUop   = inBits.uOp
+  asg(outBits.uOp, inBits.uOp)
   asg(outBits.destPregAddr, inBasic.destPregAddr)
   asg(outBits.destAregAddr, inBasic.destAregAddr)
   asg(outBits.exception, inBasic.exception)
@@ -68,7 +68,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
   //alu special
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
-    val aluType = inUop.aluType
+    val aluType = inUop.aluType.get
     //bypass
     val bypass = io.datasFromBypass.get
     val pSrcs  = inBasic.srcPregs
@@ -91,7 +91,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val low26     = maExtraIn.low26
       val imm       = low26(15, 0)
       //count target
-      val brType            = inUop.brType
+      val brType            = inUop.brType.get
       val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
       val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
       val jDest             = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
@@ -109,7 +109,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
   //mdu special
   if (fuKind == FuType.Mdu) {
-    val op = inBasic.decoded.mduType
+    val op = inUop.mduType.get
     when(MduType.isC0Inst(op)) {
       asg(outSrcs(0), ZeroExt(inBits.c0Addr.get, 32))
     }

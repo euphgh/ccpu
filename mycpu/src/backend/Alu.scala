@@ -197,7 +197,6 @@ class BrHandler extends MycpuModule {
   }
 }
 
-
 class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
   //stage connect
@@ -223,7 +222,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   //may change signal
   val outExInfo = exeOut.wbRob.exception
 
-  val inExInfo  = exeIn.exception
+  val inExInfo = exeIn.exception
   asg(outExInfo, inExInfo) //when exception occur,may change it
   asg(exeOut.wbRob.isMispredict, false.B) //mainAlu may change it
 
@@ -236,8 +235,8 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     *   3.wRob.isMispredict(for mainAlu)
     */
   val srcs    = exeIn.srcData
-  val uOp     = exeIn.decoded
-  val aluType = uOp.aluType
+  val uOp     = exeIn.uOp
+  val aluType = uOp.aluType.get
 
   //alu Component
   val aluComponent = Module(new AluComponent)
@@ -246,7 +245,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
   //bru
   if (main) {
-    val brType       = uOp.brType
+    val brType       = uOp.brType.get
     val isBr         = brType =/= BranchType.NON
     val mispreBlkReg = RegInit(false.B)
     val brValid      = isBr && !mispreBlkReg

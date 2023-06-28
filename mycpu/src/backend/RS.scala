@@ -83,10 +83,10 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val isOldestVec = (0 until rsSize).map(i => rsEntries(i).basic.robIndex === io.oldestRobIdx)
   val blockVec    = WireInit(VecInit(Seq.fill(rsSize)(false.B)))
   if (rsKind == FuType.Lsu) {
-    (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).basic.decoded.memType === MemType.CACHEINST))
+    (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.memType.get === MemType.CACHEINST))
   }
   if (rsKind == FuType.Mdu) {
-    (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).basic.decoded.mduType === MduType.MFC0))
+    (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.mduType.get === MduType.MFC0))
   }
 
   val slotsRdy = WireInit(
@@ -189,7 +189,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   if (rsKind == FuType.MainAlu) {
     val isBranch =
       WireInit(
-        VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.decoded.brType =/= BranchType.NON))
+        VecInit(List.tabulate(rsSize)(i => rsEntries(i).uOp.brType.get =/= BranchType.NON))
       )
     (0 until rsSize).map(i =>
       asg(

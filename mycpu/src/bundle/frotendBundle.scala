@@ -30,7 +30,6 @@ class BasicInstInfoBundle extends MycpuBundle {
 }
 
 /**
-  * blkType ->  [Rs]  lsu/mdu
   * brType  ->  [Rs][Ro][Exe]  mAlu
   * aluType ->  [Rs][RO][Exe]  mAlu sAlu
   * memType ->  [Rs][Ro][Mem1][Mem2] lsu
@@ -44,15 +43,6 @@ class DecodeInstInfoBundle extends MycpuBundle {
   val aluType     = AluType() //带有Non，因为mAlu里不止走aluInst
   val memType     = MemType() //不带Non
   val mduType     = MduType() //不带Non
-}
-
-//uOps是给FU流水级用的
-//直接写到RsOutIO和RoOut中
-class UOps(kind: FuType.t) extends MycpuBundle {
-  val brType  = if (kind == FuType.MainAlu) Some(Output(BranchType())) else None
-  val aluType = if (kind == FuType.MainAlu || kind == FuType.SubAlu) Some(Output(AluType())) else None
-  val memType = if (kind == FuType.Lsu) Some(Output(MemType())) else None
-  val mduType = if (kind == FuType.Mdu) Some(Output(MduType())) else None
 }
 
 //no need a wen,pDest===0 means !wen
@@ -122,7 +112,6 @@ class SRATEntry extends MycpuBundle {
 //rsBasicEntry < rsOutIO(each rs may has extra)
 class RsBasicEntry extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
-  val decoded      = new DecodeInstInfoBundle //TODO:delete this and fix other place
   val destAregAddr = Output(ARegIdx)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
@@ -144,9 +133,16 @@ class RsBasicEntry extends MycpuBundle {
   */
 class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val basic = new RsBasicEntry
-  //val decoded=new(DecodeInstInfoBundle(kind))TODO:
-  val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
+
+  val uOp = new Bundle {
+    val brType  = if (kind == FuType.MainAlu) Some(Output(BranchType())) else None
+    val aluType = if (kind == FuType.MainAlu || kind == FuType.SubAlu) Some(Output(AluType())) else None
+    val memType = if (kind == FuType.Lsu) Some(Output(MemType())) else None
+    val mduType = if (kind == FuType.Mdu) Some(Output(MduType())) else None
+  }
+
   val c0Addr    = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
+  val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
   val mAluExtra =
     if (kind == FuType.MainAlu) Some(new Bundle {
       val dsPcVal       = Output(UWord)
@@ -212,7 +208,13 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val exception    = new ExceptionInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
-  val decoded      = new DecodeInstInfoBundle //TODO:Uops
+
+  val uOp = new Bundle {
+    val brType  = if (kind == FuType.MainAlu) Some(Output(BranchType())) else None
+    val aluType = if (kind == FuType.MainAlu || kind == FuType.SubAlu) Some(Output(AluType())) else None
+    val memType = if (kind == FuType.Lsu) Some(Output(MemType())) else None
+    val mduType = if (kind == FuType.Mdu) Some(Output(MduType())) else None
+  }
 
   val srcData = Vec(2, Output(UInt(dataWidth.W)))
 

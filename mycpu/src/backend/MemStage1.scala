@@ -106,13 +106,13 @@ class MemStage1 extends MycpuModule {
   val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
   val tlbRes = io.tlb.res
   asg(io.tlb.req, Cat(vTag, 0.U(22.W)))
-  io.tlb.req.valid := true.B
+  io.tlb.req.valid := io.in.valid
   toSQbits.pTag    := tlbRes.pTag
   toSQbits.cAttr   := tlbRes.ccAttr
   //===================== Exception ===================================
   // only from RoStage has Exception, fromSQ no exception
   val isWriteReq = inBits.mem1Req.rwReq.isWrite
-  val tlbExp     = tlbRes.noFound || (isWriteReq && tlbRes.dirty)
+  val tlbExp     = (tlbRes.refill || !tlbRes.hit) || (isWriteReq && tlbRes.dirty)
   val tlbExcCode = Mux(isWriteReq, Mux(tlbRes.dirty, ExcCode.TLBS, ExcCode.Mod), ExcCode.TLBL)
   val addrErrExp = LookupEnumDefault(inBits.memType, false.B)(
     Seq(

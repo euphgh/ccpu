@@ -230,14 +230,20 @@ class IfStage1 extends MycpuModule {
     )
   )
   // >> tlb ================
+  val tlbRes = io.tlb.res
+  val tlbExp = tlbRes.refill || !tlbRes.hit
   io.tlb.req                 := pc
   io.tlb.req.valid           := true.B
-  io.out.bits.tagOfInstGroup := io.tlb.res.pTag
+  io.out.bits.tagOfInstGroup := tlbRes.pTag
   io.out.bits.exception := MuxCase(
     FrontExcCode.NONE,
     Seq(
-      addrError          -> FrontExcCode.AdEL,
-      io.tlb.res.noFound -> Mux(io.tlb.res.refill, FrontExcCode.RefillTLBL, FrontExcCode.InvalidTLBL)
+      addrError -> FrontExcCode.AdEL,
+      tlbExp -> Mux(
+        io.tlb.res.refill,
+        FrontExcCode.RefillTLBL,
+        FrontExcCode.InvalidTLBL
+      )
     )
   )
   io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached

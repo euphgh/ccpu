@@ -58,8 +58,8 @@ package object cop {
     class count(sel: Int = 0, rd: Int = 9) {
       val all = (31, 0, 0, WR)
       def create = {
-        val tick = RegInit(0.U)
-        tick := ~tick
+        val tick = RegInit(false.B)
+        tick := !tick
         when(!countWen && tick) { countReg.all := countReg.all + 1.U }
       }
     }
@@ -94,13 +94,19 @@ package object cop {
       val z29_24  = (29, 24, 0)
       val iv      = (23, 23, 0, WR)
       val z22_16  = (22, 16, 0)
-      val ip_h    = (15, 10, 0)
-      val ip_s    = (9, 8, 0, WR)
+      val iph7    = (15, 15, 0)
+      val iph6    = (14, 14, 0)
+      val iph5    = (13, 13, 0)
+      val iph4    = (12, 12, 0)
+      val iph3    = (11, 11, 0)
+      val iph2    = (10, 10, 0)
+      val ips1    = (9, 9, 0, WR)
+      val ips0    = (8, 8, 0, WR)
       val z7_7    = (7, 7, 0)
       val exccode = (6, 2, 0)
       val z1_0    = (1, 0, 0)
       def create = {
-        when(countReg.all === compareReg.all && !compareWen) {
+        when((countReg.all === compareReg.all) && !compareWen) {
           causeReg.ti := 1.U
         }
       }
@@ -153,85 +159,3 @@ package object cop {
     }
   }
 }
-
-/* above MyCop object will be expanded into below */
-// object cop {
-//   class context extends chisel3.Bundle {
-//     val ptebase = UInt((31 - 23).W)
-//     val badvpn2 = UInt((22 - 4).W)
-//     val z3_0 = UInt((3 - 0).W)
-//     def init = {
-//       ptebase := 0.U
-//       badvpn2 := 0.U
-//       z3_0 := 0.U
-//     }
-//     def read =  (Cat(0.U(31 - 31).W), ptebase, 0.U(23.W))|
-//                 (Cat(0.U(31 - 22).W), badvpn2, 0.U(4.W))|
-//                 (Cat(0.U(31 - 3).W), z3_0, 0.U(0.W))
-//     def write(data: chisel3.UInt) = {
-//       require(data.getWidth == (32))
-//       if (WR)
-//         ptebase.$colon$eq(data(31, 23))
-//       if (WR)
-//         badvpn2.$colon$eq(data(22, 4))
-//       if (false)
-//         z3_0.$colon$eq(data(3, 0))
-//     }
-//   }
-//   class pagemask extends chisel3.Bundle {
-//     val z31_29 = UInt(31 - 29).W
-//     val mask = UInt(28 - 13).W
-//     val maskx = UInt(12 - 11).W
-//     val z10_0 = UInt(10 - 0).W
-//     def init = {
-//       z31_29.$colon$eq(0.U)
-//       mask.$colon$eq(0.U)
-//       maskx.$colon$eq(0.U)
-//       z10_0.$colon$eq(0.U)
-//     }
-//     def read =  (Cat(0.U(31 - 31).W), z31_29, 0.U(29.W))|
-//                 (Cat(0.U(31 - 28).W), mask, 0.U(13.W))|
-//                 (Cat(0.U(31 - 12).W), maskx, 0.U(11.W))|
-//                 (Cat(0.U(31 - 10).W), z10_0, 0.U(0.W))
-//     def write(data: chisel3.UInt) = {
-//       require(data.getWidth == (32))
-//       if (false)
-//         z31_29.$colon$eq(data(31, 29))
-//       if (false)
-//         mask.$colon$eq(data(28, 13))
-//       if (false)
-//         maskx.$colon$eq(data(12, 11))
-//       if (false)
-//         z10_0.$colon$eq(data(10, 0))
-//     }
-//   }
-//   class COPRegs extends chisel3.Module {
-//     val contextReg = chisel3.RegInit(new context(), {
-//       val init = Wire(new context())
-//       init.init
-//       init
-//     })
-//     val pagemaskReg = chisel3.RegInit(new pagemask(), {
-//       val init = Wire(new pagemask())
-//       init.init
-//       init
-//     })
-
-//     def mtc0(sel: chisel3.UInt, rd: chisel3.UInt, data: chisel3.UInt) = {
-//       require(sel.getWidth == (3))
-//       require(rd.getWidth == (5))
-//       require(data.getWidth == (32))
-//       val contextWen = Cat(4.U, 0.U) === (Cat(sel, rd))
-//       when(contextWen)({
-//         contextReg.write(data)
-//         pagemaskReg.mask.$colon$eq(5.U)
-//       })
-//       val pagemaskWen = Cat(5.U, 0.U) === (Cat(sel, rd))
-//       when(pagemaskWen)(pagemaskReg.write(data))
-//     }
-//     def mfc0(sel: UInt, rd: UInt): UInt = MuxLookup(Cat(sel, rd), 0.U)(Seq(
-//       Cat(4.U(3.W), 0.U(5.U)). -> (contextReg.read),
-//       Cat(5.U(3.W), 0.U(5.U)). -> (pagemaskReg.read))
-//       )
-//   }
-// }

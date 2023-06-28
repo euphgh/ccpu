@@ -206,9 +206,9 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
 
   //may change signal
-  val outExInfo = exeOut.wbRob.exception
-  val inExInfo  = exeIn.exception
-  asg(outExInfo, inExInfo) //when exception occur,may change it
+  val outExDetect = exeOut.wbRob.exDetect
+  val inExDetect  = exeIn.exDetect
+  asg(outExDetect, inExDetect) //when exception occur,may change it
   asg(exeOut.wbRob.isMispredict, false.B) //mainAlu may change it
 
   /**
@@ -244,7 +244,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val bpuUpdate = IO(new BpuUpdateIO)
     val btb       = bpuUpdate.btb
     val pht       = bpuUpdate.pht
-    asg(bpuUpdate.pc, inExInfo.pc)
+    asg(bpuUpdate.pc, inBrInfo.pcVal)
     asg(bpuUpdate.moreData, 1.U(1.W)) //not sure
     //btb update
     asg(btb.bits.instType, inBrInfo.realBtbType)
@@ -276,9 +276,9 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     *   priority:
     *   overflow < 保留指令例外 < 取指例外 < 中断
     */
-  when(!inExInfo.happen && aluCpOut.overflow) {
-    asg(outExInfo.happen, true.B)
-    asg(outExInfo.excCode, ExcCode.Ov)
+  when(!inExDetect.happen && aluCpOut.overflow) {
+    asg(outExDetect.happen, true.B)
+    asg(outExDetect.excCode, ExcCode.Ov)
   }
 
   //attach interrupt to SubAlu to prevent(mispre & exception)when retire
@@ -288,8 +288,8 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val hasInt = Wire(Bool())
     BoringUtils.addSink(hasInt, "hasInterrupt")
     when(hasInt) {
-      asg(outExInfo.excCode, ExcCode.Int)
-      asg(outExInfo.happen, true.B)
+      asg(outExDetect.excCode, ExcCode.Int)
+      asg(outExDetect.happen, true.B)
     }
   }
 }

@@ -132,7 +132,7 @@ class Decoder extends MycpuModule {
     }
     val out = new Bundle {
       val decoded   = new DecodeInstInfoBundle
-      val exception = new ExceptionInfoBundle
+      val exception = new DetectExInfoBundle
     }
   })
   io.out.decoded.decode(io.in.instr, AllInsts(), AllInsts.default(), QMCMinimizer)
@@ -148,8 +148,7 @@ class dispatchSlot extends MycpuBundle {
 
   val readyGo = Output(Bool())
 
-  //  exception decoder-Rs
-  //  decoded   decoder-Rs
+  //  exception    decoder-Rs
   //  destPregAddr freelist-Rs&Rob
   //  srcPregs     srat-Rs
   //  robIndex     Rs
@@ -329,10 +328,10 @@ class Dispatcher extends MycpuModule {
 
   //decoder
   List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in.instr       := slots(i).inst.basicInstInfo.instr
-    decoder(i).io.in.exception   := slots(i).inst.exception
-    slots(i).toRsBasic.exception := decoder(i).io.out.exception
-    slots(i).decoded             := decoder(i).io.out.decoded
+    decoder(i).io.in.instr      := slots(i).inst.basicInstInfo.instr
+    decoder(i).io.in.exception  := slots(i).inst.exception
+    slots(i).toRsBasic.exDetect := decoder(i).io.out.exception
+    slots(i).decoded            := decoder(i).io.out.decoded
   })
 
   //srat rename
@@ -349,12 +348,15 @@ class Dispatcher extends MycpuModule {
 
   //to rob
   List.tabulate(dispatchNum)(i => {
+    val toRobBits = io.out.toRob(i).bits
+    val toRobUop  = toRobBits.uOp
     asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
-    asg(io.out.toRob(i).bits.pc, slots(i).inst.basicInstInfo.pcVal)
-    asg(io.out.toRob(i).bits.prevPDest, slots(i).prevPDest)
-    asg(io.out.toRob(i).bits.currADest, slots(i).inst.aRegsIdx.dest)
-    asg(io.out.toRob(i).bits.currPDest, slots(i).toRsBasic.destPregAddr)
-    asg(io.out.toRob(i).bits.specialType, decoder(i).io.out.decoded.specialType)
+    asg(toRobBits.basicExInfo.pc, slots(i).inst.basicInstInfo.pcVal)
+    //TODO:isbd
+    asg(toRobUop.prevPDest, slots(i).prevPDest)
+    asg(toRobUop.currADest, slots(i).inst.aRegsIdx.dest)
+    asg(toRobUop.currPDest, slots(i).toRsBasic.destPregAddr)
+    asg(toRobUop.specialType, decoder(i).io.out.decoded.specialType)
   })
 
   //to fl
@@ -380,7 +382,7 @@ class Dispatcher extends MycpuModule {
         val maInst  = thisSlot.inst
         val basic   = maInst.basicInstInfo
         val preRes  = maInst.predictResult
-        asg(maExtra.dsPcVal, basic.pcVal + 4.U)
+        asg(maExtra.pcVal, basic.pcVal)
         asg(maExtra.low26, basic.instr(25, 0))
         asg(maExtra.predictResult, preRes)
         asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType)

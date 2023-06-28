@@ -75,7 +75,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
   asg(exeOut.wbRob.isMispredict, false.B) //must set to false,and will not change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
-  asg(exeOut.wbRob.exception, exeIn.exception) //no exception happen here
+  asg(exeOut.wbRob.exDetect, exeIn.exDetect) //no exception happen here
 
   //6 "fu" here
   val mul     = Module(new Multiplier)

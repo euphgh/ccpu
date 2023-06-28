@@ -38,7 +38,7 @@ class Mem1ReqBus extends MycpuBundle {
 class MemStage1InIO extends MycpuBundle {
   val isRoStage = Bool()
   val wbInfo    = new WriteBackIO
-  val exception = new ExceptionInfoBundle
+  val exDetect  = new DetectExInfoBundle
   val memType   = MemType()
   val srcData   = Vec(2, Output(UInt(dataWidth.W)))
   val mem1Req   = new Mem1ReqBus
@@ -47,7 +47,7 @@ class MemStage1InIO extends MycpuBundle {
 class MemStage1OutIO extends MycpuBundle {
   val isSQ      = Bool()
   val wbInfo    = new WriteBackIO
-  val exception = new ExceptionInfoBundle
+  val exDetect  = new DetectExInfoBundle
   val toCache2  = new CacheStage1OutIO(DcachRoads, 8, true)
   val pTag      = UInt(tagWidth.W)
   val isUncache = Bool()

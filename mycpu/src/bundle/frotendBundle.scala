@@ -8,13 +8,19 @@ import decodemacro.MacroDecode
 
 /*==================== SOME BASIC BUNDLE ====================*/
 
-//decoupled with badVaddr
-class ExceptionInfoBundle extends MycpuBundle {
+class BasicExInfoBundle extends MycpuBundle {
+  val pc   = Output(UWord)
+  val isBd = Output(Bool())
+}
+class DetectExInfoBundle extends MycpuBundle {
   val happen  = Output(Bool())
-  val isBd    = Output(Bool())
   val excCode = Output(ExcCode())
-  val pc      = Output(UWord)
   val refill  = Output(Bool())
+}
+class ExCommitBundle extends MycpuBundle {
+  val basic    = new BasicExInfoBundle
+  val detect   = new DetectExInfoBundle
+  val badVaddr = Output(UWord)
 }
 
 //bpu info for per inst
@@ -52,7 +58,7 @@ class WPrfBundle extends MycpuBundle {
 
 class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
-  val exception    = new ExceptionInfoBundle
+  val exDetect     = new DetectExInfoBundle
   val isMispredict = Output(Bool())
 }
 
@@ -111,9 +117,16 @@ class SRATEntry extends MycpuBundle {
   val inPrf = Output(Bool())
 }
 
+// class ExceptionInfoBundle extends MycpuBundle {
+//   val happen  = Output(Bool())
+//   val isBd    = Output(Bool())
+//   val excCode = Output(ExcCode())
+//   val pc      = Output(UWord)
+//   val refill  = Output(Bool())
+// }
 //rsBasicEntry < rsOutIO(each rs may has extra)
 class RsBasicEntry extends MycpuBundle {
-  val exception    = new ExceptionInfoBundle
+  val exDetect     = new DetectExInfoBundle
   val destAregAddr = Output(ARegIdx)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
@@ -147,18 +160,22 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
   val mAluExtra =
     if (kind == FuType.MainAlu) Some(new Bundle {
-      val dsPcVal       = Output(UWord)
+      val pcVal         = Output(UWord) //用于updateBpu.pc 以及计算 dsPc
       val low26         = Output(UInt(26.W)) //携带有immoffset
       val predictResult = new PredictResultBundle
     })
     else None
 }
-class DispatchToRobBundle extends MycpuBundle {
-  val pc          = UWord // difftest check execution flow
+
+class RobSavedUop extends MycpuBundle {
   val prevPDest   = PRegIdx // free when retire
   val currPDest   = PRegIdx // updata A-RAT when retire
   val currADest   = ARegIdx // updata A-RAT when retire
   val specialType = SpecialType()
+}
+class DispatchToRobBundle extends MycpuBundle {
+  val basicExInfo = new BasicExInfoBundle //PC ALSO use as difftest check execution flow
+  val uOp         = new RobSavedUop
 }
 
 /**
@@ -207,7 +224,7 @@ class FunctionUnitOutIO extends MycpuBundle {
   */
 class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
-  val exception    = new ExceptionInfoBundle
+  val exDetect     = new DetectExInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
 
@@ -225,6 +242,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
       val realTarget  = Output(UWord)
       val realBtbType = Output(BtbType())
       val predict     = new PredictResultBundle
+      val pcVal       = Output(UWord) //for update bpu
     })
     else None
   val mem =

@@ -31,7 +31,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1in.bits.wbInfo.robIndex, roOutBits.robIndex)
   asg(mem1in.bits.wbInfo.destAregAddr, roOutBits.destAregAddr)
   asg(mem1in.bits.wbInfo.destPregAddr, roOutBits.destPregAddr)
-  asg(mem1in.bits.exception, roOutBits.exception)
+  asg(mem1in.bits.exDetect, roOutBits.exDetect)
   asg(mem1in.bits.memType, roOutBits.uOp.memType.get)
   asg(mem1in.bits.srcData, roOutBits.srcData)
   asg(mem1in.bits.mem1Req.rwReq, Mux(selSQ, deqSQ.bits.rwReq, roOutBits.mem.get.cache.rwReq.get))

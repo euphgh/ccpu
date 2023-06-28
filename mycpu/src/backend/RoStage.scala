@@ -97,9 +97,11 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val jDest             = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
       val jrDest            = outSrcs(0)
       //extra take:select target,connect preRes
-      val outBranch = outBits.branch.get
+      val outBranch   = outBits.branch.get
+      val realBtbType = BranchType.toBtbType(inUop.brType.get, low26(25, 21)) //rs用于判断是否jret
+      asg(outBranch.realBtbType, realBtbType)
       asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
-      asg(outBranch.predictResult, maExtraIn.predictResult)
+      asg(outBranch.predict, maExtraIn.predictResult)
       //srcs select
       when(AluType.useImm(aluType)) { asg(outSrcs(1), imm) }
       when(AluType.needSa(aluType)) { asg(outSrcs(0), imm(10, 6)) }

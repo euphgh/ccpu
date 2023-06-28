@@ -68,9 +68,8 @@ class IfStage2 extends Module with MycpuParam {
 
   @MacroDecode
   class IF2PreDecodeOut extends MycpuBundle {
-    val brType = BtbType()
+    val brType = BranchType()
   }
-
   import chisel3.util.experimental.decode.QMCMinimizer
   val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
   val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
@@ -83,13 +82,16 @@ class IfStage2 extends Module with MycpuParam {
   asg(bpuUpdateQueue.io.enq.valid, false.B)
   asg(bpuUpdateQueue.io.enq.bits, 0.U.asTypeOf(new BpuUpdateIO))
 
+  //predecode
   (0 until fetchNum).foreach(i => {
     val instr     = io.out.bits.basicInstInfo(i).instr
     val preRes    = io.out.bits.predictResult(i)
     val take      = preRes.counter > 1.U
     val instValid = io.out.bits.validMask(i)
     preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
-    nonBrMisPreVec(i) := (preDecoder(i).brType === BtbType.non && take && instValid)
+    val realBrType = preDecoder(i).brType
+    nonBrMisPreVec(i) := (realBrType === BranchType.NON && take && instValid)
+    asg(io.out.bits.realBrType(i), realBrType)
   })
 
   when(nonBrMisPreVec.asUInt.orR) {
@@ -100,6 +102,7 @@ class IfStage2 extends Module with MycpuParam {
     (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
     //change its preResult
     misPreRes.counter := 0.U
+    misPreRes.btbType := BtbType.non
     //redirect frontend
     asg(io.noBrMispreRedirect.flush, true.B)
     asg(io.noBrMispreRedirect.target, misPc + 4.U)

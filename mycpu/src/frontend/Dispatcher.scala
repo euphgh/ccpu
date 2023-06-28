@@ -329,7 +329,7 @@ class Dispatcher extends MycpuModule {
 
   //decoder
   List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in.instr       := slots(i).inst.basic.instr
+    decoder(i).io.in.instr       := slots(i).inst.basicInstInfo.instr
     decoder(i).io.in.exception   := slots(i).inst.exception
     slots(i).toRsBasic.exception := decoder(i).io.out.exception
     slots(i).decoded             := decoder(i).io.out.decoded
@@ -350,7 +350,7 @@ class Dispatcher extends MycpuModule {
   //to rob
   List.tabulate(dispatchNum)(i => {
     asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
-    asg(io.out.toRob(i).bits.pc, slots(i).inst.basic.pcVal)
+    asg(io.out.toRob(i).bits.pc, slots(i).inst.basicInstInfo.pcVal)
     asg(io.out.toRob(i).bits.prevPDest, slots(i).prevPDest)
     asg(io.out.toRob(i).bits.currADest, slots(i).inst.aRegsIdx.dest)
     asg(io.out.toRob(i).bits.currPDest, slots(i).toRsBasic.destPregAddr)
@@ -378,21 +378,21 @@ class Dispatcher extends MycpuModule {
       if (rsKind(i) == FuType.MainAlu) {
         val maExtra = toRsBits.mAluExtra.get
         val maInst  = thisSlot.inst
-        val basic   = maInst.basic
+        val basic   = maInst.basicInstInfo
         val preRes  = maInst.predictResult
         asg(maExtra.dsPcVal, basic.pcVal + 4.U)
         asg(maExtra.low26, basic.instr(25, 0))
         asg(maExtra.predictResult, preRes)
         asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType)
-        asg(toRsBits.uOp.brType.get, thisSlot.decoded.brType)
+        asg(toRsBits.uOp.brType.get, thisSlot.inst.realBrType)
       }
       if (rsKind(i) == FuType.Mdu) {
-        val instr = thisSlot.inst.basic.instr
+        val instr = thisSlot.inst.basicInstInfo.instr
         asg(toRs(i).bits.c0Addr.get, Cat(instr(15, 11), instr(2, 0)))
         asg(toRsBits.uOp.mduType.get, thisSlot.decoded.mduType)
       }
       if (rsKind(i) == FuType.Lsu || rsKind(i) == FuType.SubAlu) {
-        val imm = thisSlot.inst.basic.instr(15, 0)
+        val imm = thisSlot.inst.basicInstInfo.instr(15, 0)
         asg(toRs(i).bits.immOffset.get, imm)
         if (rsKind == FuType.Lsu) { asg(toRsBits.uOp.memType.get, thisSlot.decoded.memType) }
         if (rsKind == FuType.SubAlu) { asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType) }

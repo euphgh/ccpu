@@ -20,7 +20,7 @@ class ExceptionInfoBundle extends MycpuBundle {
 //bpu info for per inst
 class PredictResultBundle extends MycpuBundle {
   val counter = UInt(2.W)
-  val brType  = BtbType()
+  val btbType = BtbType()
   val target  = UInt(vaddrWidth.W)
 }
 
@@ -30,7 +30,6 @@ class BasicInstInfoBundle extends MycpuBundle {
 }
 
 /**
-  * brType  ->  [Rs][Ro][Exe]  mAlu
   * aluType ->  [Rs][RO][Exe]  mAlu sAlu
   * memType ->  [Rs][Ro][Mem1][Mem2] lsu
   * mduType ->  [Rs][Ro][Exe]mdu
@@ -39,7 +38,6 @@ class BasicInstInfoBundle extends MycpuBundle {
 @MacroDecode
 class DecodeInstInfoBundle extends MycpuBundle {
   val specialType = SpecialType() //带有Non，ROB里啥都有
-  val brType      = BranchType() //带有Non，因为mALU里不止走branch
   val aluType     = AluType() //带有Non，因为mAlu里不止走aluInst
   val memType     = MemType() //不带Non
   val mduType     = MduType() //不带Non
@@ -88,20 +86,24 @@ class IfStage1OutIO extends MycpuBundle {
 
 class IfStage2OutIO extends MycpuBundle {
   val predictResult = Vec(fetchNum, new PredictResultBundle)
+  val realBrType    = Vec(fetchNum, BranchType())
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
   val validMask     = Vec(fetchNum, Bool())
-  val exception     = Output(FrontExcCode())
+  val exception     = Vec(fetchNum, FrontExcCode())
 }
 
 class InstARegsIdxBundle extends MycpuBundle {
   val (src0, src1, dest) = (ARegIdx, ARegIdx, ARegIdx)
 }
-class InstBufferOutIO extends MycpuBundle {
-  val basic         = new BasicInstInfoBundle
+class InstBufferEntry extends MycpuBundle {
   val predictResult = new PredictResultBundle
+  val realBrType    = Vec(fetchNum, BranchType())
+  val basicInstInfo = new BasicInstInfoBundle
   val exception     = FrontExcCode()
-  val whichFu       = ChiselFuType()
-  val aRegsIdx      = new InstARegsIdxBundle
+}
+class InstBufferOutIO extends InstBufferEntry {
+  val whichFu  = ChiselFuType()
+  val aRegsIdx = new InstARegsIdxBundle
 }
 
 class SRATEntry extends MycpuBundle {
@@ -220,8 +222,9 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
 
   val branch =
     if (kind == FuType.MainAlu) Some(new Bundle {
-      val realTarget    = Output(UWord)
-      val predictResult = new PredictResultBundle
+      val realTarget  = Output(UWord)
+      val realBtbType = Output(BtbType())
+      val predict     = new PredictResultBundle
     })
     else None
   val mem =

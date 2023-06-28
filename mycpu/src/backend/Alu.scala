@@ -137,7 +137,7 @@ class AluComponent extends MycpuModule {
   }
 }
 
-//gen cond and trans branchType to btbType
+//gen cond
 class BrHandler extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
@@ -146,8 +146,7 @@ class BrHandler extends MycpuModule {
       val op   = Input(BranchType())
     }
     val out = new Bundle {
-      val taken   = Output(Bool())
-      val btbType = Output(BtbType())
+      val taken = Output(Bool())
     }
   })
   /*====================  op  ====================*/
@@ -177,23 +176,12 @@ class BrHandler extends MycpuModule {
       )
     )
   )
-  /*==================== trans type ====================*/
-  asg(
-    io.out.btbType,
-    MuxCase(
-      BtbType.non,
-      Seq(
-        BranchType.isB(op) -> BtbType.b
-        //TODO:
-      )
-    )
-  )
   /*==================== Access Code ====================*/
   def access(src1: UInt, src2: UInt, op: BranchType.Type) = {
     asg(io.in.src1, src1)
     asg(io.in.src2, src2)
     asg(io.in.op, op)
-    io.out
+    io.out.taken
   }
 }
 
@@ -214,15 +202,12 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   //unchange signal
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-
   asg(exeOut.wPrf.wmask, 15.U(4.W))
-
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
 
   //may change signal
   val outExInfo = exeOut.wbRob.exception
-
-  val inExInfo = exeIn.exception
+  val inExInfo  = exeIn.exception
   asg(outExInfo, inExInfo) //when exception occur,may change it
   asg(exeOut.wbRob.isMispredict, false.B) //mainAlu may change it
 
@@ -251,11 +236,10 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val brValid      = isBr && !mispreBlkReg
     //predict and gen
     val inBrInfo  = exeIn.branch.get
-    val predict   = inBrInfo.predictResult
+    val predict   = inBrInfo.predict
     val BrHandler = Module(new BrHandler)
-    val brOut     = BrHandler.access(srcs(0), srcs(1), brType)
+    val genTaken  = BrHandler.access(srcs(0), srcs(1), brType)
     val preCnt    = predict.counter
-    val genTaken  = brOut.taken
     /*==================== Update BPU ====================*/
     val bpuUpdate = IO(new BpuUpdateIO)
     val btb       = bpuUpdate.btb
@@ -263,11 +247,11 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     asg(bpuUpdate.pc, inExInfo.pc)
     asg(bpuUpdate.moreData, 1.U(1.W)) //not sure
     //btb update
-    asg(btb.bits.instType, brOut.btbType)
+    asg(btb.bits.instType, inBrInfo.realBtbType)
     asg(btb.bits.target, inBrInfo.realTarget)
     asg(
       btb.valid,
-      brValid && (brOut.btbType =/= predict.brType || inBrInfo.realTarget =/= predict.target)
+      brValid && (inBrInfo.realBtbType =/= predict.btbType || inBrInfo.realTarget =/= predict.target)
     )
     //pht update
     val cat = Cat(preCnt, genTaken)

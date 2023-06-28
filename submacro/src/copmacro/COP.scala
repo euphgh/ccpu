@@ -68,7 +68,9 @@ object MacroCOP {
     def extractClassNameAndBody(classDecl: ModuleDef) = {
       try {
         val q"object $name { ..$body }" = classDecl
-        val initStr                     = new StringBuffer()
+        val regDefStr                   = new StringBuffer()
+        val createFunctions             = new StringBuffer()
+        val addrMatchStr                = new StringBuffer()
         val readStr                     = new StringBuffer()
         val writeStr                    = new StringBuffer()
         val regsDef = body.collect {
@@ -77,24 +79,25 @@ object MacroCOP {
             // init
             val createfunc = body.collectFirst({ case q"def create = {..$body}" => body })
             val nameStr    = regName.toTermName.toString + "Reg"
-            initStr.append(s"""val $nameStr = chisel3.RegInit(new ${regName.toTermName}, {
+            regDefStr.append(s"""val $nameStr = chisel3.RegInit(new ${regName.toTermName}, {
                 val init = Wire(new $regName)
                 init.init
                 init
               })
-              ${createfunc.fold("")(_.mkString("\n"))}
               """)
+            createFunctions.append(s"${createfunc.fold("")(_.mkString("\n"))}\n")
+            addrMatchStr.append(
+              s"val ${regName.toTermName}Wen = ($sel.U === writeSel) && ($rd.U === writeRd) && isMtc0\n"
+            )
             // mfc0
-            readStr.append(s""", (chisel3.util.Cat($sel.U(3.W), $rd.U(5.U)) -> ${regName.toTermName}Reg.read)""")
+            readStr.append(s", ((sel===$sel.U && rd===$rd.U) -> ${regName.toTermName}Reg.read) \n")
             // mtc0
             val writefunc = body.collectFirst({ case q"def write(data: UInt) = {..$body}" => body })
             writeStr.append(s"""
-              val ${regName.toTermName}Wen = chisel3.util.Cat($sel.U, $rd.U) === chisel3.util.Cat(sel, rd)
-              when (${regName.toTermName}Wen) {
-                ${regName.toTermName}Reg.write(data)
-                ${writefunc.fold("")(_.mkString("\n"))}
-              }
-              """)
+            when (${regName.toTermName}Wen) {
+              ${regName.toTermName}Reg.write(writeData)
+              ${writefunc.fold("")(_.mkString("\n"))}
+            }""")
             val attrList = body.collect(ele => {
               ele match {
                 case q"val $fieldName = ($msb, $lsb, $initValue, $writable)" => {
@@ -109,15 +112,27 @@ object MacroCOP {
           }
         }
         val copRegs = c.parse(s"""
-        class COPRegs extends chisel3.Module {
-          $initStr
+        class BasicCOP extends chisel3.Module {
+          val isMtc0 = WireInit(false.B)
+          val writeSel = WireInit(0.U(3.W))
+          val writeRd  = WireInit(0.U(5.W))
+          val writeData  = WireInit(0.U(32.W))
+          $regDefStr
+          $addrMatchStr
+          $writeStr
+          $createFunctions
           def mtc0(sel:chisel3.UInt, rd:chisel3.UInt, data:chisel3.UInt) = {
             require(sel.getWidth==3)
             require(rd.getWidth==5)
             require(data.getWidth==32)
-            $writeStr
+            isMtc0 := true.B
+            writeSel := sel
+            writeRd  := rd
+            writeData := data
           }
           def mfc0(sel:chisel3.UInt, rd:chisel3.UInt):UInt = {
+            require(sel.getWidth==3)
+            require(rd.getWidth==5)
             chisel3.util.MuxLookup(chisel3.util.Cat(sel,rd), 0.U)(Seq(
             ${readStr.substring(1)}
             ))

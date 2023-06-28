@@ -35,7 +35,7 @@ class Mtc0Bundle extends SimpleWriteBundle {
   * we have make sure that at 1 cycle
   *   at most 1 inst can retire to CP0!
   */
-class CP0 extends MycpuModule {
+class CP0 extends BasicCOP with MycpuParam {
   val io = IO(new Bundle {
     val in = new Bundle {
       val eretFlush = Input(Bool())
@@ -52,48 +52,44 @@ class CP0 extends MycpuModule {
       val redirectTarget = Output(UWord) //eret exception redirect target
     }
   })
+  val exInfo = io.in.exception.bits
 
-  val cp0Regs = Module(new COPRegs)
-  val exInfo  = io.in.exception.bits
-
+  when(io.in.eretFlush) { statusReg.exl := 0.U }
   //mtc0 mfc0
   val c0Waddr = io.in.mtc0.waddr
   val c0Raddr = io.in.mfc0Addr
-  when(io.in.mtc0.wen) { cp0Regs.mtc0(sel = c0Waddr(2, 0), rd = c0Waddr(7, 3), data = io.in.mtc0.wdata) }
-  asg(io.out.mfc0Rdata, cp0Regs.mfc0(sel = c0Raddr(2, 0), rd = c0Raddr(7, 3)))
-
-  //eret_flush
-  when(io.in.eretFlush) { cp0Regs.statusReg.exl := 0.U }
+  when(io.in.mtc0.wen) { mtc0(sel = c0Waddr(2, 0), rd = c0Waddr(7, 3), data = io.in.mtc0.wdata) }
+  asg(io.out.mfc0Rdata, mfc0(sel = c0Raddr(2, 0), rd = c0Raddr(7, 3)))
 
   //redirect Target
   //TODO:remember to select from cache inst redirect target in backend
   val trapBase =
-    Mux(cp0Regs.statusReg.bev === 1.U, 0xbfc00200.U(32.W), (cp0Regs.ebaseReg.eptbase << 12 | 0x80000000.U(32.W)))
-  val trapOffs = 0x180.U(32.W)
+    Mux(statusReg.bev === 1.U, "hbfc0_0200".U(32.W), (ebaseReg.eptbase << 12 | "h8000_0000".U(32.W)))
+  val trapOffs = WireInit(0x180.U(32.W))
   asg(io.out.redirectTarget, trapBase + trapOffs)
 
   //exception
   when(io.in.exception.valid) {
-    cp0Regs.statusReg.exl    := 1.U
-    cp0Regs.causeReg.exccode := exInfo.basic.excCode
+    statusReg.exl    := 1.U
+    causeReg.exccode := exInfo.basic.excCode.asUInt
     switch(exInfo.basic.excCode) {
       is(Seq(ExcCode.TLBL, ExcCode.TLBS, ExcCode.Mod)) {
-        cp0Regs.contextReg.badvpn2 := exInfo.badVaddr(31, 13)
-        cp0Regs.entryhiReg.vpn2    := exInfo.badVaddr(31, 13)
-        cp0Regs.badvaddrReg.all    := exInfo.badVaddr
+        contextReg.badvpn2 := exInfo.badVaddr(31, 13)
+        entryhiReg.vpn2    := exInfo.badVaddr(31, 13)
+        badvaddrReg.all    := exInfo.badVaddr
       }
       is(Seq(ExcCode.AdEL, ExcCode.AdES)) {
-        cp0Regs.badvaddrReg.all := exInfo.badVaddr
+        badvaddrReg.all := exInfo.badVaddr
       }
     }
-    when(cp0Regs.statusReg.exl === 0.U) {
-      cp0Regs.causeReg.bd := exInfo.basic.isBd
-      cp0Regs.epcReg      := Mux(exInfo.basic.isBd, exInfo.basic.pc - 4.U, exInfo.basic.pc)
+    when(statusReg.exl === 0.U) {
+      causeReg.bd := exInfo.basic.isBd
+      epcReg.all  := Mux(exInfo.basic.isBd, exInfo.basic.pc - 4.U, exInfo.basic.pc)
       trapOffs := Mux(
         exInfo.basic.refill,
         0.U(32.W),
         (Mux(
-          exInfo.basic.excCode === ExcCode.Int && cp0Regs.causeReg.iv === 1.U && cp0Regs.statusReg.bev === 1.U,
+          exInfo.basic.excCode === ExcCode.Int && causeReg.iv === 1.U && statusReg.bev === 1.U,
           0x200.U(32.W),
           0x180.U(32.W)
         ))
@@ -102,11 +98,24 @@ class CP0 extends MycpuModule {
   }
 
   //Interrupt input
-  asg(cp0Regs.causeReg.ip_h(5), io.in.extInt(5) | cp0Regs.causeReg.ti)
-  asg(cp0Regs.causeReg.ip_h(4, 0), io.in.extInt(4, 0))
+  asg(causeReg.iph7, io.in.extInt(5) || causeReg.ti.asBool)
+  asg(causeReg.iph6, io.in.extInt(4))
+  asg(causeReg.iph5, io.in.extInt(3))
+  asg(causeReg.iph4, io.in.extInt(2))
+  asg(causeReg.iph3, io.in.extInt(1))
+  asg(causeReg.iph2, io.in.extInt(0))
   val hasInt =
-    ((Cat(cp0Regs.causeReg.ip_h, cp0Regs.causeReg.ip_s) & cp0Regs.statusReg.im) =/= 0.U(8.W)) &&
-      cp0Regs.statusReg.ie === 1.U(1.W) &&
-      cp0Regs.statusReg.exl === 0.U(1.W)
+    ((Cat(
+      causeReg.iph7,
+      causeReg.iph6,
+      causeReg.iph5,
+      causeReg.iph4,
+      causeReg.iph3,
+      causeReg.iph2,
+      causeReg.ips1,
+      causeReg.ips0
+    ) & statusReg.im) =/= 0.U(8.W)) &&
+      statusReg.ie === 1.U(1.W) &&
+      statusReg.exl === 0.U(1.W)
   BoringUtils.addSource(hasInt, "hasInterrupt")
 }

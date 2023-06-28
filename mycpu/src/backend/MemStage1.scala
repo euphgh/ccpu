@@ -106,8 +106,9 @@ class MemStage1 extends MycpuModule {
   val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
   val tlbRes = io.tlb.res
   asg(io.tlb.req, Cat(vTag, 0.U(22.W)))
-  toSQbits.pTag  := tlbRes.pTag
-  toSQbits.cAttr := tlbRes.ccAttr
+  io.tlb.req.valid := true.B
+  toSQbits.pTag    := tlbRes.pTag
+  toSQbits.cAttr   := tlbRes.ccAttr
   //===================== Exception ===================================
   // only from RoStage has Exception, fromSQ no exception
   val isWriteReq = inBits.mem1Req.rwReq.isWrite
@@ -155,9 +156,18 @@ class MemStage1 extends MycpuModule {
   toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
-  cache1.io.in <> io.cacheIn
+  cache1.io.in.bits <> io.cacheIn.bits
+  cache1.io.in.valid := io.cacheIn.valid && io.in.ready
   toM2Bits.toCache2 <> cache1.io.out
   when(inBits.isRoStage) {
     toM2Bits.toCache2.dCacheReq.get.size := lsSize
   }
+
+  if (enableCacheInst) {
+    val ci = cache1.io.out.cacheInst.get
+    // index type cache instr should not require tlb
+    // becasue, way infomation is in tag
+    io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
+  }
+
 }

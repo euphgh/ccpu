@@ -7,9 +7,6 @@ import chisel3._
 import utils._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils._
-import cache.CacheStage1
-import cache.CacheStage1OutIO
-import cache.CacheStage1In
 
 class Lsu extends FuncUnit(FuType.Lsu) {
   val tlb          = IO(new TLBSearchIO)
@@ -42,6 +39,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1in.bits.mem1Req.ROplus.carryout, roOutBits.mem.get.carryout)
   asg(mem1in.bits.mem1Req.SQplus.pTag, deqSQ.bits.pTag)
   asg(mem1in.bits.mem1Req.SQplus.cAttr, deqSQ.bits.cAttr)
+  // do not care cache ready, because it's same with mem1 ready
   memStage1.io.cacheIn.valid := mem1in.valid
   memStage1.io.cacheIn.bits := Mux(
     !selSQ,

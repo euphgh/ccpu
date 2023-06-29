@@ -1,11 +1,13 @@
-package object cop {
+import config.MycpuParam
+package object cop extends MycpuParam {
   import copmacro._
   import chisel3._
   import chisel3.util._
 
-  val TLBNR       = 8
-  val TLBIDXWIDTH = log2Up(TLBNR)
-  val WR          = true; val R = false
+  val TLBNR       = tlbEntriesNum
+  val TLBIDXWIDTH = tlbIndexWidth
+  val WR          = true
+  val R           = false
   @MacroCOP
   object MyCop { // any name(MyCop) is ok,  only need import cop._ before use
     class index(sel: Int = 0, rd: Int = 0) {

@@ -5,11 +5,11 @@ import chisel3._
 import config._
 
 class TLBEntry extends MycpuBundle {
-  val g    = Bool
-  val v0   = Bool
-  val v1   = Bool
-  val d0   = Bool
-  val d1   = Bool
+  val g    = Bool()
+  val v0   = Bool()
+  val v1   = Bool()
+  val d0   = Bool()
+  val d1   = Bool()
   val c0   = UInt(3.W)
   val c1   = UInt(3.W)
   val pfn0 = UInt(20.W)
@@ -19,11 +19,11 @@ class TLBEntry extends MycpuBundle {
 }
 
 class TLBSearchRes extends MycpuBundle {
-  val pTag    = UInt(tagWidth.W)
-  val noFound = Bool() // not match or match invalid
-  val dirty   = Bool() // dirty bits
-  val refill  = Bool() // match but not valid
-  val ccAttr  = CCAttr()
+  val pTag   = UInt(tagWidth.W)
+  val hit    = Bool()
+  val dirty  = Bool() // dirty bits
+  val refill = Bool() // no match by addr and asid
+  val ccAttr = CCAttr()
 }
 
 class TLBSearchIO extends MycpuBundle {
@@ -32,18 +32,21 @@ class TLBSearchIO extends MycpuBundle {
 }
 
 class TLBReadIO extends MycpuBundle {
-  val req = Decoupled(TLBIdx)
+  val req = Input(TLBIdx)
   val res = Output(new TLBEntry)
 }
 
 class TLBWriteIO extends MycpuBundle {
-  val req = Decoupled(new Bundle {
+  val req = Valid(new Bundle {
     val idx   = TLBIdx
     val entry = new TLBEntry
   })
 }
 
 class TLBProbe extends MycpuBundle {
-  val req = Decoupled(UWord)
-  val res = Valid(TLBIdx) // res.valid = true when has entry match
+  val req = Decoupled(UWord) // result is ok in fire cycle
+  val res = Output(new Bundle {
+    val found = Bool()
+    val index = TLBIdx
+  })
 }

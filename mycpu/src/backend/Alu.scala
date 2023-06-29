@@ -268,9 +268,10 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     when(brValid && (takenWrong || destWrong)) { asg(mispreBlkReg, true.B) }
     when(io.flush) { asg(mispreBlkReg, false.B) }
     //special:jrhb
-    val jrhbValid = brValid && brType === BranchType.JRHB
-    BoringUtils.addSource(inBrInfo.realTarget, "JRHBTARGET")
-    BoringUtils.addSource(jrhbValid, "JRHBVALID")
+    val jrhbSignal = Valid(UWord)
+    asg(jrhbSignal.valid, brValid && brType === BranchType.JRHB)
+    asg(jrhbSignal.bits, inBrInfo.realTarget)
+    BoringUtils.addSource(jrhbSignal, "JRHBSIGNAL")
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
   }

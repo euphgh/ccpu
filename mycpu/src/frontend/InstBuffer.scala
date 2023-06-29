@@ -41,7 +41,7 @@ class InstBuffer extends MycpuModule {
     ib.io.push(i).valid    := inBits.validMask(i) && io.in.valid
     pushBits.basicInstInfo := inBits.basicInstInfo(i)
     pushBits.predictResult := inBits.predictResult(i)
-    pushBits.exception     := inBits.exception(i)
+    pushBits.exception     := inBits.exception
     pushBits.realBrType    := inBits.realBrType(i)
     pushBits.isBd          := inBits.isBd(i)
   })

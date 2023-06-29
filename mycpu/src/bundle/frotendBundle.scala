@@ -97,7 +97,7 @@ class IfStage2OutIO extends MycpuBundle {
   val realBrType    = Vec(fetchNum, BranchType())
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
   val validMask     = Vec(fetchNum, Bool())
-  val exception     = Vec(fetchNum, FrontExcCode())
+  val exception     = FrontExcCode()
 }
 
 class InstARegsIdxBundle extends MycpuBundle {

@@ -43,18 +43,19 @@ class IfStage2 extends Module with MycpuParam {
   asg(icache2.io.in.bits.cancel, io.in.bits.exception =/= FrontExcCode.NONE)
   asg(icache2.io.in.bits.isUncached, io.in.bits.isUncached)
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
+  val inBits  = io.in.bits
+  val outBits = io.out.bits
   (0 until fetchNum).foreach(i => {
-    io.out.bits.predictResult(i) := io.in.bits.predictResult(i)
-    io.out.bits.exception        := io.in.bits.exception
-    asg(
-      io.out.bits.basicInstInfo(i).pcVal,
-      Cat(io.in.bits.pcVal(31, 5), io.in.bits.pcVal(4, 2) + i.U, io.in.bits.pcVal(1, 0))
-    )
-    asg(io.out.bits.basicInstInfo(i).instr, icache2.io.out.bits.idata.get(i))
-    io.out.bits.validMask(i) := io.in.bits.validMask(i)
+    val outBasic = outBits.basicInstInfo(i)
+    val inPcVal  = inBits.pcVal
+    outBits.predictResult(i) := inBits.predictResult(i)
+    asg(outBasic.pcVal, Cat(inPcVal(31, 5), inPcVal(4, 2) + i.U, inPcVal(1, 0)))
+    asg(outBasic.instr, Mux(inBits.exception === FrontExcCode.AdEL, 0.U(32.W), icache2.io.out.bits.idata.get(i)))
+    outBits.validMask(i) := inBits.validMask(i)
   })
-  io.out.valid         := icache2.io.out.valid
-  icache2.io.out.ready := io.out.ready
+  asg(outBits.exception, inBits.exception)
+  asg(io.out.valid, icache2.io.out.valid)
+  asg(icache2.io.out.ready, io.out.ready)
 
   /**
     * pre-decode

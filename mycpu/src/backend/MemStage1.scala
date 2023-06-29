@@ -127,12 +127,21 @@ class MemStage1 extends MycpuModule {
   badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exDetect.happen
   badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
   addSource(badAddr, "mem1BadAddr")
-  when(tlbExp || addrErrExp) {
-    val toM2ExDetect = toM2Bits.exDetect
-    toM2ExDetect.happen  := true.B
-    toM2ExDetect.excCode := Mux(tlbExp, tlbExcCode, Mux(isWriteReq, ExcCode.AdES, ExcCode.AdEL))
-    toM2ExDetect.refill  := tlbRes.refill
-  }
+  val inEx   = inBits.exDetect
+  val toM2Ex = toM2Bits.exDetect
+  asg(toM2Ex.happen, inEx.happen || tlbExp || addrErrExp)
+  asg(toM2Ex.refill, inEx.refill || (tlbExp && tlbRes.refill))
+  asg(
+    toM2Ex.excCode,
+    MuxCase(
+      ExcCode.AdEL, //dontcare,no exception happen
+      Seq(
+        inEx.happen -> inEx.excCode,
+        addrErrExp  -> Mux(isWriteReq, ExcCode.AdES, ExcCode.AdEL),
+        tlbExp      -> tlbExcCode
+      )
+    )
+  )
   when(!inBits.isRoStage) {
     toM2Bits.exDetect.happen := false.B
   }

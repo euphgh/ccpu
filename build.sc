@@ -2,7 +2,6 @@
 import mill._
 import mill.scalalib._
 import mill.scalalib.scalafmt.ScalafmtModule
-import mill.scalalib.TestModule.Utest
 // support BSP
 import mill.bsp._
 
@@ -31,9 +30,8 @@ object submacro extends ChiselModule {
   )
 }
 
-object mycpu extends ScalaModule with ScalafmtModule { m =>
-  override def scalaVersion = "2.13.10"
-  def moduleDeps            = Seq(submacro)
+object mycpu extends ChiselModule {
+  def moduleDeps = super.moduleDeps ++ Seq(submacro)
   override def scalacOptions = Seq(
     "-unchecked",
     "-language:reflectiveCalls",
@@ -46,11 +44,5 @@ object mycpu extends ScalaModule with ScalafmtModule { m =>
     // "-Ywarn-dead-code",
     // "-Ywarn-unused",
     // "-Ymacro-annotations"
-  )
-  override def ivyDeps = Agg(
-    ivy"edu.berkeley.cs::chisel3:3.6.0"
-  )
-  override def scalacPluginIvyDeps = Agg(
-    ivy"edu.berkeley.cs:::chisel3-plugin:3.6.0"
   )
 }

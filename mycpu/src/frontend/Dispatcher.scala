@@ -215,13 +215,16 @@ class Dispatcher extends MycpuModule {
     }
     val outFireNum = Output(UInt())
 
-    val fromAluMispre = Flipped(new MispreSignal)
-    val fronRedirect  = new FrontRedirctIO
+    val fromAluMispre = new Bundle {
+      val happen     = Input(Bool())
+      val realTarget = Input(UWord)
+    }
+    val dsAllow      = Input(Bool())
+    val fronRedirect = new FrontRedirctIO
 
     //valid when flush(mispredictRetire/exception/eret)
     // next cycle the backend is empty
     val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
-    val dsAllow     = Input(Bool()) //TODO: rob output to it
 
     val out = new Bundle {
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
@@ -310,7 +313,6 @@ class Dispatcher extends MycpuModule {
     *     but inst still can't go,because rob won't ready
     *   t3:fl recoverd
     */
-  val dsIdxReg      = RegInit(0.U(robIndexWidth.W))
   val realTargetReg = RegInit(0.U(vaddrWidth.W))
   asg(io.fronRedirect.flush, false.B) //default
   asg(io.fronRedirect.target, realTargetReg) //default
@@ -324,21 +326,18 @@ class Dispatcher extends MycpuModule {
   switch(state) {
     is(normal) {
       when(mispre.happen) {
-        when(io.in.robIndex === mispre.robIdx + 1.U) { //ds not in rob
+        when(!io.dsAllow) {
           asg(state, waitDs)
-          asg(dsIdxReg, mispre.robIdx + 1.U)
           asg(realTargetReg, mispre.realTarget)
-        }.elsewhen(io.dsAllow) { //ds already in ROB
+        }.otherwise {
           asg(state, block)
           asg(io.fronRedirect.flush, true.B)
-          asg(io.fronRedirect.target, mispre.realTarget)
-        }.otherwise {
           asg(io.fronRedirect.target, mispre.realTarget)
         }
       }
     }
     is(waitDs) {
-      when(io.in.robIndex === dsIdxReg) {
+      when(io.dsAllow) {
         asg(state, block)
         asg(io.fronRedirect.flush, true.B)
         asg(io.fronRedirect.target, realTargetReg)

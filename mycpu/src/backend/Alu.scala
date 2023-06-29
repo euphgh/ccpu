@@ -262,16 +262,22 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val mispre     = IO(new MispreSignal)
     val takenWrong = genTaken ^ preCnt(1)
     val destWrong  = genTaken && inBrInfo.realTarget =/= predict.target
-    asg(mispre.happen, brValid && (takenWrong || destWrong || brType === BranchType.JRHB))
+    asg(mispre.happen, brValid && (takenWrong || destWrong))
     asg(mispre.realTarget, inBrInfo.realTarget)
     asg(mispre.robIdx, exeIn.robIndex)
-    when(brValid && (takenWrong || destWrong)) { asg(mispreBlkReg, true.B) }
+    when(brValid && (takenWrong || destWrong)) {
+      asg(mispreBlkReg, true.B)
+      asg(exeOut.wbRob.isMispredict, true.B)
+    }
     when(io.flush) { asg(mispreBlkReg, false.B) }
     //special:jrhb
     val jrhbSignal = Valid(UWord)
     asg(jrhbSignal.valid, brValid && brType === BranchType.JRHB)
     asg(jrhbSignal.bits, inBrInfo.realTarget)
-    BoringUtils.addSource(jrhbSignal, "JRHBSIGNAL")
+    BoringUtils.addSource(jrhbSignal, "hbdest")
+    //JRHB无论是否mispre都要设为mispre，ROB进行处理
+    //前端无所谓是否重定向，由ROB重定向到JRHB的TARGET
+    when(jrhbSignal.valid) { asg(exeOut.wbRob.isMispredict, true.B) }
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
   }

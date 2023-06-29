@@ -132,10 +132,44 @@ class Decoder extends MycpuModule {
     }
     val out = new Bundle {
       val decoded   = new DecodeInstInfoBundle
-      val exception = new ExceptionInfoBundle
+      val exception = new DetectExInfoBundle
     }
   })
-  io.out.decoded.decode(io.in.instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+
+  //decode
+  val instr   = io.in.instr
+  val decoder = new DecodeInstInfoBundle
+  decoder.decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+  asg(io.out.decoded, decoder)
+
+  /**
+    * exception handle
+    *   note that input is frontExcCode，output is detectExInfoBundle
+    *   here we detect 系统调用/保留指令
+    *   priority:前面的fetch/tlbl > 保留指令例外 > 系统调用/BREAK
+    */
+  val deExType  = decoder.decodeExcType
+  val ri        = deExType === DeExType.RI //TODO:保留指令例外
+  val syscall   = deExType === DeExType.SYS
+  val break     = deExType === DeExType.BP
+  val inExcCode = io.in.exception
+  val inIsEx    = FrontExcCode.happen(inExcCode)
+  val outEx     = io.out.exception
+  //connect
+  asg(outEx.happen, inIsEx || ri || syscall || break)
+  asg(outEx.refill, FrontExcCode.isRefill(inExcCode))
+  asg(
+    outEx.excCode,
+    MuxCase(
+      ExcCode.AdEL, //dontcare,no exception happen
+      Seq(
+        inIsEx  -> FrontExcCode.trans(inExcCode),
+        ri      -> ExcCode.RI,
+        syscall -> ExcCode.Sys,
+        break   -> ExcCode.Bp
+      )
+    )
+  )
 }
 
 class dispatchSlot extends MycpuBundle {
@@ -148,12 +182,12 @@ class dispatchSlot extends MycpuBundle {
 
   val readyGo = Output(Bool())
 
-  //  exception decoder-Rs
-  //  decoded   decoder-Rs
-  //  destPregAddr freelist-Rs&Rob
-  //  srcPregs     srat-Rs
-  //  robIndex     Rs
+  //  exceptDetect    decoder-Rs
+  //  destPregAddr    freelist-Rs & Rob
+  //  srcPregs        srat-Rs
+  //  robIndex        Rs
   val toRsBasic = new RsBasicEntry
+  val decoded   = new DecodeInstInfoBundle
   //srat-Rob
   val prevPDest = PRegIdx
 }
@@ -181,13 +215,16 @@ class Dispatcher extends MycpuModule {
     }
     val outFireNum = Output(UInt())
 
-    val fromAluMispre = Flipped(new MispreSignal)
-    val fronRedirect  = new FrontRedirctIO
+    val fromAluMispre = new Bundle {
+      val happen     = Input(Bool())
+      val realTarget = Input(UWord)
+    }
+    val dsAllow      = Input(Bool())
+    val fronRedirect = new FrontRedirctIO
 
     //valid when flush(mispredictRetire/exception/eret)
     // next cycle the backend is empty
     val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
-    val dsAllow     = Input(Bool()) //TODO: rob output to it
 
     val out = new Bundle {
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
@@ -276,7 +313,6 @@ class Dispatcher extends MycpuModule {
     *     but inst still can't go,because rob won't ready
     *   t3:fl recoverd
     */
-  val dsIdxReg      = RegInit(0.U(robIndexWidth.W))
   val realTargetReg = RegInit(0.U(vaddrWidth.W))
   asg(io.fronRedirect.flush, false.B) //default
   asg(io.fronRedirect.target, realTargetReg) //default
@@ -290,21 +326,18 @@ class Dispatcher extends MycpuModule {
   switch(state) {
     is(normal) {
       when(mispre.happen) {
-        when(io.in.robIndex === mispre.robIdx + 1.U) { //ds not in rob
+        when(!io.dsAllow) {
           asg(state, waitDs)
-          asg(dsIdxReg, mispre.robIdx + 1.U)
           asg(realTargetReg, mispre.realTarget)
-        }.elsewhen(io.dsAllow) { //ds already in ROB
+        }.otherwise {
           asg(state, block)
           asg(io.fronRedirect.flush, true.B)
-          asg(io.fronRedirect.target, mispre.realTarget)
-        }.otherwise {
           asg(io.fronRedirect.target, mispre.realTarget)
         }
       }
     }
     is(waitDs) {
-      when(io.in.robIndex === dsIdxReg) {
+      when(io.dsAllow) {
         asg(state, block)
         asg(io.fronRedirect.flush, true.B)
         asg(io.fronRedirect.target, realTargetReg)
@@ -328,10 +361,10 @@ class Dispatcher extends MycpuModule {
 
   //decoder
   List.tabulate(dispatchNum)(i => {
-    decoder(i).io.in.instr       := slots(i).inst.basic.instr
-    decoder(i).io.in.exception   := slots(i).inst.exception
-    slots(i).toRsBasic.decoded   := decoder(i).io.out.decoded
-    slots(i).toRsBasic.exception := decoder(i).io.out.exception
+    decoder(i).io.in.instr      := slots(i).inst.basicInstInfo.instr
+    decoder(i).io.in.exception  := slots(i).inst.exception
+    slots(i).toRsBasic.exDetect := decoder(i).io.out.exception
+    slots(i).decoded            := decoder(i).io.out.decoded
   })
 
   //srat rename
@@ -348,12 +381,18 @@ class Dispatcher extends MycpuModule {
 
   //to rob
   List.tabulate(dispatchNum)(i => {
+    val toRobBits    = io.out.toRob(i).bits
+    val toRobUop     = toRobBits.uOp
+    val toRobExBasic = toRobBits.basicExInfo
     asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
-    asg(io.out.toRob(i).bits.pc, slots(i).inst.basic.pcVal)
-    asg(io.out.toRob(i).bits.prevPDest, slots(i).prevPDest)
-    asg(io.out.toRob(i).bits.currADest, slots(i).inst.aRegsIdx.dest)
-    asg(io.out.toRob(i).bits.currPDest, slots(i).toRsBasic.destPregAddr)
-    asg(io.out.toRob(i).bits.specialType, decoder(i).io.out.decoded.specialType)
+    //exception:pc and isBd
+    asg(toRobExBasic.pc, slots(i).inst.basicInstInfo.pcVal)
+    asg(toRobExBasic.isBd, slots(i).inst.isBd)
+    //uOp
+    asg(toRobUop.prevPDest, slots(i).prevPDest)
+    asg(toRobUop.currADest, slots(i).inst.aRegsIdx.dest)
+    asg(toRobUop.currPDest, slots(i).toRsBasic.destPregAddr)
+    asg(toRobUop.specialType, decoder(i).io.out.decoded.specialType)
   })
 
   //to fl
@@ -366,29 +405,35 @@ class Dispatcher extends MycpuModule {
   //rs is special
   val rsKind = List(FuType.MainAlu, FuType.SubAlu, FuType.Lsu, FuType.Mdu)
   List.tabulate(toRs.length)(i => {
-    val thisSlot = Mux1H(rsSlotSel(i), (0 to dispatchNum).map(slots(_)))
 
-    toRs(i).valid      := false.B //only valid is important
-    toRs(i).bits.basic := thisSlot.toRsBasic
+    val thisSlot = Mux1H(rsSlotSel(i), (0 to dispatchNum).map(slots(_)))
+    val toRsBits = toRs(i).bits
+    toRs(i).valid  := false.B //only valid is important
+    toRsBits.basic := thisSlot.toRsBasic
 
     when(rsSlotSel(i).orR) {
       toRs(i).valid := thisSlot.valid & thisSlot.readyGo
       if (rsKind(i) == FuType.MainAlu) {
-        val maExtra = toRs(i).bits.mAluExtra.get
+        val maExtra = toRsBits.mAluExtra.get
         val maInst  = thisSlot.inst
-        val basic   = maInst.basic
+        val basic   = maInst.basicInstInfo
         val preRes  = maInst.predictResult
-        asg(maExtra.dsPcVal, basic.pcVal + 4.U)
+        asg(maExtra.pcVal, basic.pcVal)
         asg(maExtra.low26, basic.instr(25, 0))
         asg(maExtra.predictResult, preRes)
+        asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType)
+        asg(toRsBits.uOp.brType.get, thisSlot.inst.realBrType)
       }
       if (rsKind(i) == FuType.Mdu) {
-        val instr = thisSlot.inst.basic.instr
+        val instr = thisSlot.inst.basicInstInfo.instr
         asg(toRs(i).bits.c0Addr.get, Cat(instr(15, 11), instr(2, 0)))
+        asg(toRsBits.uOp.mduType.get, thisSlot.decoded.mduType)
       }
       if (rsKind(i) == FuType.Lsu || rsKind(i) == FuType.SubAlu) {
-        val imm = thisSlot.inst.basic.instr(15, 0)
+        val imm = thisSlot.inst.basicInstInfo.instr(15, 0)
         asg(toRs(i).bits.immOffset.get, imm)
+        if (rsKind == FuType.Lsu) { asg(toRsBits.uOp.memType.get, thisSlot.decoded.memType) }
+        if (rsKind == FuType.SubAlu) { asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType) }
       }
     }
   })

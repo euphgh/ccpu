@@ -43,18 +43,20 @@ class IfStage2 extends Module with MycpuParam {
   asg(icache2.io.in.bits.cancel, io.in.bits.exception =/= FrontExcCode.NONE)
   asg(icache2.io.in.bits.isUncached, io.in.bits.isUncached)
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
+  val inBits  = io.in.bits
+  val outBits = io.out.bits
   (0 until fetchNum).foreach(i => {
-    io.out.bits.predictResult(i) := io.in.bits.predictResult(i)
-    io.out.bits.exception        := io.in.bits.exception
-    asg(
-      io.out.bits.basicInstInfo(i).pcVal,
-      Cat(io.in.bits.pcVal(31, 5), io.in.bits.pcVal(4, 2) + i.U, io.in.bits.pcVal(1, 0))
-    )
-    asg(io.out.bits.basicInstInfo(i).instr, icache2.io.out.bits.idata.get(i))
-    io.out.bits.validMask(i) := io.in.bits.validMask(i)
+    val outBasic = outBits.basicInstInfo(i)
+    val inPcVal  = inBits.pcVal
+    outBits.predictResult(i) := inBits.predictResult(i)
+    asg(outBasic.pcVal, Cat(inPcVal(31, 5), inPcVal(4, 2) + i.U, inPcVal(1, 0)))
+    asg(outBasic.instr, icache2.io.out.bits.idata.get(i)) //要求cache根据自动机状态返回全0
+    //asg(outBasic.instr, Mux(inBits.exception === FrontExcCode.AdEL, 0.U(32.W), icache2.io.out.bits.idata.get(i)))
+    outBits.validMask(i) := inBits.validMask(i)
   })
-  io.out.valid         := icache2.io.out.valid
-  icache2.io.out.ready := io.out.ready
+  asg(outBits.exception, inBits.exception)
+  asg(io.out.valid, icache2.io.out.valid)
+  asg(icache2.io.out.ready, io.out.ready)
 
   /**
     * pre-decode
@@ -68,11 +70,11 @@ class IfStage2 extends Module with MycpuParam {
 
   @MacroDecode
   class IF2PreDecodeOut extends MycpuBundle {
-    val brType = BtbType()
+    val brType = BranchType()
   }
-
   import chisel3.util.experimental.decode.QMCMinimizer
   val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
+  val validBr        = Wire(Vec(fetchNum, Bool()))
   val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
   val firNonBrMispre = WireDefault(0.U(log2Up(retireNum).W))
   val bpuUpdateQueue = Module(new Queue(gen = new BpuUpdateIO, entries = 4))
@@ -83,16 +85,20 @@ class IfStage2 extends Module with MycpuParam {
   asg(bpuUpdateQueue.io.enq.valid, false.B)
   asg(bpuUpdateQueue.io.enq.bits, 0.U.asTypeOf(new BpuUpdateIO))
 
+  //predecode
   (0 until fetchNum).foreach(i => {
     val instr     = io.out.bits.basicInstInfo(i).instr
     val preRes    = io.out.bits.predictResult(i)
-    val take      = preRes.counter > 1.U
-    val instValid = io.out.bits.validMask(i)
+    val preTake   = preRes.counter > 1.U
+    val instValid = io.out.bits.validMask(i) && io.in.valid
     preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
-    nonBrMisPreVec(i) := (preDecoder(i).brType === BtbType.non && take && instValid)
+    val realBrType = preDecoder(i).brType
+    nonBrMisPreVec(i) := (realBrType === BranchType.NON && preTake && instValid) //注意io.in.valid
+    asg(io.out.bits.realBrType(i), realBrType)
+    asg(validBr(i), realBrType =/= BranchType.NON && instValid) //注意io.in.valid
   })
 
-  when(nonBrMisPreVec.asUInt.orR) {
+  when(nonBrMisPreVec.asUInt.orR && io.in.valid) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val misPc     = io.out.bits.basicInstInfo(firNonBrMispre).pcVal
     val misPreRes = io.out.bits.predictResult(firNonBrMispre)
@@ -100,6 +106,7 @@ class IfStage2 extends Module with MycpuParam {
     (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
     //change its preResult
     misPreRes.counter := 0.U
+    misPreRes.btbType := BtbType.non
     //redirect frontend
     asg(io.noBrMispreRedirect.flush, true.B)
     asg(io.noBrMispreRedirect.target, misPc + 4.U)
@@ -118,9 +125,27 @@ class IfStage2 extends Module with MycpuParam {
     asg(updatePht.valid, true.B)
     asg(updatePht.bits, 0.U(2.W))
   }
-
   //bpuUpdateQ deq
   asg(io.bpuUpdate.valid, bpuUpdateQueue.io.deq.valid)
   asg(bpuUpdateQueue.io.deq.ready, io.bpuUpdate.ready)
 
+  /**
+    * is延迟槽
+    *   目前放在IF2段处理
+    *   PRE-IF那还不太一样，如果分支没被预测跳转，是不会进入单走延迟槽的状态的
+    */
+  val validMask = io.in.bits.validMask
+  val dsReg     = RegInit(false.B)
+  val lastDs    = WireInit(0.U(log2Up(fetchNum).W))
+  val validNum  = PriorityCount(validMask.asUInt)
+  when(validMask(0) && io.in.valid) { dsReg := false.B } //注意io.in.valid
+  when(validBr.asUInt.orR && io.in.valid) {
+    asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
+    when(lastDs >= validNum) {
+      dsReg := true.B
+    }
+  }
+  val isBd = io.out.bits.isBd
+  (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
+  asg(isBd(0), dsReg)
 }

@@ -137,7 +137,7 @@ class AluComponent extends MycpuModule {
   }
 }
 
-//gen cond and trans branchType to btbType
+//gen cond
 class BrHandler extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
@@ -146,8 +146,7 @@ class BrHandler extends MycpuModule {
       val op   = Input(BranchType())
     }
     val out = new Bundle {
-      val taken   = Output(Bool())
-      val btbType = Output(BtbType())
+      val taken = Output(Bool())
     }
   })
   /*====================  op  ====================*/
@@ -177,26 +176,14 @@ class BrHandler extends MycpuModule {
       )
     )
   )
-  /*==================== trans type ====================*/
-  asg(
-    io.out.btbType,
-    MuxCase(
-      BtbType.non,
-      Seq(
-        BranchType.isB(op) -> BtbType.b
-        //TODO:
-      )
-    )
-  )
   /*==================== Access Code ====================*/
   def access(src1: UInt, src2: UInt, op: BranchType.Type) = {
     asg(io.in.src1, src1)
     asg(io.in.src2, src2)
     asg(io.in.op, op)
-    io.out
+    io.out.taken
   }
 }
-
 
 class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
@@ -204,8 +191,9 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   val exeStageIO = new ExeStageIO(FuType.MainAlu)
   exeStageIO.out <> io.out
   PipelineConnect(roStage.io.out, exeStageIO.in, exeStageIO.out.fire, io.flush)
-  val exeIn  = exeStageIO.in.bits
-  val exeOut = exeStageIO.out.bits
+  val exeIn     = exeStageIO.in.bits
+  val exeOut    = exeStageIO.out.bits
+  val instValid = exeStageIO.in.valid
 
   //注意，这里的in.valid已经代表着pipex_valid
   val exeStageReadyGo = true.B
@@ -215,16 +203,13 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   //unchange signal
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
-
   asg(exeOut.wPrf.wmask, 15.U(4.W))
-
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
 
   //may change signal
-  val outExInfo = exeOut.wbRob.exception
-
-  val inExInfo  = exeIn.exception
-  asg(outExInfo, inExInfo) //when exception occur,may change it
+  val outExDetect = exeOut.wbRob.exDetect
+  val inExDetect  = exeIn.exDetect
+  asg(outExDetect, inExDetect) //when exception occur,may change it
   asg(exeOut.wbRob.isMispredict, false.B) //mainAlu may change it
 
   /**
@@ -236,8 +221,8 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     *   3.wRob.isMispredict(for mainAlu)
     */
   val srcs    = exeIn.srcData
-  val uOp     = exeIn.decoded
-  val aluType = uOp.aluType
+  val uOp     = exeIn.uOp
+  val aluType = uOp.aluType.get
 
   //alu Component
   val aluComponent = Module(new AluComponent)
@@ -246,29 +231,28 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
   //bru
   if (main) {
-    val brType       = uOp.brType
+    val brType       = uOp.brType.get
     val isBr         = brType =/= BranchType.NON
     val mispreBlkReg = RegInit(false.B)
-    val brValid      = isBr && !mispreBlkReg
+    val brValid      = isBr && !mispreBlkReg && instValid
     //predict and gen
     val inBrInfo  = exeIn.branch.get
-    val predict   = inBrInfo.predictResult
+    val predict   = inBrInfo.predict
     val BrHandler = Module(new BrHandler)
-    val brOut     = BrHandler.access(srcs(0), srcs(1), brType)
+    val genTaken  = BrHandler.access(srcs(0), srcs(1), brType)
     val preCnt    = predict.counter
-    val genTaken  = brOut.taken
     /*==================== Update BPU ====================*/
     val bpuUpdate = IO(new BpuUpdateIO)
     val btb       = bpuUpdate.btb
     val pht       = bpuUpdate.pht
-    asg(bpuUpdate.pc, inExInfo.pc)
+    asg(bpuUpdate.pc, inBrInfo.pcVal)
     asg(bpuUpdate.moreData, 1.U(1.W)) //not sure
     //btb update
-    asg(btb.bits.instType, brOut.btbType)
+    asg(btb.bits.instType, inBrInfo.realBtbType)
     asg(btb.bits.target, inBrInfo.realTarget)
     asg(
       btb.valid,
-      brValid && (brOut.btbType =/= predict.brType || inBrInfo.realTarget =/= predict.target)
+      brValid && (inBrInfo.realBtbType =/= predict.btbType || inBrInfo.realTarget =/= predict.target)
     )
     //pht update
     val cat = Cat(preCnt, genTaken)
@@ -278,12 +262,22 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val mispre     = IO(new MispreSignal)
     val takenWrong = genTaken ^ preCnt(1)
     val destWrong  = genTaken && inBrInfo.realTarget =/= predict.target
-    asg(mispre.happen, brValid && (takenWrong || destWrong || brType === BranchType.JRHB))
+    asg(mispre.happen, brValid && (takenWrong || destWrong))
     asg(mispre.realTarget, inBrInfo.realTarget)
     asg(mispre.robIdx, exeIn.robIndex)
-    when(brValid && (takenWrong || destWrong)) { asg(mispreBlkReg, true.B) }
+    when(brValid && (takenWrong || destWrong)) {
+      asg(mispreBlkReg, true.B)
+      asg(exeOut.wbRob.isMispredict, true.B)
+    }
     when(io.flush) { asg(mispreBlkReg, false.B) }
-    BoringUtils.addSource(Valid(inBrInfo.realTarget), "realTarget")
+    //special:jrhb
+    val jrhbSignal = Valid(UWord)
+    asg(jrhbSignal.valid, brValid && brType === BranchType.JRHB)
+    asg(jrhbSignal.bits, inBrInfo.realTarget)
+    BoringUtils.addSource(jrhbSignal, "hbdest")
+    //JRHB无论是否mispre都要设为mispre，ROB进行处理
+    //前端无所谓是否重定向，由ROB重定向到JRHB的TARGET
+    when(jrhbSignal.valid) { asg(exeOut.wbRob.isMispredict, true.B) }
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
   }
@@ -291,22 +285,21 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
   /**
     * deal with exception
     *   priority:
-    *   overflow < 保留指令例外 < 取指例外 < 中断
+    *   overflow < 保留指令例外/BP/SYS(DPER) < 取指TLB(IF1) < 中断
     */
-  when(!inExInfo.happen && aluCpOut.overflow) {
-    asg(outExInfo.happen, true.B)
-    asg(outExInfo.excCode, ExcCode.Ov)
+  when(!inExDetect.happen && aluCpOut.overflow) {
+    asg(outExDetect.happen, true.B)
+    asg(outExDetect.excCode, ExcCode.Ov)
   }
 
   //attach interrupt to SubAlu to prevent(mispre & exception)when retire
   //p172：中断是电平输入信号
-
   if (!main) {
     val hasInt = Wire(Bool())
     BoringUtils.addSink(hasInt, "hasInterrupt")
     when(hasInt) {
-      asg(outExInfo.excCode, ExcCode.Int)
-      asg(outExInfo.happen, true.B)
+      asg(outExDetect.excCode, ExcCode.Int)
+      asg(outExDetect.happen, true.B)
     }
   }
 }

@@ -42,17 +42,16 @@ class CP0 extends BasicCOP with MycpuParam {
       val extInt    = Input(UInt(6.W))
       val mfc0Addr  = Input(CP0Idx)
       val mtc0      = Flipped(new Mtc0Bundle)
-      val exception = Flipped(Valid(new Bundle {
-        val basic    = new ExceptionInfoBundle
-        val badVaddr = Output(UWord)
-      }))
+      val exception = Flipped(Valid(new ExCommitBundle))
     }
     val out = new Bundle {
       val mfc0Rdata      = Output(UWord) //wire logic of mfc0
       val redirectTarget = Output(UWord) //eret exception redirect target
     }
   })
-  val exInfo = io.in.exception.bits
+  val exCommit = io.in.exception.bits
+  val badVaddr = exCommit.badVaddr
+  val excCode  = exCommit.detect.excCode
 
   when(io.in.eretFlush) { statusReg.exl := 0.U }
   //mtc0 mfc0
@@ -71,25 +70,25 @@ class CP0 extends BasicCOP with MycpuParam {
   //exception
   when(io.in.exception.valid) {
     statusReg.exl    := 1.U
-    causeReg.exccode := exInfo.basic.excCode.asUInt
-    switch(exInfo.basic.excCode) {
+    causeReg.exccode := excCode.asUInt
+    switch(excCode) {
       is(Seq(ExcCode.TLBL, ExcCode.TLBS, ExcCode.Mod)) {
-        contextReg.badvpn2 := exInfo.badVaddr(31, 13)
-        entryhiReg.vpn2    := exInfo.badVaddr(31, 13)
-        badvaddrReg.all    := exInfo.badVaddr
+        contextReg.badvpn2 := exCommit.badVaddr(31, 13)
+        entryhiReg.vpn2    := exCommit.badVaddr(31, 13)
+        badvaddrReg.all    := exCommit.badVaddr
       }
       is(Seq(ExcCode.AdEL, ExcCode.AdES)) {
-        badvaddrReg.all := exInfo.badVaddr
+        badvaddrReg.all := exCommit.badVaddr
       }
     }
     when(statusReg.exl === 0.U) {
-      causeReg.bd := exInfo.basic.isBd
-      epcReg.all  := Mux(exInfo.basic.isBd, exInfo.basic.pc - 4.U, exInfo.basic.pc)
+      causeReg.bd := exCommit.basic.isBd
+      epcReg.all  := Mux(exCommit.basic.isBd, exCommit.basic.pc - 4.U, exCommit.basic.pc)
       trapOffs := Mux(
-        exInfo.basic.refill,
+        exCommit.detect.refill,
         0.U(32.W),
         (Mux(
-          exInfo.basic.excCode === ExcCode.Int && causeReg.iv === 1.U && statusReg.bev === 1.U,
+          excCode === ExcCode.Int && causeReg.iv === 1.U && statusReg.bev === 1.U,
           0x200.U(32.W),
           0x180.U(32.W)
         ))

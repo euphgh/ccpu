@@ -32,19 +32,18 @@ class InstBuffer extends MycpuModule {
     val in  = Flipped(Decoupled(new IfStage2OutIO))
     val out = Vec(decodeNum, Decoupled(new InstBufferOutIO))
   })
-  class InstBufferEntry extends MycpuBundle {
-    val predictResult = new PredictResultBundle
-    val basicInstInfo = new BasicInstInfoBundle
-    val exception     = FrontExcCode()
-  }
   // sub decode ==================================================
   val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 32, true))
   // input ========================================================
   (0 until fetchNum).foreach(i => {
-    ib.io.push(i).valid              := io.in.bits.validMask(i) && io.in.valid
-    ib.io.push(i).bits.basicInstInfo := io.in.bits.basicInstInfo(i)
-    ib.io.push(i).bits.predictResult := io.in.bits.predictResult(i)
-    ib.io.push(i).bits.exception     := io.in.bits.exception
+    val pushBits = ib.io.push(i).bits
+    val inBits   = io.in.bits
+    ib.io.push(i).valid    := inBits.validMask(i) && io.in.valid
+    pushBits.basicInstInfo := inBits.basicInstInfo(i)
+    pushBits.predictResult := inBits.predictResult(i)
+    pushBits.exception     := inBits.exception
+    pushBits.realBrType    := inBits.realBrType(i)
+    pushBits.isBd          := inBits.isBd(i)
   })
   io.in.ready := ib.io.push(0).ready // any number is ok
 
@@ -60,7 +59,17 @@ class InstBuffer extends MycpuModule {
   assert(ibRdy(0) === ibRdy(3))
 
   // output ========================================================
-  io.out <> ib.io.pop
+  List.tabulate(decodeNum)(i => {
+    val outBits = io.out(i).bits
+    val ibPop   = ib.io.pop(i).bits
+    outBits.basicInstInfo := ibPop.basicInstInfo
+    outBits.exception     := ibPop.exception
+    outBits.predictResult := ibPop.predictResult
+    outBits.realBrType    := ibPop.realBrType
+    outBits.isBd          := ibPop.isBd
+    io.out(i).valid       := ib.io.pop(i).valid
+    ib.io.pop(i).ready    := io.out(i).ready
+  })
 
   @MacroDecode
   class IBdecodeOut extends MycpuBundle {
@@ -68,20 +77,19 @@ class InstBuffer extends MycpuModule {
     val dstType = DSTType()
     val whichFu = ChiselFuType()
   }
-
   import chisel3.util.experimental.decode.QMCMinimizer
-
   val subDecode = Wire(Vec(decodeNum, new IBdecodeOut))
+
   (0 until decodeNum).foreach(i => {
-    val instr = io.out(i).bits.basic.instr
-    subDecode(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
-    asg(io.out(i).bits.whichFu, subDecode(i).whichFu)
+    val outBits      = io.out(i).bits
+    val outAregIdx   = outBits.aRegsIdx
+    val instr        = outBits.basicInstInfo.instr
     val (rs, rt, rd) = (instr(25, 21), instr(20, 16), instr(15, 11))
-    io.out(i).bits.aRegsIdx.src0 := LookupEnumDefault(subDecode(i).srcType, rs)(
-      Seq(SRCType.RT -> rt, SRCType.noSRC -> 0.U)
-    )
-    io.out(i).bits.aRegsIdx.src1 := Mux(subDecode(i).srcType === SRCType.RSRT, rt, 0.U)
-    io.out(i).bits.aRegsIdx.dest := LookupEnum(
+    subDecode(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+    asg(outBits.whichFu, subDecode(i).whichFu)
+    outAregIdx.src0 := LookupEnumDefault(subDecode(i).srcType, rs)(Seq(SRCType.RT -> rt, SRCType.noSRC -> 0.U))
+    outAregIdx.src1 := Mux(subDecode(i).srcType === SRCType.RSRT, rt, 0.U)
+    outAregIdx.dest := LookupEnum(
       subDecode(i).dstType,
       Seq(DSTType.toRT -> rt, DSTType.toRD -> rd, DSTType.to31 -> 31.U, DSTType.noDST -> 0.U)
     )

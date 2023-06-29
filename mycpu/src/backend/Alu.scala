@@ -187,6 +187,9 @@ class BrHandler extends MycpuModule {
 
 class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
 
+  val bpuUpdate = if (main) Some(IO(new BpuUpdateIO)) else None
+  val mispre    = if (main) Some(IO(new MispreSignal)) else None
+
   //stage connect
   val exeStageIO = new ExeStageIO(FuType.MainAlu)
   exeStageIO.out <> io.out
@@ -242,11 +245,11 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     val genTaken  = BrHandler.access(srcs(0), srcs(1), brType)
     val preCnt    = predict.counter
     /*==================== Update BPU ====================*/
-    val bpuUpdate = IO(new BpuUpdateIO)
-    val btb       = bpuUpdate.btb
-    val pht       = bpuUpdate.pht
-    asg(bpuUpdate.pc, inBrInfo.pcVal)
-    asg(bpuUpdate.moreData, 1.U(1.W)) //not sure
+    val bpUp = bpuUpdate.get
+    val btb  = bpUp.btb
+    val pht  = bpUp.pht
+    asg(bpUp.pc, inBrInfo.pcVal)
+    asg(bpUp.moreData, 1.U(1.W)) //not sure
     //btb update
     asg(btb.bits.instType, inBrInfo.realBtbType)
     asg(btb.bits.target, inBrInfo.realTarget)
@@ -259,12 +262,12 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     asg(pht.valid, brValid && cat.andR =/= cat.orR)
     asg(pht.bits, Mux(genTaken, pht.bits + 1.U, pht.bits - 1.U))
     /*==================== MisPre Signal to Dper/ROB ====================*/
-    val mispre     = IO(new MispreSignal)
+    val misSignal  = mispre.get
     val takenWrong = genTaken ^ preCnt(1)
     val destWrong  = genTaken && inBrInfo.realTarget =/= predict.target
-    asg(mispre.happen, brValid && (takenWrong || destWrong))
-    asg(mispre.realTarget, inBrInfo.realTarget)
-    asg(mispre.robIdx, exeIn.robIndex)
+    asg(misSignal.happen, brValid && (takenWrong || destWrong))
+    asg(misSignal.realTarget, inBrInfo.realTarget)
+    asg(misSignal.robIdx, exeIn.robIndex)
     when(brValid && (takenWrong || destWrong)) {
       asg(mispreBlkReg, true.B)
       asg(exeOut.wbRob.isMispredict, true.B)

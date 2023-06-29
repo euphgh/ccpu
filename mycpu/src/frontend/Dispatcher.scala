@@ -209,9 +209,9 @@ class dispatchSlot extends MycpuBundle {
 class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val fromInstBuffer  = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
-      val fromFuWriteBack = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
-      val robIndex        = Input(ROBIdx)
+      val fromInstBuffer = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
+      val fuWbSrat       = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
+      val robIndex       = Input(ROBIdx)
     }
     val outFireNum = Output(UInt())
 
@@ -225,6 +225,7 @@ class Dispatcher extends MycpuModule {
     //valid when flush(mispredictRetire/exception/eret)
     // next cycle the backend is empty
     val recoverSrat = Flipped(Valid(Vec(aRegNum, new SRATEntry)))
+    val pushFl      = Flipped(Vec(retireNum, Valid(PRegIdx)))
 
     val out = new Bundle {
       val toMainAluRs = Decoupled(new RsOutIO(kind = FuType.MainAlu))
@@ -255,8 +256,13 @@ class Dispatcher extends MycpuModule {
 
   val freeListSize = 32
   val freeList = Module(
-    new MultiQueue(enqNum = wBNum, deqNum = dispatchNum, gen = PRegIdx, size = freeListSize, allIn = false)
+    new MultiQueue(enqNum = retireNum, deqNum = dispatchNum, gen = PRegIdx, size = freeListSize, allIn = false)
   )
+  (0 until retireNum).map(i => {
+    asg(freeList.io.push(i).valid, io.pushFl(i).valid)
+    asg(freeList.io.push(i).bits, io.pushFl(i).bits)
+  })
+
   val decoder = List.fill(decodeNum)(Module(new Decoder()))
   val srat    = Module(new SRAT)
   val slots   = Wire(Vec(dispatchNum, new dispatchSlot))
@@ -368,7 +374,7 @@ class Dispatcher extends MycpuModule {
   })
 
   //srat rename
-  srat.io.wb <> io.in.fromFuWriteBack
+  srat.io.wb <> io.in.fuWbSrat
   srat.io.recover <> io.recoverSrat
   val slotsAregsIdx = WireInit(VecInit((0 until dispatchNum).map(i => slots(i).inst.aRegsIdx)))
   val slotsRenamed  = srat.read(aRegsIdx = slotsAregsIdx)

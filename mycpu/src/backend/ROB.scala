@@ -88,9 +88,11 @@ class ROB extends MycpuModule {
       val misPredictIdx = Input(ROBIdx)
     }
     val out = new Bundle {
-      val robIndex = Output(ROBIdx) //to dper
-      val robEmpty = Output(Bool()) //to dper
-      //valid = normal & instValid
+      val robIndex  = Output(ROBIdx) //to dper
+      val dsAllow   = Output(Bool()) //to dper
+      val oldestIdx = Output(ROBIdx) //for ucload(LSU) and <mfc0,cacheInst(RS)>
+
+      val singleRetire = Valid(new SingleRetireBundle) //single Retire inst
       val multiRetire = Vec(
         retireNum,
         Valid(new Bundle {
@@ -98,20 +100,14 @@ class ROB extends MycpuModule {
           val scommit = Output(Bool()) //to storeQ
         })
       )
-      //single Retire inst
-      val singleRetire = Valid(new SingleRetireBundle)
-      //to CP0
+
       val eretFlush = Output(Bool()) //to CP0
-      val exCommit  = Valid(new ExCommitBundle)
-      //mispredict only FlushBackend
-      val mispreFlushBackend = Output(Bool())
+      val exCommit  = Valid(new ExCommitBundle) //to CP0
+
+      val flRecover          = Vec(retireNum, Valid(PRegIdx)) // FreeList recover Ports
+      val mispreFlushBackend = Output(Bool()) //mispredict only FlushBackend
       val flushAll           = Output(Bool()) //serve as recover rat and hilo
       val robRedirect        = Output(new FrontRedirctIO) //serve as recover rat and hilo
-      val dsAllow            = Output(Bool())
-      //for ucload and mfc0 and cachedInst
-      val oldestIdx = Output(ROBIdx)
-      // FreeList recover Ports
-      val flRecover = Vec(retireNum, Valid(PRegIdx))
     }
   })
   class ROBQueue extends MultiQueue(dispatchNum, retireNum, new RobEntry, robNum) {
@@ -179,7 +175,7 @@ class ROB extends MycpuModule {
     robEntries.wb(i).misPredict := wdata(i).isMispredict
   })
 
-  io.out.robEmpty := robEntries.isEmpty
+  //io.out.robEmpty := robEntries.isEmpty
   asg(io.out.robIndex, robEntries.headIdx)
 
   /**

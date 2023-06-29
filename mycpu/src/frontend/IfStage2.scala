@@ -50,7 +50,8 @@ class IfStage2 extends Module with MycpuParam {
     val inPcVal  = inBits.pcVal
     outBits.predictResult(i) := inBits.predictResult(i)
     asg(outBasic.pcVal, Cat(inPcVal(31, 5), inPcVal(4, 2) + i.U, inPcVal(1, 0)))
-    asg(outBasic.instr, Mux(inBits.exception === FrontExcCode.AdEL, 0.U(32.W), icache2.io.out.bits.idata.get(i)))
+    asg(outBasic.instr, icache2.io.out.bits.idata.get(i)) //要求cache根据自动机状态返回全0
+    //asg(outBasic.instr, Mux(inBits.exception === FrontExcCode.AdEL, 0.U(32.W), icache2.io.out.bits.idata.get(i)))
     outBits.validMask(i) := inBits.validMask(i)
   })
   asg(outBits.exception, inBits.exception)

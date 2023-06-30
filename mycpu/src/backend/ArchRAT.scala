@@ -5,6 +5,8 @@ import config._
 import chisel3._
 import frontend._
 import chisel3.util._
+import utils.asg
+import chisel3.util.experimental.BoringUtils._
 
 class ArchRAT extends MycpuModule {
   val io = IO(new Bundle {
@@ -23,5 +25,6 @@ class ArchRAT extends MycpuModule {
     }
     io.recover(i).inPrf := true.B
     io.recover(i).pIdx  := pIdxMap(i)
+    addSource(pIdxMap, "DiffArchRegNums")
   })
 }

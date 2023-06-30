@@ -86,6 +86,8 @@ object FrontExcCode extends ChiselEnum {
 }
 
 trait MycpuParam {
+  val verilator = true
+  val vivado    = !verilator
   // General Parameter for mycpu
 
   val excCodeWidth     = 5
@@ -111,7 +113,7 @@ trait MycpuParam {
   val renameNum   = 3
   val dispatchNum = 3
   val wBNum       = 3
-  val issueNum    = 2 //should be 4
+  val issueNum    = 4 //should be 4
   val srcDataNum  = 2
   val retireNum   = 2 //should be 4
 

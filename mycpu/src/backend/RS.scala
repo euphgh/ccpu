@@ -66,9 +66,9 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
       val fromDispatcher = Flipped(Decoupled(new RsOutIO(rsKind)))
       val wPrf           = Vec(wBNum, Flipped(Valid(PRegIdx)))
       val flush          = Input(Bool()) //mispredict retire,exception,eret
+      val oldestRobIdx   = Input(ROBIdx)
     }
-    val out          = Decoupled(new RsOutIO(kind = rsKind))
-    val oldestRobIdx = Input(ROBIdx)
+    val out = Decoupled(new RsOutIO(kind = rsKind))
   })
 
   val rsEntries  = RegInit(VecInit(Seq.fill(rsSize)(0.U.asTypeOf(new RsOutIO(rsKind)))))
@@ -80,7 +80,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val src1Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(0).inPrf | srcsWaken(i)(0))))
   val src2Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(1).inPrf | srcsWaken(i)(1))))
 
-  val isOldestVec = (0 until rsSize).map(i => rsEntries(i).basic.robIndex === io.oldestRobIdx)
+  val isOldestVec = (0 until rsSize).map(i => rsEntries(i).basic.robIndex === io.in.oldestRobIdx)
   val blockVec    = WireInit(VecInit(Seq.fill(rsSize)(false.B)))
   if (rsKind == FuType.Lsu) {
     (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.memType.get === MemType.CACHEINST))

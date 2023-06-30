@@ -10,11 +10,9 @@ import chisel3.util.Cat
 import chisel3.util.switch
 import chisel3.util._
 
-class SimpleWriteBundle extends MycpuBundle {
+class Mtc0Bundle extends MycpuBundle {
   val wen   = Output(Bool())
   val wdata = Output(UWord)
-}
-class Mtc0Bundle extends SimpleWriteBundle {
   val waddr = Output(CP0Idx)
 }
 
@@ -40,35 +38,36 @@ class CP0 extends BasicCOP with MycpuParam {
     val in = new Bundle {
       val eretFlush = Input(Bool())
       val extInt    = Input(UInt(6.W))
-      val mfc0Addr  = Input(CP0Idx)
       val mtc0      = Flipped(new Mtc0Bundle)
-      val exception = Flipped(Valid(new ExCommitBundle))
+      val exCommit  = Flipped(Valid(new ExCommitBundle))
     }
-    val out = new Bundle {
-      val mfc0Rdata      = Output(UWord) //wire logic of mfc0
-      val redirectTarget = Output(UWord) //eret exception redirect target
+    val mfc0 = new Bundle {
+      val addr  = Input(CP0Idx)
+      val rdata = Output(UWord)
     }
+    val redirectTarget = Output(UWord) //eret exception redirect target
+
   })
-  val exCommit = io.in.exception.bits
+  val exCommit = io.in.exCommit.bits
   val badVaddr = exCommit.badVaddr
   val excCode  = exCommit.detect.excCode
 
   when(io.in.eretFlush) { statusReg.exl := 0.U }
   //mtc0 mfc0
   val c0Waddr = io.in.mtc0.waddr
-  val c0Raddr = io.in.mfc0Addr
+  val c0Raddr = io.mfc0.addr
   when(io.in.mtc0.wen) { mtc0(sel = c0Waddr(2, 0), rd = c0Waddr(7, 3), data = io.in.mtc0.wdata) }
-  asg(io.out.mfc0Rdata, mfc0(sel = c0Raddr(2, 0), rd = c0Raddr(7, 3)))
+  asg(io.mfc0.rdata, mfc0(sel = c0Raddr(2, 0), rd = c0Raddr(7, 3)))
 
   //redirect Target
   //TODO:remember to select from cache inst redirect target in backend
   val trapBase =
     Mux(statusReg.bev === 1.U, "hbfc0_0200".U(32.W), (ebaseReg.eptbase << 12 | "h8000_0000".U(32.W)))
   val trapOffs = WireInit(0x180.U(32.W))
-  asg(io.out.redirectTarget, trapBase + trapOffs)
+  asg(io.redirectTarget, trapBase + trapOffs)
 
   //exception
-  when(io.in.exception.valid) {
+  when(io.in.exCommit.valid) {
     statusReg.exl    := 1.U
     causeReg.exccode := excCode.asUInt
     switch(excCode) {
@@ -117,4 +116,29 @@ class CP0 extends BasicCOP with MycpuParam {
       statusReg.ie === 1.U(1.W) &&
       statusReg.exl === 0.U(1.W)
   BoringUtils.addSource(hasInt, "hasInterrupt")
+
+  // DiffTest ===============================================
+  import difftest.DifftestArchCP0
+  if (verilator) {
+    val checkCP0Regs = Module(new DifftestArchCP0)
+    checkCP0Regs.io.index    := indexReg.read
+    checkCP0Regs.io.random   := randomReg.read
+    checkCP0Regs.io.entrylo0 := entrylo0Reg.read
+    checkCP0Regs.io.entrylo1 := entrylo1Reg.read
+    checkCP0Regs.io.context  := contextReg.read
+    checkCP0Regs.io.pagemask := pagemaskReg.read
+    checkCP0Regs.io.wire     := wireReg.read
+    checkCP0Regs.io.badvaddr := badvaddrReg.read
+    checkCP0Regs.io.count    := countReg.read
+    checkCP0Regs.io.entryhi  := entryhiReg.read
+    checkCP0Regs.io.compare  := compareReg.read
+    checkCP0Regs.io.status   := statusReg.read
+    checkCP0Regs.io.cause    := causeReg.read
+    checkCP0Regs.io.epc      := epcReg.read
+    checkCP0Regs.io.prid     := pridReg.read
+    checkCP0Regs.io.ebase    := ebaseReg.read
+    checkCP0Regs.io.config0  := config0Reg.read
+    checkCP0Regs.io.config1  := config1Reg.read
+    BoringUtils.addSink(checkCP0Regs.io.en, "hasValidRetire")
+  }
 }

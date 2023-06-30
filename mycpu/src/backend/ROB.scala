@@ -88,9 +88,11 @@ class ROB extends MycpuModule {
       val misPredictIdx = Input(ROBIdx)
     }
     val out = new Bundle {
-      val robIndex = Output(ROBIdx) //to dper
-      val robEmpty = Output(Bool()) //to dper
-      //valid = normal & instValid
+      val robIndex  = Output(ROBIdx) //to dper
+      val dsAllow   = Output(Bool()) //to dper
+      val oldestIdx = Output(ROBIdx) //for ucload(LSU) and <mfc0,cacheInst(RS)>
+
+      val singleRetire = Valid(new SingleRetireBundle) //single Retire inst
       val multiRetire = Vec(
         retireNum,
         Valid(new Bundle {
@@ -98,20 +100,14 @@ class ROB extends MycpuModule {
           val scommit = Output(Bool()) //to storeQ
         })
       )
-      //single Retire inst
-      val singleRetire = Valid(new SingleRetireBundle)
-      //to CP0
+
       val eretFlush = Output(Bool()) //to CP0
-      val exCommit  = Valid(new ExCommitBundle)
-      //mispredict only FlushBackend
-      val mispreFlushBackend = Output(Bool())
+      val exCommit  = Valid(new ExCommitBundle) //to CP0
+
+      val flRecover          = Vec(retireNum, Valid(PRegIdx)) // FreeList recover Ports
+      val mispreFlushBackend = Output(Bool()) //mispredict only FlushBackend
       val flushAll           = Output(Bool()) //serve as recover rat and hilo
       val robRedirect        = Output(new FrontRedirctIO) //serve as recover rat and hilo
-      val dsAllow            = Output(Bool())
-      //for ucload and mfc0 and cachedInst
-      val oldestIdx = Output(ROBIdx)
-      // FreeList recover Ports
-      val flRecover = Vec(retireNum, Valid(PRegIdx))
     }
   })
   class ROBQueue extends MultiQueue(dispatchNum, retireNum, new RobEntry, robNum) {
@@ -179,7 +175,7 @@ class ROB extends MycpuModule {
     robEntries.wb(i).misPredict := wdata(i).isMispredict
   })
 
-  io.out.robEmpty := robEntries.isEmpty
+  //io.out.robEmpty := robEntries.isEmpty
   asg(io.out.robIndex, robEntries.headIdx)
 
   /**
@@ -432,5 +428,23 @@ class ROB extends MycpuModule {
     (0 until dispatchNum).foreach(i => {
       io.in.fromDispatcher(i).ready := robEntries.io.push(i).ready
     })
+  }
+  //DiffTest ===================================================
+  import difftest.DifftestInstrCommit
+  if (verilator) {
+    import chisel3.util.experimental.BoringUtils._
+    val checkRetire = Module(new DifftestInstrCommit)
+    checkRetire.io.retireNum := PriorityEncoder((0 until retireNum).map(io.out.multiRetire(_).valid))
+    checkRetire.io.lastPC := PriorityMux(
+      (0 to retireNum)
+        .map(i => {
+          io.out.multiRetire(i).valid -> retirePcVal(i)
+        })
+        .reverse
+    )
+    checkRetire.io.interrSeq := Mux(io.out.exCommit.bits.detect.excCode === ExcCode.Int, 0.U, retireNum.U)
+    checkRetire.io.en        := true.B
+    val validRetire = checkRetire.io.retireNum > 0.U
+    addSource(validRetire, "hasValidRetire")
   }
 }

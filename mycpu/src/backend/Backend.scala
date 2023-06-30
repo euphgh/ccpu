@@ -39,7 +39,7 @@ class Backend extends MycpuModule {
   val (dperIn, dperOut) = (dperIO.in, dperIO.out)
   val (robIn, robOut)   = (rob.io.in, rob.io.out)
   val dperToRs          = List(dperOut.toMainAluRs, dperOut.toSubAluRs, dperOut.toMduRs, dperOut.toLsuRs)
-  val rsIO              = List(mAluRS.io, sAluRS.io, mduRS.io, lsuRS.io)
+  val rsIO              = List(mAluRS.io, sAluRS.io, lsuRS.io, mduRS.io)
   val fuIO              = List(mAluFU.io, sAluFU.io, lsuFU.io, mduFU.io)
   val fuWb              = (0 until issueNum).map(i => fuIO(i).out)
   val fuIn              = (0 until issueNum).map(i => fuIO(i).in)
@@ -185,7 +185,16 @@ class Backend extends MycpuModule {
     * flushBackend = robMisFlushBackend & robFlushALL
     */
   val robRedirect = robOut.robRedirect
-  asg(io.redirectFront.flush, robOut.flushAll)
+  asg(io.redirectFront.flush, robOut.flushAll || dperIO.fronRedirect.flush)
   //发生EXER的时候不会给出robRedirect.flush
-  asg(io.redirectFront.target, Mux(robRedirect.flush, robRedirect.target, cp0.io.redirectTarget))
+  asg(
+    io.redirectFront.target,
+    MuxCase(
+      dperIO.fronRedirect.target,
+      Seq(
+        robRedirect.flush -> robRedirect.target,
+        robOut.flushAll   -> cp0.io.redirectTarget
+      )
+    )
+  )
 }

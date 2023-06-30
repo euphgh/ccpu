@@ -2,12 +2,9 @@ package backend
 import bundle._
 import config._
 import chisel3._
-import chisel3.util.Valid
 import cop._
-import utils.asg
-import chisel3.util.experimental.BoringUtils
-import chisel3.util.Cat
-import chisel3.util.switch
+import utils._
+import chisel3.util.experimental.BoringUtils._
 import chisel3.util._
 
 class Mtc0Bundle extends MycpuBundle {
@@ -95,6 +92,47 @@ class CP0 extends BasicCOP with MycpuParam {
     }
   }
 
+  // TLB instr ===========================================
+  // >> tlbp  ============================================
+  val tlbpWreq  = Bool()
+  val tlbpFound = Bool()
+  val tlbpIndex = UInt(6.W)
+  addSink(tlbpWreq, "tlbpRes") // when tlb set tlbpRes to mdu, data ok
+  addSink(tlbpFound, "tlbpFound")
+  addSink(tlbpIndex, "tlbpIndex")
+  when(tlbpWreq) {
+    asg(indexReg.p, !tlbpFound)
+    asg(indexReg.index, tlbpIndex)
+  }
+  // >> tlbr  =============================================
+  val tlbrReq   = Bool()
+  val tlbrEntry = new TLBEntry
+  addSink(tlbrReq, "tlbrReq")
+  addSink(tlbrEntry, "tlbrEntry")
+  when(tlbrReq) {
+    asg(entryhiReg.asid, tlbrEntry.asid)
+    asg(entryhiReg.vpn2, tlbrEntry.vpn2)
+    asg(entrylo0Reg.pfn, tlbrEntry.pfn0)
+    asg(entrylo0Reg.c, tlbrEntry.c0)
+    asg(entrylo0Reg.d, tlbrEntry.d0)
+    asg(entrylo0Reg.v, tlbrEntry.v0)
+    asg(entrylo0Reg.g, tlbrEntry.g)
+    asg(entrylo1Reg.pfn, tlbrEntry.pfn1)
+    asg(entrylo1Reg.c, tlbrEntry.c1)
+    asg(entrylo1Reg.d, tlbrEntry.d1)
+    asg(entrylo1Reg.v, tlbrEntry.v1)
+    asg(entrylo1Reg.g, tlbrEntry.g)
+  }
+
+  // addSource to out
+  addSource(entryhiReg, "EntryHi")
+  addSource(entrylo0Reg, "EntryLo0")
+  addSource(entrylo1Reg, "EntryLo1")
+  addSource(indexReg, "Index")
+  addSource(randomReg, "Random")
+  addSource(config0Reg, "config0")
+  addSource(statusReg, "status")
+
   //Interrupt input
   asg(causeReg.iph7, io.in.extInt(5) || causeReg.ti.asBool)
   asg(causeReg.iph6, io.in.extInt(4))
@@ -141,4 +179,5 @@ class CP0 extends BasicCOP with MycpuParam {
     checkCP0Regs.io.config1  := config1Reg.read
     BoringUtils.addSink(checkCP0Regs.io.en, "hasValidRetire")
   }
+
 }

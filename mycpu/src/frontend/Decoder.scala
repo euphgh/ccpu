@@ -3,6 +3,7 @@ package frontend
 import config._
 import chisel3._
 import chisel3.util._
+import decodemacro.MacroDecode
 
 object AllInsts {
   def apply(): Seq[Tuple2[chisel3.util.BitPat, List[chisel3.ChiselEnum#Type]]] = {

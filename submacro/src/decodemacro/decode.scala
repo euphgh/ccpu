@@ -93,6 +93,26 @@ object MacroDecode {
                 s"${name} := ${rhs}.safe(tmp(start${name}+width${name}-1, start${name}))._1\n"
               )
             }
+            case q"val $nameTerm = $rhsTerm.$default" => {
+              val name = nameTerm.toTermName.toString
+              val rhs  = rhsTerm.toString
+              constructCode.append(
+                s"""
+                val start${name} = counter
+                val width${name} = ${rhs}.getWidth
+                counter += width${name}
+                """
+              )
+              bitPatGenCode.append(s"""
+              val opt${name} = const.find(_.isInstanceOf[${rhs}.Type])
+              val bip${name} = if (opt${name}.isDefined) chisel3.util.BitPat(opt${name}.get.litValue.U(width${name}.W)) 
+                                          else chisel3.util.BitPat(${rhsTerm}.${default}.litValue.U(width${name}.W))
+              """)
+              bitPatRetCode.append(s" ## bip${name}")
+              assignCode.append(
+                s"${name} := ${rhs}.safe(tmp(start${name}+width${name}-1, start${name}))._1\n"
+              )
+            }
             case _ => c.abort(c.enclosingPosition, "can not write in decode out")
           }
         })
@@ -138,7 +158,9 @@ object MacroDecode {
 
     annottees.map(_.tree) match {
       case (param: ClassDef) :: Nil => {
-        c.Expr(extractClassNameAndBody(param))
+        val res = extractClassNameAndBody(param)
+        // println(res)
+        c.Expr(res)
       }
       case _ => {
         println("not match")

@@ -30,23 +30,3 @@ class TLBSearchIO extends MycpuBundle {
   val req = Valid(UWord)
   val res = Input(new TLBSearchRes)
 }
-
-class TLBReadIO extends MycpuBundle {
-  val req = Input(TLBIdx)
-  val res = Output(new TLBEntry)
-}
-
-class TLBWriteIO extends MycpuBundle {
-  val req = Valid(new Bundle {
-    val idx   = TLBIdx
-    val entry = new TLBEntry
-  })
-}
-
-class TLBProbe extends MycpuBundle {
-  val req = Decoupled(UWord) // result is ok in fire cycle
-  val res = Output(new Bundle {
-    val found = Bool()
-    val index = TLBIdx
-  })
-}

@@ -1,4 +1,0 @@
-[submodule "hitd"]
-	path = hitd
-	url = https://github.com/euphgh/hitd
-	branch = flake

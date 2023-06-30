@@ -15,7 +15,16 @@ object ChiselFuType extends ChiselEnum {
 }
 
 object MduType extends ChiselEnum {
-  val MULT, MULTU, DIV, DIVU, MFHI, MFLO, MTHI, MTLO, CLZ, MTC0, MFC0 = Value
+  // block
+  val MULT, MULTU, MUL         = Value
+  val MADD, MADDU, MSUB, MSUBU = Value
+  val DIV, DIVU                = Value
+  val CLZ                      = Value
+  val TLBP                     = Value
+  // through
+  val MFHI, MFLO, MTHI, MTLO = Value
+  val MTC0, MFC0             = Value
+  val TLBR, TLBWI, TLBWR     = Value
   def isC0Inst(op: MduType.Type): Bool = op === MTC0 || op === MFC0
 }
 object SpecialType extends ChiselEnum {

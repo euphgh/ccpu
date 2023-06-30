@@ -5,50 +5,7 @@ import bundle._
 import chisel3._
 import chisel3.util._
 import utils._
-import difftest.DiffArchHiloIO
-import chisel3.util.experimental.BoringUtils._
-
-class MulDivIO extends MycpuBundle {
-  val in = Flipped(Decoupled(new Bundle {
-    val srcs   = Vec(srcDataNum, Output(UInt(dataWidth.W)))
-    val isSign = Output(Bool())
-  }))
-  val out = DecoupledIO(Output(UInt((dataWidth * 2).W)))
-}
-
-class Multiplier extends MycpuModule {
-  val io = IO(new MulDivIO)
-  //TODO:deal with readyGo logic
-  val readyGo = Wire(Bool())
-  io.in.ready  := !io.in.valid || readyGo && io.out.ready
-  io.out.valid := io.in.valid && readyGo
-
-  // asg(readyGo, true.B)
-  // asg(io.out.bits, 0.U(64.W))
-}
-class Divider extends MycpuModule {
-  val io = IO(new MulDivIO)
-  //TODO:deal with readyGo logic
-  val readyGo = Wire(Bool())
-  io.in.ready  := !io.in.valid || readyGo && io.out.ready
-  io.out.valid := io.in.valid && readyGo
-
-  // asg(readyGo, true.B)
-  // asg(io.out.bits, 0.U(64.W))
-}
-class CountLeadZeor extends MycpuModule {
-  val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(UWord))
-    val out = Decoupled(UWord)
-  })
-  //TODO:deal with readyGo logic
-  val readyGo = Wire(Bool())
-  io.in.ready  := !io.in.valid || readyGo && io.out.ready
-  io.out.valid := io.in.valid && readyGo
-
-  // asg(readyGo, true.B)
-  // asg(io.out.bits, 0.U(32.W))
-}
+import backend.components._
 
 // automat for status change when madd and msub
 class Mdu extends FuncUnit(FuType.Mdu) {
@@ -79,32 +36,111 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
   asg(exeOut.wbRob.exDetect, exeIn.exDetect) //no exception happen here
 
-  //6 "fu" here
-  val mul     = Module(new Multiplier)
-  val div     = Module(new Divider)
-  val clz     = Module(new CountLeadZeor)
-  val specHi  = RegInit(UWord, 0.U)
-  val specLo  = RegInit(UWord, 0.U)
-  val c0Rdata = c0Inst.mfc0.rdata
-  val divRes  = div.io.out.bits
+  import MduType._
+  // alias  ==========================================================
+  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
+  val isDiv                      = (mduType.isOneOf(DIV, DIVU)) && instValid
+  val isMult                     = (mduType.isOneOf(MULT, MULTU)) && instValid
+  val isClz                      = (mduType === CLZ) && instValid
+  val isHi                       = (mduType.isOneOf(MFHI, MTHI)) && instValid
+  val isLo                       = (mduType.isOneOf(MFLO, MTLO)) && instValid
+  val isMtc0                     = (mduType === MduType.MTC0) && instValid
+  val isMfc0                     = (mduType === MduType.MFC0) && instValid
+  val isBlock                    = mduType.isOneOf(TLBP, MULT, MULTU, MUL, MADD, MADDU, MSUB, MSUBU, DIV, DIVU, CLZ) && instValid
+
+  // multiplier ======================================================
+  val mul   = Module(new Multiplier)
+  val mulIn = mul.io.in.bits
+  mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD))
+  mulIn.isAdd  := mduType.isOneOf(MADD, MADDU)
+  mulIn.isSub  := mduType.isOneOf(MSUB, MSUBU)
+  (0 to srcDataNum).foreach(i => { mulIn.srcs(i) := srcs(i) })
   val multRes = mul.io.out.bits
 
-  //fuSel shoule be one-hot,notice instValid!!
-  val isDiv  = (mduType === MduType.DIV || mduType === MduType.DIVU) && instValid
-  val isMult = (mduType === MduType.MULT || mduType === MduType.MULTU) && instValid
-  val isClz  = (mduType === MduType.CLZ) && instValid
-  val isHi   = (mduType === MduType.MFHI || mduType === MduType.MTHI) && instValid
-  val isLo   = (mduType === MduType.MFLO || mduType === MduType.MTLO) && instValid
-  val isMtc0 = (mduType === MduType.MTC0) && instValid
-  val isMfc0 = (mduType === MduType.MFC0) && instValid
+  // divider =========================================================
+  val div   = Module(new Divider)
+  val divIn = div.io.in.bits
+  divIn.isSign := mduType === DIV
+  (0 to srcDataNum).foreach(i => { divIn.srcs(i) := srcs(i) })
+  val divRes = div.io.out.bits
 
-  //TODO:dataQ size
+  // count leader ====================================================
+  val clz = Module(new CountLeadZero)
+  clz.io.in.bits := srcs(0)
+
+  //mfc0 =============================================================
+  val c0Addr = srcs(0)(7, 0)
+  asg(c0Inst.mfc0.addr, c0Addr)
+  val c0Rdata = c0Inst.mfc0.rdata
+
+  // tlb instr ========================================================
+  import chisel3.util.experimental.BoringUtils._
+  // only tlbp will block, need res
+  val tlbpReq  = Bool()
+  val tlbpRes  = Bool()
+  val tlbrReq  = Bool()
+  val tlbwiReq = Bool()
+  val tlbwrReq = Bool()
+  addSource(tlbpReq, "tlbpReq")
+  addSink(tlbpRes, "tlbpRes")
+  addSource(tlbrReq, "tlbrReq")
+  addSource(tlbwiReq, "tlbwiReq")
+  addSource(tlbwrReq, "tlbwrReq")
+
+  val fuOutValid = List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
+  val fuOutData  = List(multRes, divRes, clz.io.out.bits, 0.U)
+
+  // speculate ============================================================================
+  val specHi    = RegInit(UWord, 0.U)
+  val specLo    = RegInit(UWord, 0.U)
   val data64Q   = Module(new Queue(gen = UInt(64.W), entries = 4, hasFlush = true)) //muldiv
-  val data32Q   = Module(new Queue(gen = UWord, entries = 8, hasFlush = true)) //mtc0 mthi mtlo
+  val data32Q   = Module(new Queue(gen = UWord, entries = 4, hasFlush = true)) //mtc0 mthi mtlo
   val mtc0AddrQ = Module(new Queue(gen = CP0Idx, entries = 4, hasFlush = true)) //mtc0 addr
   asg(data64Q.io.flush.get, io.flush)
   asg(data32Q.io.flush.get, io.flush)
   asg(mtc0AddrQ.io.flush.get, io.flush)
+
+  // automat ================================================================================
+  val run :: block :: Nil = Enum(2)
+  val blockDone           = RegInit(false.B)
+  // state
+  val state    = RegInit(run)
+  val blockRes = UInt(64.W) // save res for clz mul mult div ...
+  exeStageIO.out.valid := false.B //default
+  switch(state) {
+    is(run) {
+      exeStageIO.out.valid := !isBlock
+      state                := Mux(isBlock, block, run)
+      blockDone            := false.B
+    }
+    is(block) {
+      val validMask = VecInit(fuOutValid).asUInt
+      state := Mux(validMask.orR, run, block)
+      assert(PopCount(validMask) < 2.U) // one hot must
+      // want to faster
+      blockRes             := HoldUnless(Mux1H(validMask, fuOutData), validMask.orR)
+      exeStageIO.out.valid := validMask.orR
+    }
+  }
+
+// all valid and ready ==================================================
+  mul.io.in.valid := isMult && !blockDone
+  div.io.in.valid := isDiv && !blockDone
+  clz.io.in.valid := isClz && !blockDone
+  tlbpReq         := instValid && mduType === TLBP && !blockDone
+  val queueReadyIn = data32Q.io.enq.ready && data64Q.io.enq.ready && mtc0AddrQ.io.enq.ready
+  exeStageIO.in.ready := queueReadyIn && exeStageIO.out.fire || !instValid // in.ready depand on out.valid
+
+  // Output ===========================================================================
+  exeOut.wPrf.result := MuxCase(
+    blockRes, // include clz and mul, they are blocked and save result in it
+    Seq(
+      isHi   -> specHi,
+      isLo   -> specLo,
+      isMfc0 -> c0Rdata
+    )
+  )
+  exeOut.wPrf.wmask := Mux(mduType.isOneOf(MFC0, MFHI, MFLO, CLZ, MUL), "b1111".U, "b0000".U)
 
   /**
     * speculative:<exeStage>
@@ -113,10 +149,13 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     *   mtc0:data32 enq,mtc0addr enq
     */
   asg(data64Q.io.enq.valid, (isMult || isDiv) && exeStageIO.out.fire)
-  asg(data32Q.io.enq.valid, (mduType === MduType.MTHI || mduType === MduType.MTLO || isMtc0) && exeStageIO.out.fire)
+  asg(data32Q.io.enq.valid, (mduType.isOneOf(MTHI, MTLO) || isMtc0) && exeStageIO.out.fire)
   asg(mtc0AddrQ.io.enq.valid, isMtc0 && exeStageIO.out.fire)
+  tlbwiReq := instValid && mduType === TLBWI && exeStageIO.out.fire
+  tlbwrReq := instValid && mduType === TLBWR && exeStageIO.out.fire
+  tlbrReq  := instValid && mduType === TLBR && exeStageIO.out.fire
 
-  asg(data64Q.io.enq.bits, Mux(isDiv, divRes, multRes))
+  asg(data64Q.io.enq.bits, blockRes)
   asg(data32Q.io.enq.bits, Mux(isMtc0, srcs(1), srcs(0))) //mtc0:rt mthilo:rs
   asg(mtc0AddrQ.io.enq.bits, c0Addr)
 
@@ -166,62 +205,6 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     asg(specLo, archLo)
   }
 
-  // feed data/addr
-  val mdIOlist = List(mul.io, div.io)
-  val isSign   = (mduType === MduType.DIV || mduType === MduType.MULT)
-  List.tabulate(2)(i => {
-    asg(mdIOlist(i).in.bits.isSign, isSign)
-    asg(mdIOlist(i).in.bits.srcs, srcs)
-  })
-  asg(clz.io.in.bits, srcs(0))
-  asg(c0Inst.mfc0.addr, c0Addr)
-
-  //deal with fu.in.valid and fu.out.ready
-  val isMtMf = isHi | isLo | isMfc0 | isMtc0 //1 cycle inst
-  val fuSel  = VecInit(isMult, isDiv, isClz, isMtMf, !instValid)
-  val fuIn   = List(mul.io.in, div.io.in, clz.io.in)
-  val fuOut  = List(mul.io.out, div.io.out, clz.io.out)
-  (0 to 2).map(i => {
-    asg(fuIn(i).valid, fuSel(i))
-    asg(fuOut(i).ready, exeStageIO.out.ready)
-  })
-
-  /**
-    * deal with exeStge in.ready and out.valid
-    *   common form is:
-    *     out.valid = pipex_valid & readyGo
-    *     in.ready  = !pipex_valid || readyGo & io.out.ready
-    *   we have dealt with valid-rdy inside fu(mul/div/clz)
-    *     when certain fu has been selected(instvalid & kindMatch),use its out.valid and in.ready
-    *     when ishi|islo|ismtc0|ismfc0:
-    *       always readyGo
-    *       so out.valid is true,so in.ready = out.ready
-    *     when !instValid:
-    *       out.valid=false,in.ready=true
-    */
-  asg(
-    exeStageIO.out.valid,
-    Mux1H(fuSel, VecInit(fuOut(0).valid, fuOut(1).valid, fuOut(2).valid, true.B, false.B))
-  )
-
-  //it's the most simple way to block exestage.in
-  val queueReadyIn = data32Q.io.enq.ready && data64Q.io.enq.ready && mtc0AddrQ.io.enq.ready
-  asg(
-    exeStageIO.in.ready,
-    Mux(
-      !queueReadyIn,
-      false.B,
-      Mux1H(fuSel, VecInit(fuIn(0).ready, fuIn(1).ready, fuIn(2).ready, io.out.ready, true.B))
-    )
-  )
-
-  //get the result
-  val rdata = Mux(isHi, specHi, Mux(isLo, specLo, c0Rdata))
-  asg(
-    exeOut.wPrf.result,
-    Mux(isClz, clz.io.out.bits, rdata)
-  )
-  asg(exeOut.wPrf.wmask, 15.U(4.W))
   // DiffTest ============================================================
   import difftest.DifftestArchHILO
   if (verilator) {

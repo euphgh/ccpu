@@ -80,9 +80,14 @@ object ExcCode extends ChiselEnum {
 
 object FrontExcCode extends ChiselEnum {
   val AdEL, InvalidTLBL, RefillTLBL, NONE = Value
+  def happen(code:   FrontExcCode.Type): Bool         = code =/= NONE
+  def isRefill(code: FrontExcCode.Type): Bool         = code === RefillTLBL
+  def trans(code:    FrontExcCode.Type): ExcCode.Type = Mux(code === AdEL, ExcCode.AdEL, ExcCode.TLBL)
 }
 
 trait MycpuParam {
+  val verilator = true
+  val vivado    = !verilator
   // General Parameter for mycpu
 
   val excCodeWidth     = 5
@@ -108,7 +113,7 @@ trait MycpuParam {
   val renameNum   = 3
   val dispatchNum = 3
   val wBNum       = 3
-  val issueNum    = 2 //should be 4
+  val issueNum    = 4 //should be 4
   val srcDataNum  = 2
   val retireNum   = 2 //should be 4
 
@@ -123,7 +128,8 @@ trait MycpuParam {
   def PRegIdx = UInt(pRegAddrWidth.W)
   def ROBIdx  = UInt(robIndexWidth.W)
 
-  val tlbIndexWidth = 3
+  val tlbEntriesNum = 8
+  val tlbIndexWidth = log2Ceil(tlbEntriesNum)
   def TLBIdx        = UInt(tlbIndexWidth.W)
 
   val prfReadPortNum = srcDataNum * issueNum

@@ -16,4 +16,6 @@ class Mark[T <: Data](gen: T, init: T = 0.U) extends Module {
   when(end) {
     set := true.B
   }
+  asg(value.bits, mark)
+  asg(value.valid, set)
 }

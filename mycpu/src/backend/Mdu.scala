@@ -43,6 +43,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val isLo                       = (mduType.isOneOf(MFLO, MTLO)) && instValid
   val isMtc0                     = (mduType === MduType.MTC0) && instValid
   val isMfc0                     = (mduType === MduType.MFC0) && instValid
+  val isBlock                    = mduType.isOneOf(TLBP, MULT, MULTU, MUL, MADD, MADDU, MSUB, MSUBU, DIV, DIVU, CLZ) && instValid
 
   // multiplier ======================================================
   val mul   = Module(new Multiplier)
@@ -69,9 +70,22 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   asg(c0Inst.mfc0.addr, c0Addr)
   val c0Rdata = c0Inst.mfc0.rdata
 
-  val fuOut      = List(mul.io.out, div.io.out, clz.io.out)
-  val fuOutValid = List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid)
-  val fuOutData  = List(multRes, divRes, clz.io.out.bits)
+  // tlb instr ========================================================
+  import chisel3.util.experimental.BoringUtils._
+  // only tlbp will block, need res
+  val tlbpReq  = Bool()
+  val tlbpRes  = Bool()
+  val tlbrReq  = Bool()
+  val tlbwiReq = Bool()
+  val tlbwrReq = Bool()
+  addSource(tlbpReq, "tlbpReq")
+  addSink(tlbpRes, "tlbpRes")
+  addSource(tlbrReq, "tlbrReq")
+  addSource(tlbwiReq, "tlbwiReq")
+  addSource(tlbwrReq, "tlbwrReq")
+
+  val fuOutValid = List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
+  val fuOutData  = List(multRes, divRes, clz.io.out.bits, 0.U)
 
   // speculate ============================================================================
   val specHi    = RegInit(UWord, 0.U)
@@ -83,31 +97,36 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   asg(data32Q.io.flush.get, io.flush)
   asg(mtc0AddrQ.io.flush.get, io.flush)
 
-// all valid and ready ==================================================
-  mul.io.in.valid := isMult
-  div.io.in.valid := isDiv
-  clz.io.in.valid := isClz
-  val queueReadyIn = data32Q.io.enq.ready && data64Q.io.enq.ready && mtc0AddrQ.io.enq.ready
-  exeStageIO.in.ready := queueReadyIn && io.out.ready || instValid
-
   // automat ================================================================================
   val run :: block :: Nil = Enum(2)
-  val state               = RegInit(run)
-  val blockRes            = RegInit(0.U(64.W)) // save res for clz mul mult div ...
+  val blockDone           = RegInit(false.B)
+  // state
+  val state    = RegInit(run)
+  val blockRes = UInt(64.W) // save res for clz mul mult div ...
   exeStageIO.out.valid := false.B //default
   switch(state) {
     is(run) {
-      val isBlock = mduType.isOneOf(MULT, MULTU, MUL, MADD, MADDU, MSUB, MSUBU, DIV, DIVU, CLZ)
-      io.out.valid := instValid && isBlock
-      state        := Mux(isBlock, block, run)
+      exeStageIO.out.valid := !isBlock
+      state                := Mux(isBlock, block, run)
+      blockDone            := false.B
     }
     is(block) {
       val validMask = VecInit(fuOutValid).asUInt
       state := Mux(validMask.orR, run, block)
       assert(PopCount(validMask) < 2.U) // one hot must
-      blockRes := Mux1H(validMask, fuOutData)
+      // want to faster
+      blockRes             := HoldUnless(Mux1H(validMask, fuOutData), validMask.orR)
+      exeStageIO.out.valid := validMask.orR
     }
   }
+
+// all valid and ready ==================================================
+  mul.io.in.valid := isMult && !blockDone
+  div.io.in.valid := isDiv && !blockDone
+  clz.io.in.valid := isClz && !blockDone
+  tlbpReq         := instValid && mduType === TLBP && !blockDone
+  val queueReadyIn = data32Q.io.enq.ready && data64Q.io.enq.ready && mtc0AddrQ.io.enq.ready
+  exeStageIO.in.ready := queueReadyIn && exeStageIO.out.fire || !instValid // in.ready depand on out.valid
 
   // Output ===========================================================================
   exeOut.wPrf.result := MuxCase(
@@ -118,7 +137,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
       isMfc0 -> c0Rdata
     )
   )
-  asg(exeOut.wPrf.wmask, "b1111".U)
+  exeOut.wPrf.wmask := Mux(mduType.isOneOf(MFC0, MFHI, MFLO, CLZ, MUL), "b1111".U, "b0000".U)
 
   /**
     * speculative:<exeStage>
@@ -129,6 +148,9 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   asg(data64Q.io.enq.valid, (isMult || isDiv) && exeStageIO.out.fire)
   asg(data32Q.io.enq.valid, (mduType.isOneOf(MTHI, MTLO) || isMtc0) && exeStageIO.out.fire)
   asg(mtc0AddrQ.io.enq.valid, isMtc0 && exeStageIO.out.fire)
+  tlbwiReq := instValid && mduType === TLBWI && exeStageIO.out.fire
+  tlbwrReq := instValid && mduType === TLBWR && exeStageIO.out.fire
+  tlbrReq  := instValid && mduType === TLBR && exeStageIO.out.fire
 
   asg(data64Q.io.enq.bits, blockRes)
   asg(data32Q.io.enq.bits, Mux(isMtc0, srcs(1), srcs(0))) //mtc0:rt mthilo:rs

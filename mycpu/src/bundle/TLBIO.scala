@@ -30,20 +30,3 @@ class TLBSearchIO extends MycpuBundle {
   val req = Valid(UWord)
   val res = Input(new TLBSearchRes)
 }
-
-class TLBReadIO extends MycpuBundle {
-  val req = Decoupled(TLBIdx)
-  val res = Output(new TLBEntry)
-}
-
-class TLBWriteIO extends MycpuBundle {
-  val req = Decoupled(new Bundle {
-    val idx   = TLBIdx
-    val entry = new TLBEntry
-  })
-}
-
-class TLBProbe extends MycpuBundle {
-  val req = Decoupled(UWord)
-  val res = Valid(TLBIdx) // res.valid = true when has entry match
-}

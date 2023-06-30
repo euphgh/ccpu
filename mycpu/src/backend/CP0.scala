@@ -116,4 +116,29 @@ class CP0 extends BasicCOP with MycpuParam {
       statusReg.ie === 1.U(1.W) &&
       statusReg.exl === 0.U(1.W)
   BoringUtils.addSource(hasInt, "hasInterrupt")
+
+  // DiffTest ===============================================
+  import difftest.DifftestArchCP0
+  if (verilator) {
+    val checkCP0Regs = Module(new DifftestArchCP0)
+    checkCP0Regs.io.index    := indexReg.read
+    checkCP0Regs.io.random   := randomReg.read
+    checkCP0Regs.io.entrylo0 := entrylo0Reg.read
+    checkCP0Regs.io.entrylo1 := entrylo1Reg.read
+    checkCP0Regs.io.context  := contextReg.read
+    checkCP0Regs.io.pagemask := pagemaskReg.read
+    checkCP0Regs.io.wire     := wireReg.read
+    checkCP0Regs.io.badvaddr := badvaddrReg.read
+    checkCP0Regs.io.count    := countReg.read
+    checkCP0Regs.io.entryhi  := entryhiReg.read
+    checkCP0Regs.io.compare  := compareReg.read
+    checkCP0Regs.io.status   := statusReg.read
+    checkCP0Regs.io.cause    := causeReg.read
+    checkCP0Regs.io.epc      := epcReg.read
+    checkCP0Regs.io.prid     := pridReg.read
+    checkCP0Regs.io.ebase    := ebaseReg.read
+    checkCP0Regs.io.config0  := config0Reg.read
+    checkCP0Regs.io.config1  := config1Reg.read
+    BoringUtils.addSink(checkCP0Regs.io.en, "hasValidRetire")
+  }
 }

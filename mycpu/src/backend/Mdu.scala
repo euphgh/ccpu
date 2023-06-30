@@ -5,6 +5,8 @@ import bundle._
 import chisel3._
 import chisel3.util._
 import utils._
+import difftest.DiffArchHiloIO
+import chisel3.util.experimental.BoringUtils._
 
 class MulDivIO extends MycpuBundle {
   val in = Flipped(Decoupled(new Bundle {
@@ -220,5 +222,12 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     Mux(isClz, clz.io.out.bits, rdata)
   )
   asg(exeOut.wPrf.wmask, 15.U(4.W))
-
+  // DiffTest ============================================================
+  import difftest.DifftestArchHILO
+  if (verilator) {
+    val checkHILORegs = Module(new DifftestArchHILO)
+    checkHILORegs.io.hi := archHi
+    checkHILORegs.io.lo := archLo
+    addSink(checkHILORegs.io.en, "hasValidRetire")
+  }
 }

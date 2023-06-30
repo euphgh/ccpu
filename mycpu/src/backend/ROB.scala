@@ -429,4 +429,22 @@ class ROB extends MycpuModule {
       io.in.fromDispatcher(i).ready := robEntries.io.push(i).ready
     })
   }
+  //DiffTest ===================================================
+  import difftest.DifftestInstrCommit
+  if (verilator) {
+    import chisel3.util.experimental.BoringUtils._
+    val checkRetire = Module(new DifftestInstrCommit)
+    checkRetire.io.retireNum := PriorityEncoder((0 until retireNum).map(io.out.multiRetire(_).valid))
+    checkRetire.io.lastPC := PriorityMux(
+      (0 to retireNum)
+        .map(i => {
+          io.out.multiRetire(i).valid -> retirePcVal(i)
+        })
+        .reverse
+    )
+    checkRetire.io.interrSeq := Mux(io.out.exCommit.bits.detect.excCode === ExcCode.Int, 0.U, retireNum.U)
+    checkRetire.io.en        := true.B
+    val validRetire = checkRetire.io.retireNum > 0.U
+    addSource(validRetire, "hasValidRetire")
+  }
 }

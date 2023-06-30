@@ -5,6 +5,7 @@ import chisel3._
 import chisel3.util._
 import utils.asg
 import utils.BytesWordUtils._
+import difftest.DifftestArchIntRegState
 
 /**
   * connect rs.out.renamed.srcPregs to prf.readPorts.addr in Backend
@@ -56,5 +57,16 @@ class Prf extends MycpuModule {
       asg(this.io.readPorts(i)(1).addr, raddr(i)(1))
     })
     (0 until issueNum).map(i => { (0 until srcDataNum).map(j => this.io.readPorts(i)(j).data) })
+  }
+  //DiffTest ===================================================
+  if (verilator) {
+    import chisel3.util.experimental.BoringUtils._
+    val pRegNumOfArchReg = Vec(32, PRegIdx)
+    addSink(pRegNumOfArchReg, "DiffArchRegNums")
+    val checkArchRegs = Module(new DifftestArchIntRegState)
+    (0 until 32).foreach(i => {
+      checkArchRegs.io.gpr(i) := phyRegs(pRegNumOfArchReg(i))
+    })
+    addSink(checkArchRegs.io.en, "hasValidRetire")
   }
 }

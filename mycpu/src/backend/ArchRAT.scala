@@ -6,12 +6,12 @@ import chisel3._
 import frontend._
 import chisel3.util._
 import utils.asg
+import chisel3.util.experimental.BoringUtils._
 
 class ArchRAT extends MycpuModule {
   val io = IO(new Bundle {
-    val retire        = Vec(retireNum, Valid(new RATWriteBackIO))
-    val recover       = Vec(aRegNum, new SRATEntry)
-    val prfWritePorts = Vec(wBNum, Flipped(Valid(new WPrfBundle)))
+    val retire  = Vec(retireNum, Valid(new RATWriteBackIO))
+    val recover = Vec(aRegNum, new SRATEntry)
   })
   val pIdxMap = RegInit(VecInit((0 until aRegNum).map(i => i.U(pRegAddrWidth.W))))
   (0 to aRegNum).foreach(i => {
@@ -25,11 +25,6 @@ class ArchRAT extends MycpuModule {
     }
     io.recover(i).inPrf := true.B
     io.recover(i).pIdx  := pIdxMap(i)
+    addSource(pIdxMap, "DiffArchRegNums")
   })
-
-  val prf = Module(new Prf)
-  asg(prf.io.writePorts, io.prfWritePorts)
-  def readPrf(raddr: Vec[Vec[UInt]]) = {
-    prf.read(raddr)
-  }
 }

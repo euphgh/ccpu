@@ -22,6 +22,7 @@ class Backend extends MycpuModule {
   //component
   val dispatcher = Module(new Dispatcher)
   val arat       = Module(new ArchRAT)
+  val prf        = Module(new Prf)
   val rob        = Module(new ROB)
   val mAluRS     = Module(new RS(rsKind = FuType.MainAlu, rsSize = 4))
   val sAluRS     = Module(new RS(rsKind = FuType.SubAlu, rsSize = 4))
@@ -127,7 +128,7 @@ class Backend extends MycpuModule {
   (0 until issueNum).map(i => {
     (0 until srcDataNum).map(j => raddrs(i)(j) := fuSrcPIdx(i)(j).pIdx)
   })
-  val rdata = arat.readPrf(raddrs)
+  val rdata = prf.read(raddrs)
   (0 until issueNum).map(i => {
     (0 until srcDataNum).map(j => fuRdata(i)(j) := rdata(i)(j))
   })
@@ -153,7 +154,7 @@ class Backend extends MycpuModule {
     robToArat(i).bits  := mulRe(i).bits.toArat
   })
   asg(arat.io.retire, robToArat) //Retire->arat
-  asg(arat.io.prfWritePorts, wPrf) //WB->Prf
+  asg(prf.io.writePorts, wPrf) //WB->Prf
 
   //lsu extra
   (0 until retireNum).map(i => asg(lsuFU.scommit(i), mulRe(i).valid && mulRe(i).bits.scommit))

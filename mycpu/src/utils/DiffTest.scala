@@ -28,7 +28,24 @@ class DiffArchHiloIO extends DifftestBundle {
 }
 
 class DiffArchCopIO extends DifftestBundle {
-  val status = Input(UInt(32.W))
+  val index    = Input(UInt(32.W))
+  val random   = Input(UInt(32.W))
+  val entrylo0 = Input(UInt(32.W))
+  val entrylo1 = Input(UInt(32.W))
+  val context  = Input(UInt(32.W))
+  val pagemask = Input(UInt(32.W))
+  val wire     = Input(UInt(32.W))
+  val badvaddr = Input(UInt(32.W))
+  val count    = Input(UInt(32.W))
+  val entryhi  = Input(UInt(32.W))
+  val compare  = Input(UInt(32.W))
+  val status   = Input(UInt(32.W))
+  val cause    = Input(UInt(32.W))
+  val epc      = Input(UInt(32.W))
+  val prid     = Input(UInt(32.W))
+  val ebase    = Input(UInt(32.W))
+  val config0  = Input(UInt(32.W))
+  val config1  = Input(UInt(32.W))
 }
 
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {

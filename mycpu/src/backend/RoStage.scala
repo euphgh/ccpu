@@ -38,11 +38,11 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   val outBits = io.out.bits
   val inBits  = io.in.bits
   val inBasic = inBits.basic
-  val inUop   = inBasic.decoded
-  asg(outBits.decoded, inBasic.decoded)
+  val inUop   = inBits.uOp
+  asg(outBits.uOp, inBits.uOp)
   asg(outBits.destPregAddr, inBasic.destPregAddr)
   asg(outBits.destAregAddr, inBasic.destAregAddr)
-  asg(outBits.exception, inBasic.exception)
+  asg(outBits.exDetect, inBasic.exDetect)
   asg(outBits.robIndex, inBasic.robIndex)
 
   /**
@@ -68,7 +68,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
   //alu special
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
-    val aluType = inUop.aluType
+    val aluType = inUop.aluType.get
     //bypass
     val bypass = io.datasFromBypass.get
     val pSrcs  = inBasic.srcPregs
@@ -91,25 +91,28 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val low26     = maExtraIn.low26
       val imm       = low26(15, 0)
       //count target
-      val brType            = inUop.brType
+      val brType            = inUop.brType.get
+      val dsPcVal           = maExtraIn.pcVal
       val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
       val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
-      val jDest             = Cat(maExtraIn.dsPcVal(31, 28), low26, 0.U(2.W))
+      val jDest             = Cat(dsPcVal(31, 28), low26, 0.U(2.W))
       val jrDest            = outSrcs(0)
       //extra take:select target,connect preRes
-      val outBranch = outBits.branch.get
+      val outBranch   = outBits.branch.get
+      val realBtbType = BranchType.toBtbType(inUop.brType.get, low26(25, 21)) //rs用于判断是否jret
+      asg(outBranch.realBtbType, realBtbType)
       asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
-      asg(outBranch.predictResult, maExtraIn.predictResult)
+      asg(outBranch.predict, maExtraIn.predictResult)
       //srcs select
       when(AluType.useImm(aluType)) { asg(outSrcs(1), imm) }
       when(AluType.needSa(aluType)) { asg(outSrcs(0), imm(10, 6)) }
-      when(isAl) { asg(outSrcs(1), maExtraIn.dsPcVal + 4.U) }
+      when(isAl) { asg(outSrcs(1), dsPcVal + 4.U) }
     }
   }
 
   //mdu special
   if (fuKind == FuType.Mdu) {
-    val op = inBasic.decoded.mduType
+    val op = inUop.mduType.get
     when(MduType.isC0Inst(op)) {
       asg(outSrcs(0), ZeroExt(inBits.c0Addr.get, 32))
     }

@@ -35,7 +35,7 @@ class MemStage2 extends MycpuModule {
   val inBits  = io.in.bits
   outBits.wbRob.robIndex     := inBits.wbInfo.robIndex
   outBits.wbRob.isMispredict := false.B
-  outBits.wbRob.exception    := inBits.exception
+  outBits.wbRob.exDetect     := inBits.exDetect
   outBits.wPrf.pDest         := inBits.wbInfo.destPregAddr
   outBits.destAregAddr       := inBits.wbInfo.destAregAddr
   // ======================  Cache ============================
@@ -44,7 +44,7 @@ class MemStage2 extends MycpuModule {
   val coutBit = cache2.io.out.bits
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
-  asg(cinBit.cancel, inBits.exception.happen)
+  asg(cinBit.cancel, inBits.exDetect.happen)
   asg(cinBit.isUncached, inBits.isUncache)
   asg(cinBit.cancel, io.querySQ.res.memMask === 0.U) // storeQ find
   cache2.io.in.valid := io.in.valid

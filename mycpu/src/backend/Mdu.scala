@@ -5,6 +5,8 @@ import bundle._
 import chisel3._
 import chisel3.util._
 import utils._
+import difftest.DiffArchHiloIO
+import chisel3.util.experimental.BoringUtils._
 
 class MulDivIO extends MycpuBundle {
   val in = Flipped(Decoupled(new Bundle {
@@ -67,17 +69,15 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val exeIn  = exeStageIO.in.bits
   val exeOut = exeStageIO.out.bits
 
-
-   val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
+  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.uOp.mduType.get)
   val c0Addr                     = srcs(0)(7, 0)
-
 
   //unchange connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
   asg(exeOut.wbRob.isMispredict, false.B) //must set to false,and will not change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
-  asg(exeOut.wbRob.exception, exeIn.exception) //no exception happen here
+  asg(exeOut.wbRob.exDetect, exeIn.exDetect) //no exception happen here
 
   //6 "fu" here
   val mul     = Module(new Multiplier)
@@ -222,5 +222,12 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     Mux(isClz, clz.io.out.bits, rdata)
   )
   asg(exeOut.wPrf.wmask, 15.U(4.W))
-
+  // DiffTest ============================================================
+  import difftest.DifftestArchHILO
+  if (verilator) {
+    val checkHILORegs = Module(new DifftestArchHILO)
+    checkHILORegs.io.hi := archHi
+    checkHILORegs.io.lo := archLo
+    addSink(checkHILORegs.io.en, "hasValidRetire")
+  }
 }

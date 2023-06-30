@@ -183,7 +183,7 @@ class IfStage1 extends MycpuModule {
   (0 until fetchNum).foreach(i => {
     btbout(i)         := btb.access(PCs(i))
     phtout(i)         := pht.access(PCs(i))
-    bpuout(i).brType  := btbout(i).instType
+    bpuout(i).btbType := btbout(i).instType
     bpuout(i).target  := btbout(i).target
     bpuout(i).counter := phtout
   })
@@ -193,8 +193,8 @@ class IfStage1 extends MycpuModule {
   val takeMask    = Wire(UInt(fetchNum.W))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
   (0 until fetchNum).foreach(i => {
-    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).brType === BtbType.b
-    val isTakeJp = BtbType.isJump(bpuout(i).brType)
+    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).btbType === BtbType.b
+    val isTakeJp = BtbType.isJump(bpuout(i).btbType)
     takeMask(i)    := isTakeJp || isTakeBr
     validBranch(i) := takeMask(i) && alignMask(i)
   })
@@ -211,24 +211,29 @@ class IfStage1 extends MycpuModule {
 
   // use regs in, only combinatorial logic ================
   // >> output ================
-  val inst4to2  = pc(3, 2)
+  val inst4to2  = pc(4, 2)
   val addrError = pc(1, 0).orR
   io.toPreIf.pcVal  := pc
   io.out.bits.pcVal := pc
   import chisel3.util.experimental.decode._
-  val alignMask = decoder(
-    inst4to2,
-    TruthTable(
-      Seq(
-        BitPat("b?00") -> BitPat("b1111"),
-        BitPat("b100") -> BitPat("b1111"),
-        BitPat("b101") -> BitPat("b0111"),
-        BitPat("b110") -> BitPat("b0011"),
-        BitPat("b111") -> BitPat("b0001")
-      ),
-      BitPat("b1111")
+  val alignMask = Mux(
+    isDelaySlot,
+    "b0001".U,
+    decoder(
+      inst4to2,
+      TruthTable(
+        Seq(
+          BitPat("b?00") -> BitPat("b1111"),
+          BitPat("b100") -> BitPat("b1111"),
+          BitPat("b101") -> BitPat("b0111"),
+          BitPat("b110") -> BitPat("b0011"),
+          BitPat("b111") -> BitPat("b0001")
+        ),
+        BitPat("b1111")
+      )
     )
   )
+
   // >> tlb ================
   val tlbRes = io.tlb.res
   val tlbExp = tlbRes.refill || !tlbRes.hit

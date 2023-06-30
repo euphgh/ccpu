@@ -124,16 +124,26 @@ class MemStage1 extends MycpuModule {
     )
   )
   val badAddr = Valid(UWord)
-  badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exception.happen
+  badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exDetect.happen
   badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
   addSource(badAddr, "mem1BadAddr")
-  when(tlbExp || addrErrExp) {
-    toM2Bits.exception.happen  := true.B
-    toM2Bits.exception.excCode := Mux(tlbExp, tlbExcCode, Mux(isWriteReq, ExcCode.AdES, ExcCode.AdEL))
-    toM2Bits.exception.refill  := tlbRes.refill
-  }
+  val inEx   = inBits.exDetect
+  val toM2Ex = toM2Bits.exDetect
+  asg(toM2Ex.happen, inEx.happen || tlbExp || addrErrExp)
+  asg(toM2Ex.refill, inEx.refill || (tlbExp && tlbRes.refill))
+  asg(
+    toM2Ex.excCode,
+    MuxCase(
+      ExcCode.AdEL, //dontcare,no exception happen
+      Seq(
+        inEx.happen -> inEx.excCode,
+        addrErrExp  -> Mux(isWriteReq, ExcCode.AdES, ExcCode.AdEL),
+        tlbExp      -> tlbExcCode
+      )
+    )
+  )
   when(!inBits.isRoStage) {
-    toM2Bits.exception.happen := false.B
+    toM2Bits.exDetect.happen := false.B
   }
 
   val lateMemRdy = toStoreQ.ready && toMem2.ready

@@ -12,7 +12,7 @@ class Frontend extends MycpuModule {
     val redirect = Flipped(new FrontRedirctIO)
     val out      = Vec(decodeNum, Decoupled(new InstBufferOutIO))
 
-    val tlb         = new TLBSearchIO
+    val tlbSearch   = new TLBSearchIO
     val imem        = new DramReadIO
     val bpuUpdateIn = Flipped(Valid(new BpuUpdateIO))
     val icacheInst =
@@ -26,7 +26,7 @@ class Frontend extends MycpuModule {
   asg(instFetch.io.bpuUpdateIn, io.bpuUpdateIn)
   asg(instFetch.io.imem, io.imem)
   asg(instFetch.io.redirect, io.redirect)
-  asg(instFetch.io.tlb, io.tlb)
+  instFetch.io.tlb <> io.tlbSearch
   if (enableCacheInst) { asg(instFetch.io.icacheInst.get, io.icacheInst.get) }
 
   instFetch.io.out <> instBuffer.io.in //not pipeline connect

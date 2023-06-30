@@ -13,9 +13,10 @@ import utils._
 //io.out.wprf can use as bypass
 class FuncUnit(kind: FuType.t) extends MycpuModule {
   val io = IO(new Bundle {
-    val in    = Flipped(Decoupled(new RsOutIO(kind)))
-    val out   = Decoupled(new FunctionUnitOutIO)
-    val flush = Input(Bool())
+    val in        = Flipped(Decoupled(new RsOutIO(kind)))
+    val out       = Decoupled(new FunctionUnitOutIO)
+    val roOutFire = Output(Bool())
+    val flush     = Input(Bool())
 
     val datasFromPrf = Vec(srcDataNum, Input(UInt(dataWidth.W)))
     //valid is pipex_valid
@@ -24,6 +25,11 @@ class FuncUnit(kind: FuType.t) extends MycpuModule {
   })
   val roStage = Module(new RoStage(fuKind = kind))
   roStage.io.in <> io.in
+  asg(io.roOutFire, roStage.io.out.fire)
   asg(roStage.io.datasFromPrf, io.datasFromPrf)
-  if (FuType.needByPassIn(kind)) { asg(roStage.io.datasFromBypass.get, io.bypassIn.get) }
+
+  if (FuType.needByPassIn(kind)) {
+    asg(roStage.io.datasFromBypass.get(0), io.bypassIn.get) //来自brother fu
+    asg(roStage.io.datasFromBypass.get(1), io.out.bits.wPrf) //来自本条流水线
+  }
 }

@@ -8,12 +8,7 @@ import chisel3.util._
 import utils._
 
 class TLB extends MycpuModule {
-
   val search  = IO(Vec(2, Flipped(new TLBSearchIO)))
-  val read    = IO(new TLBReadIO)
-  val probe   = IO(new TLBProbe)
-  val write   = IO(new TLBWriteIO)
-
   val entries = Reg(VecInit.fill(tlbEntriesNum)(0.U.asTypeOf(new TLBEntry)))
   // aliases =======================================
   import cop._

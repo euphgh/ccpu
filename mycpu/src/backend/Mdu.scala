@@ -26,9 +26,6 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val exeIn  = exeStageIO.in.bits
   val exeOut = exeStageIO.out.bits
 
-  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.uOp.mduType.get)
-  val c0Addr                     = srcs(0)(7, 0)
-
   //unchange connect
   asg(exeOut.destAregAddr, exeIn.destAregAddr)
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
@@ -38,7 +35,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
 
   import MduType._
   // alias  ==========================================================
-  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.decoded.mduType)
+  val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.uOp.mduType.get)
   val isDiv                      = (mduType.isOneOf(DIV, DIVU)) && instValid
   val isMult                     = (mduType.isOneOf(MULT, MULTU)) && instValid
   val isClz                      = (mduType === CLZ) && instValid

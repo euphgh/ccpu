@@ -153,7 +153,7 @@ class CP0 extends BasicCOP with MycpuParam {
     ) & statusReg.im) =/= 0.U(8.W)) &&
       statusReg.ie === 1.U(1.W) &&
       statusReg.exl === 0.U(1.W)
-  BoringUtils.addSource(hasInt, "hasInterrupt")
+  addSource(hasInt, "hasInterrupt")
 
   // DiffTest ===============================================
   import difftest.DifftestArchCP0
@@ -177,7 +177,7 @@ class CP0 extends BasicCOP with MycpuParam {
     checkCP0Regs.io.ebase    := ebaseReg.read
     checkCP0Regs.io.config0  := config0Reg.read
     checkCP0Regs.io.config1  := config1Reg.read
-    BoringUtils.addSink(checkCP0Regs.io.en, "hasValidRetire")
+    addSink(checkCP0Regs.io.en, "hasValidRetire")
   }
 
 }

@@ -8,79 +8,79 @@ import decodemacro.MacroDecode
 object AllInsts {
   def apply(): Seq[Tuple2[chisel3.util.BitPat, List[chisel3.ChiselEnum#Type]]] = {
     Seq(
-      ADD   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      ADDU  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SUB   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SUBU  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      AND   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      OR    -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      XOR   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      NOR   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SLT   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SLTU  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SLL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SRL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SRA   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SLLV  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SRLV  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      SRAV  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU),
-      MULT  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
-      MULTU -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
-      DIV   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
-      DIVU  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
-      MFHI  -> List(SRCType.noSRC, DSTType.toRD, ChiselFuType.MDU),
-      MFLO  -> List(SRCType.noSRC, DSTType.toRD, ChiselFuType.MDU),
-      MTHI  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MDU),
-      MTLO  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MDU),
-      LB    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU),
-      LBU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU),
-      LH    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU),
-      LHU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU),
-      LW    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU),
-      LWL   -> List(SRCType.RSRT, DSTType.toRT, ChiselFuType.LSU),
-      LWR   -> List(SRCType.RSRT, DSTType.toRT, ChiselFuType.LSU),
-      SB    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
-      SH    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
-      SW    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
-      SWR   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
-      SWL   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
+      ADD   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.ADD),
+      ADDU  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.ADDU),
+      SUB   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SUB),
+      SUBU  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SUBU),
+      AND   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.AND),
+      OR    -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.OR),
+      XOR   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.XOR),
+      NOR   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.NOR),
+      SLT   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SLT),
+      SLTU  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SLTU),
+      SLL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SLL),
+      SRL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SRL),
+      SRA   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SRA),
+      SLLV  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SLLV),
+      SRLV  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SRLV),
+      SRAV  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.SubALU, AluType.SRAV),
+      MULT  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MULT, SpecialType.MULDIV),
+      MULTU -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MULTU, SpecialType.MULDIV),
+      DIV   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.DIV, SpecialType.MULDIV),
+      DIVU  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.DIVU, SpecialType.MULDIV),
+      MFHI  -> List(SRCType.noSRC, DSTType.toRD, ChiselFuType.MDU, MduType.MFHI),
+      MFLO  -> List(SRCType.noSRC, DSTType.toRD, ChiselFuType.MDU, MduType.MFLO),
+      MTHI  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MDU, MduType.MTHI, SpecialType.MTHI),
+      MTLO  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MDU, MduType.MTLO, SpecialType.MTLO),
+      LB    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU, MemType.LB, SpecialType.LOAD),
+      LBU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU, MemType.LBU, SpecialType.LOAD),
+      LH    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU, MemType.LH, SpecialType.LOAD),
+      LHU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU, MemType.LHU, SpecialType.LOAD),
+      LW    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU, MemType.LW, SpecialType.LOAD),
+      LWL   -> List(SRCType.RSRT, DSTType.toRT, ChiselFuType.LSU, MemType.LWL, SpecialType.LOAD),
+      LWR   -> List(SRCType.RSRT, DSTType.toRT, ChiselFuType.LSU, MemType.LWR, SpecialType.LOAD),
+      SB    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.SB, SpecialType.STORE),
+      SH    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.SH, SpecialType.STORE),
+      SW    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.SW, SpecialType.STORE),
+      SWR   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.SWR, SpecialType.STORE),
+      SWL   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.SWL, SpecialType.STORE),
       // U type
-      ADDI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      ADDUI   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      SLTI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      SLTIU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      ORI     -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      XORI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      LUI     -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU),
-      MFC0    -> List(SRCType.noSRC, DSTType.toRT, ChiselFuType.MDU),
-      MTC0    -> List(SRCType.RT, DSTType.noDST, ChiselFuType.MDU),
-      BREAK   -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
-      SYSCALL -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
-      ERET    -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
-      BEQ     -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
-      BNE     -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
-      BGEZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
-      BLEZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
-      BLTZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
-      BGTZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
-      BLTZAL  -> List(SRCType.RS, DSTType.to31, ChiselFuType.MainALU),
-      BGEZAL  -> List(SRCType.RS, DSTType.to31, ChiselFuType.MainALU),
+      ADDI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.ADDI),
+      ADDIU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.ADDIU),
+      SLTI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.SLTI),
+      SLTIU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.SLTIU),
+      ORI     -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.ORI),
+      XORI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.XORI),
+      LUI     -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.LUI),
+      MFC0    -> List(SRCType.noSRC, DSTType.toRT, ChiselFuType.MDU, MduType.MFC0),
+      MTC0    -> List(SRCType.RT, DSTType.noDST, ChiselFuType.MDU, MduType.MTC0, SpecialType.MTC0),
+      BREAK   -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU, DeExType.BP),
+      SYSCALL -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU, DeExType.SYS),
+      ERET    -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU, SpecialType.ERET),
+      BEQ     -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU, BranchType.BEQ),
+      BNE     -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU, BranchType.BNE),
+      BGEZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.BGEZ),
+      BLEZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.BLEZ),
+      BLTZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.BLTZ),
+      BGTZ    -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.BGTZ),
+      BLTZAL  -> List(SRCType.RS, DSTType.to31, ChiselFuType.MainALU, BranchType.BLTZAL),
+      BGEZAL  -> List(SRCType.RS, DSTType.to31, ChiselFuType.MainALU, BranchType.BGEZAL),
       //J type
-      J    -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
+      J    -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU, BranchType.J),
       JAL  -> List(SRCType.noSRC, DSTType.to31, ChiselFuType.MainALU, BranchType.JAL),
-      JR   -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
-      JALR -> List(SRCType.RS, DSTType.toRD, ChiselFuType.MainALU),
+      JR   -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.JR),
+      JALR -> List(SRCType.RS, DSTType.toRD, ChiselFuType.MainALU, BranchType.JALR),
       // for uboot
-      MUL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU),
-      MOVN  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU),
-      MOVZ  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU),
-      CACHE -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
+      MUL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU, MduType.MUL),
+      MOVN  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU), //TODO:
+      MOVZ  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU), //TODO:
+      CACHE -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.CACHEINST, SpecialType.CACHEINST),
       SYNC  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
-      JRHB  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
+      JRHB  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.JRHB, SpecialType.HB),
       // for linux
-      MADD  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
-      MADDU -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
-      MSUB  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU),
+      MADD  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADD),
+      MADDU -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADDU),
+      MSUB  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MSUB),
       TLBP  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
       TLBR  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
       TLBWI -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
@@ -89,7 +89,7 @@ object AllInsts {
       SC    -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU),
       TNE   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
       TEQ   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
-      CLZ   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU),
+      CLZ   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU, MduType.CLZ),
       PREF  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
       WAIT  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU)
     )
@@ -126,7 +126,7 @@ object AllInsts {
   //      6       5       5       16
   //      [31:26] [25:21] [20:16] [15:0]
   def ADDI  = BitPat("b001000_?????   ?????   ????? ????? ??????")
-  def ADDUI = BitPat("b001001_?????   ?????   ????? ????? ??????")
+  def ADDIU = BitPat("b001001_?????   ?????   ????? ????? ??????")
   def SLTI  = BitPat("b001010_?????   ?????   ????? ????? ??????")
   def SLTIU = BitPat("b001011_?????   ?????   ????? ????? ??????")
 
@@ -148,14 +148,14 @@ object AllInsts {
   //                   opcode  rs      rt      imm
   //                   6       5       5       16
   //                   [31:26] [25:21] [20:16] [15:0]
-  def ADDIU = BitPat("b001100  ?????   ?????   ????? ????? ??????")
-  def ORI   = BitPat("b001101  ?????   ?????   ????? ????? ??????")
-  def XORI  = BitPat("b001110  ?????   ?????   ????? ????? ??????")
-  def LUI   = BitPat("b001111  00000   ?????   ????? ????? ??????")
-  def MTHI  = BitPat("b000000  ?????   00000   00000 00000 010001")
-  def MTLO  = BitPat("b000000  ?????   00000   00000 00000 010011")
-  def MFC0  = BitPat("b010000  00000   ?????   ????? 00000 000???")
-  def MTC0  = BitPat("b010000  00100   ?????   ????? 00000 000???")
+  def ANDI = BitPat("b001100  ?????   ?????   ????? ????? ??????")
+  def ORI  = BitPat("b001101  ?????   ?????   ????? ????? ??????")
+  def XORI = BitPat("b001110  ?????   ?????   ????? ????? ??????")
+  def LUI  = BitPat("b001111  00000   ?????   ????? ????? ??????")
+  def MTHI = BitPat("b000000  ?????   00000   00000 00000 010001")
+  def MTLO = BitPat("b000000  ?????   00000   00000 00000 010011")
+  def MFC0 = BitPat("b010000  00000   ?????   ????? 00000 000???")
+  def MTC0 = BitPat("b010000  00100   ?????   ????? 00000 000???")
 
   def BREAK   = BitPat("b000000_?????   ?????   ????? ????? 001101")
   def SYSCALL = BitPat("b000000_?????   ?????   ????? ????? 001100")

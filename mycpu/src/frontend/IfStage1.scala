@@ -3,7 +3,7 @@ import bundle._
 import config._
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.conversions._
+
 import cache._
 import utils.asg
 import chisel3.util.experimental.decode._
@@ -223,14 +223,24 @@ class IfStage1 extends MycpuModule {
     takeMask(i)    := isTakeJp || isTakeBr
     validBranch(i) := takeMask(i) && alignMask(i)
   })
-  (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
-    Seq(
-      validBranch(0) -> (bpuout(0).target, alignMask(1), "b0011".U(4.W)),
-      validBranch(1) -> (bpuout(1).target, alignMask(2), "b0111".U(4.W)),
-      validBranch(2) -> (bpuout(2).target, alignMask(3), "b1111".U(4.W)),
-      validBranch(3) -> (bpuout(3).target, false.B, "b1111".U(4.W)) //dontcare dsmask
+
+  def getByVB[T <: Data](a: Seq[T]) = {
+    val res = PriorityMux(
+      validBranch.zip(a)
     )
-  )
+    res
+  }
+  io.toPreIf.predictDst := getByVB(bpuout.map(_.target))
+  io.toPreIf.dsFetched  := getByVB(Seq(alignMask(1), alignMask(2), alignMask(3), false.B))
+  dsMask                := getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
+  // (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
+  //   Seq(
+  //     validBranch(0) -> (bpuout(0).target, alignMask(1), "b0011".U(4.W)),
+  //     validBranch(1) -> (bpuout(1).target, alignMask(2), "b0111".U(4.W)),
+  //     validBranch(2) -> (bpuout(2).target, alignMask(3), "b1111".U(4.W)),
+  //     validBranch(3) -> (bpuout(3).target, false.B, "b1111".U(4.W)) //dontcare dsmask
+  //   )
+  // )
   val dsMaskVec    = Wire(Vec(fetchNum, Bool()))
   val alignMaskVec = Wire(Vec(fetchNum, Bool()))
   (0 until fetchNum).map(i => {

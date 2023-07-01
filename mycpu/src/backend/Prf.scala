@@ -61,8 +61,10 @@ class Prf extends MycpuModule {
   //DiffTest ===================================================
   if (verilator) {
     import chisel3.util.experimental.BoringUtils._
-    val pRegNumOfArchReg = Wire(Vec(32, PRegIdx))
-    addSink(pRegNumOfArchReg, "DiffArchRegNums")
+    val pRegNumOfArchReg = Wire(Vec(aRegNum, PRegIdx))
+    (0 until aRegNum).foreach(i => {
+      addSink(pRegNumOfArchReg(i), s"DiffArchRegNum$i")
+    })
     val checkArchRegs = Module(new DifftestArchIntRegState)
     (0 until 32).foreach(i => {
       checkArchRegs.io.gpr(i) := phyRegs(pRegNumOfArchReg(i))

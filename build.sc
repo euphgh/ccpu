@@ -2,6 +2,7 @@
 import mill._
 import mill.scalalib._
 import mill.scalalib.scalafmt.ScalafmtModule
+import mill.scalalib.TestModule.ScalaTest
 // support BSP
 import mill.bsp._
 
@@ -30,7 +31,7 @@ object submacro extends ChiselModule {
   )
 }
 
-object mycpu extends ChiselModule {
+object mycpu extends ChiselModule { m =>
   def moduleDeps = super.moduleDeps ++ Seq(submacro)
   override def scalacOptions = Seq(
     "-unchecked",
@@ -45,4 +46,9 @@ object mycpu extends ChiselModule {
     // "-Ywarn-unused",
     // "-Ymacro-annotations"
   )
+  object test extends Tests with ScalaTest {
+    override def ivyDeps = m.ivyDeps() ++ Agg(
+      ivy"edu.berkeley.cs::chiseltest:0.6.0"
+    )
+  }
 }

@@ -66,7 +66,7 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   //assume input is 1..0..
   if (allIn) {
     val enqValidNum = PopCount(io.push.map(_.valid))
-    (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(enqValidNum)))
+    (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(enqValidNum - 1.U)))
   } else {
     (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(i.U)))
   }
@@ -78,11 +78,14 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   headPtr := headPtr + enqFireNum
 
   //pop
-  (0 until deqNum).foreach(i => (io.pop(i).valid := !underflowR(i.U)))
+  (0 until deqNum).foreach(i => (io.pop(i).valid := !underflowR((i + 1).U)))
   tailPtr := tailPtr + deqFireNum
   (0 until deqNum).foreach(i => {
     io.pop(i).bits := ringBuffer(tailPtr + i.U)
   })
 
-  //TODO:flush
+  when(io.flush) {
+    headPtr := 0.U
+    tailPtr := 0.U
+  }
 }

@@ -81,14 +81,15 @@ object MacroDecode {
                 val start${name} = counter
                 val width${name} = ${rhs}.getWidth
                 counter += width${name}
+                val ${name} = $rhs()
                 """
               )
               bitPatGenCode.append(s"""
-              val opt${name} = const.find(_.isInstanceOf[${rhs}.Type])
+              val opt${name} = const.find(enumMatch(_, ${rhs}))
               val bip${name} = if (opt${name}.isDefined) chisel3.util.BitPat(opt${name}.get.litValue.U(width${name}.W)) 
                                           else chisel3.util.BitPat("b" + "?" * width${name})
               """)
-              bitPatRetCode.append(s" ## bip${name}")
+              bitPatRetCode.insert(0, s" ## bip${name}")
               assignCode.append(
                 s"${name} := ${rhs}.safe(tmp(start${name}+width${name}-1, start${name}))._1\n"
               )
@@ -101,14 +102,15 @@ object MacroDecode {
                 val start${name} = counter
                 val width${name} = ${rhs}.getWidth
                 counter += width${name}
+                val ${name} = $rhs()
                 """
               )
               bitPatGenCode.append(s"""
-              val opt${name} = const.find(_.isInstanceOf[${rhs}.Type])
+              val opt${name} = const.find(enumMatch(_, ${rhs}))
               val bip${name} = if (opt${name}.isDefined) chisel3.util.BitPat(opt${name}.get.litValue.U(width${name}.W)) 
                                           else chisel3.util.BitPat(${rhsTerm}.${default}.litValue.U(width${name}.W))
               """)
-              bitPatRetCode.append(s" ## bip${name}")
+              bitPatRetCode.insert(0, s" ## bip${name}")
               assignCode.append(
                 s"${name} := ${rhs}.safe(tmp(start${name}+width${name}-1, start${name}))._1\n"
               )
@@ -122,7 +124,12 @@ object MacroDecode {
           .mkString} { 
           var counter = 0
           ${constructCode.toString()}
-          ${body.map(_.toString()).mkString("\n")}
+          def enumMatch(a: ChiselEnum#Type, b: ChiselEnum):Boolean = {
+            a match {
+              case _: b.Type => true
+              case _ => false
+            }
+          }
           def trans(const: List[chisel3.ChiselEnum#Type]): chisel3.util.BitPat = {
             ${bitPatGenCode.toString()}
             ${bitPatRetCode.substring(3)}
@@ -163,7 +170,6 @@ object MacroDecode {
         c.Expr(res)
       }
       case _ => {
-        println("not match")
         c.abort(c.enclosingPosition, "hahaha")
       }
     }

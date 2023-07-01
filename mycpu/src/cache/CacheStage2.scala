@@ -206,8 +206,9 @@ class CacheStage2[T <: Data](
       w1data(victimRoad).req.valid := false.B
       w1meta(victimRoad).req.valid := false.B
       // default: cancel || unvalid
-      io.in.ready  := io.out.ready
-      io.out.valid := io.in.valid
+      io.in.ready                          := io.out.ready
+      io.out.valid                         := io.in.valid
+      if (!isDcache) io.out.bits.idata.get := 0.U
       when(!inBits.cancel && io.in.valid) {
         when(isCacheInst) {
           mainState := instr

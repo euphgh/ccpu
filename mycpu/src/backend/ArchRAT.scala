@@ -25,8 +25,6 @@ class ArchRAT extends MycpuModule {
     }
     io.recover(i).inPrf := true.B
     io.recover(i).pIdx  := pIdxMap(i)
-    (0 until aRegNum).foreach(i => {
-      addSource(pIdxMap(i), s"DiffArchRegNum$i")
-    })
   })
+  addSink(pIdxMap, s"DiffArchRegNum")
 }

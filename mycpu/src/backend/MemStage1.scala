@@ -214,6 +214,13 @@ class MemStage1 extends MycpuModule {
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
     io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
+    import frontend.ICacheInstIO
+    val toICache1 = Valid(new ICacheInstIO)
+    addSource(toICache1, "ICacheInstrReq")
+    toICache1.bits.index := cache1.io.in.bits.rwReq.get.lowAddr.index
+    toICache1.bits.taglo := cache1.io.in.bits.cacheInst.get.bits.taglo
+    toICache1.bits.op    := cache1.io.in.bits.cacheInst.get.bits.op
+    toICache1.valid      := cache1.io.in.valid && io.cacheIn.bits.cacheInst.get.valid
   }
 
 }

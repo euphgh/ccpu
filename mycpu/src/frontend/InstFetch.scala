@@ -5,6 +5,7 @@ import config._
 import chisel3.util._
 import utils.asg
 import utils.PipelineConnect
+import chisel3.util.experimental.BoringUtils
 
 /**
   * preif.in.redirect:
@@ -53,6 +54,7 @@ class InstFetch extends MycpuModule {
     asg(ifStage1.io.bpuUpdateIn.btb.valid, false.B)
     asg(ifStage1.io.bpuUpdateIn.pht.valid, false.B)
   }
+  if (enableCacheInst) BoringUtils.addSink(ifStage1.io.icacheInst.get, "ICacheInstrReq")
 
   //IF2 in
   PipelineConnect(ifStage1.io.out, ifStage2.io.in, ifStage2.io.out.fire, preIfStage.io.in.redirect.flush)

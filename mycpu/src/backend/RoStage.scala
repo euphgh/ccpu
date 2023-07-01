@@ -82,8 +82,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     //subAlu：(imm as src2)|(sa as src1)
     if (fuKind == FuType.SubAlu) {
       val imm = inBits.immOffset.get
-      when(AluType.useImm(aluType)) { asg(outSrcs(1), imm) }
-      when(AluType.needSa(aluType)) { asg(outSrcs(0), imm(10, 6)) }
+      when(AluType.useImm(aluType)) { asg(outSrcs(1), SignExt(imm, 32)) }
+      when(AluType.needSa(aluType)) { asg(outSrcs(0), ZeroExt(imm(10, 6), 32)) }
     }
     //mainAlu：(imm as src2)|(sa as src1)|(linkAddr as src2)|(extra take)
     if (fuKind == FuType.MainAlu) {
@@ -104,8 +104,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
       asg(outBranch.predict, maExtraIn.predictResult)
       //srcs select
-      when(AluType.useImm(aluType)) { asg(outSrcs(1), imm) }
-      when(AluType.needSa(aluType)) { asg(outSrcs(0), imm(10, 6)) }
+      when(AluType.useImm(aluType)) { asg(outSrcs(1), SignExt(imm, 32)) }
+      when(AluType.needSa(aluType)) { asg(outSrcs(0), ZeroExt(imm(10, 6), 32)) }
       when(isAl) { asg(outSrcs(1), dsPcVal + 4.U) }
     }
   }

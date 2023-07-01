@@ -36,7 +36,7 @@ object PriorityMask {
 object PriorityCount {
   def apply(input: UInt): UInt = {
     val n        = input.getWidth
-    val outWidth = log2Ceil(n)
+    val outWidth = log2Ceil(n)+1
     val pair = (0 to n).map(i => {
       val left  = "b" + "0" * (n - i) + "1" * i
       val right = i.U(outWidth.W)

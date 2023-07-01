@@ -20,7 +20,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   val storeQ    = Module(new StoreQueue(8))
   val mem1in    = memStage1.io.in
   val deqSQ     = storeQ.io.deq.req
-  val selSQ     = !roStage.io.out.valid || storeQ.full
+  val selSQ     = !roStage.io.out.valid || storeQ.io.full
   val roOutBits = roStage.io.out.bits
   // valid and ready
   mem1in.valid := deqSQ.valid || roStage.io.out.valid
@@ -44,13 +44,13 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   memStage1.io.cacheIn.bits := Mux(
     !selSQ,
     roOutBits.mem.get.cache, {
-      val sqCacheReq = new CacheStage1In(true)
+      val sqCacheReq = Wire(new CacheStage1In(true))
       if (enableCacheInst) { sqCacheReq.cacheInst.get.valid := false.B }
       sqCacheReq.rwReq.get := deqSQ.bits.rwReq
       sqCacheReq
     }
   )
-  memStage1.io.stqEmpty     := storeQ.empty
+  memStage1.io.stqEmpty     := storeQ.io.empty
   memStage1.io.robOldestIdx := robOldestIdx
   memStage1.io.tlb <> tlb
   // pipeline connect storeQ/roStage => mem1Stage

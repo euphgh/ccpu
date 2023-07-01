@@ -30,6 +30,7 @@ class FuncUnit(kind: FuType.t) extends MycpuModule {
 
   if (FuType.needByPassIn(kind)) {
     asg(roStage.io.datasFromBypass.get(0), io.bypassIn.get) //来自brother fu
-    asg(roStage.io.datasFromBypass.get(1), io.out.bits.wPrf) //来自本条流水线
+    asg(roStage.io.datasFromBypass.get(1).bits, io.out.bits.wPrf) //来自本条流水线
+    asg(roStage.io.datasFromBypass.get(1).valid, io.out.valid) //来自本条流水线
   }
 }

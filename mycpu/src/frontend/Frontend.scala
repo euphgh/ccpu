@@ -24,11 +24,12 @@ class Frontend extends MycpuModule {
   val instBuffer = Module(new InstBuffer)
 
   asg(instFetch.io.bpuUpdateIn, io.bpuUpdateIn)
-  asg(instFetch.io.imem, io.imem)
+  instFetch.io.imem <> io.imem
   asg(instFetch.io.redirect, io.redirect)
   instFetch.io.tlb <> io.tlbSearch
   if (enableCacheInst) { asg(instFetch.io.icacheInst.get, io.icacheInst.get) }
 
   instFetch.io.out <> instBuffer.io.in //not pipeline connect
   io.out <> instBuffer.io.out
+  asg(instBuffer.io.flush, io.redirect.flush)
 }

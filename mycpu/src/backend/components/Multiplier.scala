@@ -1,5 +1,5 @@
 package backend.components
-
+import chisel3.util.experimental.BoringUtils._
 import config._
 import backend._
 import chisel3._
@@ -58,12 +58,12 @@ class Multiplier extends MycpuModule {
       val isAdd  = Input(Bool())
       val isSub  = Input(Bool())
     }))
-    val out = Valid(UInt(63.W))
+    val out = Valid(Output(UInt(63.W)))
   })
 
   val inBits = io.in.bits
-  val op     = Vec(srcDataNum, UInt(33.W))
-  (0 to srcDataNum).foreach(i => {
+  val op     = Wire(Vec(srcDataNum, UInt(33.W)))
+  (0 until srcDataNum).foreach(i => {
     asg(op(i), Cat(inBits.isSign && inBits.srcs(i)(31), inBits.srcs(i)))
   })
   val add = inBits.isAdd
@@ -73,11 +73,13 @@ class Multiplier extends MycpuModule {
   ip.io.rst := this.reset
   ip.io.A   := op(0)
   ip.io.B   := op(1)
-  val wirehi = UWord
-  val wirelo = UWord
-  val mres   = UInt(64.W)
+  val wirehi = Wire(UWord)
+  val wirelo = Wire(UWord)
+  val mres   = WireInit(0.U(64.W)) //init
+  addSink(wirehi, "specHIdata")
+  addSink(wirelo, "specLOdata")
 
-  val run :: mul :: addsub :: finish :: Nil = Enum(6)
+  val run :: mul :: addsub :: finish :: Nil = Enum(4)
   // state
   val state = RegInit(run)
   assert(!io.in.valid || state === run)
@@ -94,10 +96,12 @@ class Multiplier extends MycpuModule {
     }
     is(addsub) {
       state := finish
-      val uOp  = List(Cat(wirehi, wirelo), ip.io.P)
+      val uOp  = List(Cat(wirehi, wirelo), ip.io.P(63, 0))
       val sOp  = uOp.map(_.asSInt)
-      val ures = Mux(add, uOp(0) + uOp(1), uOp(0) - uOp(1))
-      val sres = Mux(add, sOp(0) + sOp(1), sOp(0) - sOp(1))
+      val ures = Wire(UInt(64.W))
+      val sres = Wire(SInt(64.W))
+      asg(ures, Mux(add, uOp(0) + uOp(1), uOp(0) - uOp(1)))
+      asg(sres, Mux(add, sOp(0) + sOp(1), sOp(0) - sOp(1)))
       mres := Mux(inBits.isSign, sres.asUInt, ures)
     }
   }

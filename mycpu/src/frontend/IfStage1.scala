@@ -3,9 +3,10 @@ import bundle._
 import config._
 import chisel3._
 import chisel3.util._
-import chisel3.experimental.conversions._
+
 import cache._
 import utils.asg
+import chisel3.util.experimental.decode._
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -24,6 +25,9 @@ class BranchTargetBuffer extends MycpuModule {
     val pc   = Input(UWord)
     val data = Flipped(Valid(new BtbOutIO))
   })
+  val readAddr = IO(Input(UWord))
+  val readRes  = IO(Output(new BtbOutIO))
+
   val btbIdxWidth = 10
   val btbTagWidth = 32 - btbIdxWidth - 2
   def getBTBTag(address: UInt) = address(31, btbIdxWidth + 2)
@@ -40,23 +44,23 @@ class BranchTargetBuffer extends MycpuModule {
   // write ========================================
   when(update.data.valid) {
     val wdata = Wire(new BTBEntry)
-    wdata.data  := update.data
+    wdata.data  := update.data.bits
     wdata.valid := true.B
     wdata.tag   := getBTBTag(update.pc)
     ram.write(hash(update.pc), wdata)
   }
 
   // read ========================================
+  val entry = ram.read(hash(readAddr))
+  when(entry.valid && (entry.tag === getBTBTag(readAddr))) {
+    readRes := entry.data
+  }.otherwise {
+    readRes.target   := readAddr
+    readRes.instType := BtbType.non
+  }
   def access(address: UInt) = {
-    val entry = ram.read(hash(address))
-    val res   = Wire(new BtbOutIO)
-    when(entry.valid && (entry.tag === getBTBTag(address))) {
-      res := entry.data
-    }.otherwise {
-      res.target   := address
-      res.instType := BtbType.non
-    }
-    res
+    this.readAddr := address
+    this.readRes
   }
 
 }
@@ -65,6 +69,9 @@ class PatternHistoryTable extends MycpuModule {
     val pc   = Input(UWord)
     val data = Flipped(Valid(UInt(2.W)))
   })
+  val readAddr = IO(Input(UWord))
+  val readRes  = IO(Output(UInt(2.W)))
+
   val phtIdxWidth = 10
   val phtTagWidth = 32 - phtIdxWidth - 2
   def getphtTag(address: UInt) = address(31, phtIdxWidth + 2)
@@ -87,15 +94,15 @@ class PatternHistoryTable extends MycpuModule {
   }
 
   // read ========================================
+  val entry = ram.read(hash(readAddr))
+  when(entry.valid && (entry.tag === getphtTag(readAddr))) {
+    readRes := entry.data
+  }.otherwise {
+    readRes := 0.U
+  }
   def access(address: UInt) = {
-    val entry = ram.read(hash(address))
-    val res   = Wire(UInt(2.W))
-    when(entry.valid && (entry.tag === getphtTag(address))) {
-      res := entry.data
-    }.otherwise {
-      res := 0.U
-    }
-    res
+    this.readAddr := address
+    this.readRes
   }
 }
 
@@ -177,45 +184,19 @@ class IfStage1 extends MycpuModule {
   pht.update.pc := io.bpuUpdateIn.pc
   pht.update.data <> io.bpuUpdateIn.pht
   // >> >> >> read =========================================
-  val btbout = Vec(fetchNum, new BtbOutIO)
-  val phtout = Vec(fetchNum, UInt(2.W))
-  val bpuout = Vec(fetchNum, new PredictResultBundle)
+  val btbout = Wire(Vec(fetchNum, new BtbOutIO))
+  val phtout = Wire(Vec(fetchNum, UInt(2.W)))
+  val bpuout = Wire(Vec(fetchNum, new PredictResultBundle))
   (0 until fetchNum).foreach(i => {
     btbout(i)         := btb.access(PCs(i))
     phtout(i)         := pht.access(PCs(i))
     bpuout(i).btbType := btbout(i).instType
     bpuout(i).target  := btbout(i).target
-    bpuout(i).counter := phtout
+    bpuout(i).counter := phtout(i)
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================
-  val validBranch = Wire(UInt(fetchNum.W))
-  val takeMask    = Wire(UInt(fetchNum.W))
-  val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
-  (0 until fetchNum).foreach(i => {
-    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).btbType === BtbType.b
-    val isTakeJp = BtbType.isJump(bpuout(i).btbType)
-    takeMask(i)    := isTakeJp || isTakeBr
-    validBranch(i) := takeMask(i) && alignMask(i)
-  })
-  (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
-    Seq(
-      validBranch(0) -> (bpuout(0).target, alignMask(1), "b0011".U),
-      validBranch(1) -> (bpuout(1).target, alignMask(2), "b0111".U),
-      validBranch(2) -> (bpuout(2).target, alignMask(3), "b1111".U),
-      validBranch(3) -> (bpuout(3).target, false.B, DontCare)
-    )
-  )
-  io.toPreIf.hasBranch  := validBranch.orR
-  io.out.bits.validMask := Mux(io.toPreIf.hasBranch && io.toPreIf.dsFetched, dsMask, alignMask)
-
-  // use regs in, only combinatorial logic ================
-  // >> output ================
-  val inst4to2  = pc(4, 2)
-  val addrError = pc(1, 0).orR
-  io.toPreIf.pcVal  := pc
-  io.out.bits.pcVal := pc
-  import chisel3.util.experimental.decode._
+  val inst4to2 = pc(4, 2)
   val alignMask = Mux(
     isDelaySlot,
     "b0001".U,
@@ -223,7 +204,7 @@ class IfStage1 extends MycpuModule {
       inst4to2,
       TruthTable(
         Seq(
-          BitPat("b?00") -> BitPat("b1111"),
+          BitPat("b0??") -> BitPat("b1111"),
           BitPat("b100") -> BitPat("b1111"),
           BitPat("b101") -> BitPat("b0111"),
           BitPat("b110") -> BitPat("b0011"),
@@ -233,11 +214,51 @@ class IfStage1 extends MycpuModule {
       )
     )
   )
+  val validBranch = Wire(Vec(fetchNum, Bool()))
+  val takeMask    = Wire(Vec(fetchNum, Bool()))
+  val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
+  (0 until fetchNum).foreach(i => {
+    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).btbType === BtbType.b
+    val isTakeJp = BtbType.isJump(bpuout(i).btbType)
+    takeMask(i)    := isTakeJp || isTakeBr
+    validBranch(i) := takeMask(i) && alignMask(i)
+  })
 
+  def getByVB[T <: Data](a: Seq[T]) = {
+    val res = PriorityMux(
+      validBranch.zip(a)
+    )
+    res
+  }
+  io.toPreIf.predictDst := getByVB(bpuout.map(_.target))
+  io.toPreIf.dsFetched  := getByVB(Seq(alignMask(1), alignMask(2), alignMask(3), false.B))
+  dsMask                := getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
+  // (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
+  //   Seq(
+  //     validBranch(0) -> (bpuout(0).target, alignMask(1), "b0011".U(4.W)),
+  //     validBranch(1) -> (bpuout(1).target, alignMask(2), "b0111".U(4.W)),
+  //     validBranch(2) -> (bpuout(2).target, alignMask(3), "b1111".U(4.W)),
+  //     validBranch(3) -> (bpuout(3).target, false.B, "b1111".U(4.W)) //dontcare dsmask
+  //   )
+  // )
+  val dsMaskVec    = Wire(Vec(fetchNum, Bool()))
+  val alignMaskVec = Wire(Vec(fetchNum, Bool()))
+  (0 until fetchNum).map(i => {
+    dsMaskVec(i)    := dsMask(i)
+    alignMaskVec(i) := alignMask(i)
+  })
+  io.toPreIf.hasBranch  := validBranch.asUInt.orR
+  io.out.bits.validMask := Mux(io.toPreIf.hasBranch && io.toPreIf.dsFetched, dsMaskVec, alignMaskVec)
+
+  // use regs in, only combinatorial logic ================
+  // >> output ================
+  val addrError = pc(1, 0).orR
+  io.toPreIf.pcVal  := pc
+  io.out.bits.pcVal := pc
   // >> tlb ================
   val tlbRes = io.tlb.res
   val tlbExp = tlbRes.refill || !tlbRes.hit
-  io.tlb.req                 := pc
+  io.tlb.req.bits            := pc
   io.tlb.req.valid           := true.B
   io.out.bits.tagOfInstGroup := tlbRes.pTag
   io.out.bits.exception := MuxCase(

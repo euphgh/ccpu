@@ -11,7 +11,7 @@ class Mark[T <: Data](gen: T, init: T = 0.U) extends Module {
   val mark = RegInit(gen, init)
   when(start.valid && !set) {
     set  := true.B
-    mark := start
+    mark := start.bits
   }
   when(end) {
     set := true.B

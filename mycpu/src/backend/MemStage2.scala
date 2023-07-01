@@ -27,7 +27,7 @@ class MemStage2 extends MycpuModule {
   val io = IO(new Bundle {
     val in      = Flipped(Decoupled(new MemStage1OutIO))
     val out     = Decoupled(new FunctionUnitOutIO)
-    val querySQ = IO(new QuerySQ)
+    val querySQ = new QuerySQ
     val doneSQ  = Output(Bool()) //connect storeQ deq.back
     val dmem    = new DramIO
   })

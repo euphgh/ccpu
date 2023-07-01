@@ -3,6 +3,7 @@ import chisel3._
 import bundle._
 import config._
 import chisel3.util._
+import utils.asg
 
 /**
   * flush:
@@ -47,6 +48,8 @@ class PreIf extends MycpuModule {
   import PreIfState._
   val state       = RegInit(normal)
   val brDestSaved = RegInit(0.U(vaddrWidth.W))
+  asg(io.out.npc, 0.U(32.W)) //init
+  asg(io.out.isDelaySlot, false.B) //init
   switch(state) {
     is(normal) {
       when(io.in.fromIf1.hasBranch && !io.in.fromIf1.dsFetched) {

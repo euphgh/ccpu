@@ -29,11 +29,13 @@ import decodemacro._
   */
 class InstBuffer extends MycpuModule {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new IfStage2OutIO))
-    val out = Vec(decodeNum, Decoupled(new InstBufferOutIO))
+    val in    = Flipped(Decoupled(new IfStage2OutIO))
+    val out   = Vec(decodeNum, Decoupled(new InstBufferOutIO))
+    val flush = Input(Bool())
   })
   // sub decode ==================================================
   val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 32, true))
+  asg(ib.io.flush, io.flush)
   // input ========================================================
   (0 until fetchNum).foreach(i => {
     val pushBits = ib.io.push(i).bits

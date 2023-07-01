@@ -64,14 +64,14 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val fromDispatcher = Flipped(Decoupled(new RsOutIO(rsKind)))
-      val wPrf           = Vec(wBNum, Flipped(Valid(PRegIdx)))
+      val wPrfPIdx       = Vec(wBNum, Flipped(Valid(PRegIdx)))
       val flush          = Input(Bool()) //mispredict retire,exception,eret
       val oldestRobIdx   = Input(ROBIdx)
     }
     val out = Decoupled(new RsOutIO(kind = rsKind))
   })
 
-  val rsEntries  = RegInit(VecInit(Seq.fill(rsSize)(0.U.asTypeOf(new RsOutIO(rsKind)))))
+  val rsEntries  = Reg(Vec(rsSize, new RsOutIO(rsKind)))
   val slotsValid = RegInit(VecInit(Seq.fill(rsSize)(false.B)))
   val deqSel     = Wire(Vec(rsSize, Bool())) //one-hot or all-zero
   val enqSlot    = WireInit(0.U(log2Up(rsSize).W)) //default
@@ -86,6 +86,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.memType.get === MemType.CACHEINST))
   }
   if (rsKind == FuType.Mdu) {
+    //(0 until rsSize).map(i => asg(blockVec(i), false.B))
     (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.mduType.get === MduType.MFC0))
   }
 
@@ -113,15 +114,15 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     })
   }
 
-  //listen to wPrf
+  //listen to wPrfPIdx
   List.tabulate(wBNum)(i =>
     List.tabulate(rsSize)(j => {
       rsEntries(j).basic
         .srcPregs(0)
-        .inPrf := (io.in.wPrf(i).bits === rsEntries(j).basic.srcPregs(0).pIdx && io.in.wPrf(i).valid)
+        .inPrf := (io.in.wPrfPIdx(i).bits === rsEntries(j).basic.srcPregs(0).pIdx && io.in.wPrfPIdx(i).valid)
       rsEntries(j).basic
         .srcPregs(1)
-        .inPrf := (io.in.wPrf(i).bits === rsEntries(j).basic.srcPregs(1).pIdx && io.in.wPrf(i).valid)
+        .inPrf := (io.in.wPrfPIdx(i).bits === rsEntries(j).basic.srcPregs(1).pIdx && io.in.wPrfPIdx(i).valid)
     })
   )
 

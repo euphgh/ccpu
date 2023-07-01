@@ -10,14 +10,14 @@ import chisel3.util.experimental.BoringUtils._
 
 class ArchRAT extends MycpuModule {
   val io = IO(new Bundle {
-    val retire  = Vec(retireNum, Valid(new RATWriteBackIO))
+    val retire  = Vec(retireNum, Flipped(Valid(new RATWriteBackIO)))
     val recover = Vec(aRegNum, new SRATEntry)
   })
   val pIdxMap = RegInit(VecInit((0 until aRegNum).map(i => i.U(pRegAddrWidth.W))))
-  (0 to aRegNum).foreach(i => {
-    val writeMap = (0 to retireNum)
+  (0 until aRegNum).foreach(i => {
+    val writeMap = (0 until retireNum)
       .map(j => {
-        ((io.retire(i).bits.aDest === i.U) && io.retire(j).valid) -> io.retire(i).bits.pDest
+        ((io.retire(j).bits.aDest === i.U) && io.retire(j).valid) -> io.retire(j).bits.pDest
       })
       .reverse
     when(VecInit(writeMap.map(_._1)).asUInt.orR) {
@@ -25,6 +25,6 @@ class ArchRAT extends MycpuModule {
     }
     io.recover(i).inPrf := true.B
     io.recover(i).pIdx  := pIdxMap(i)
-    addSource(pIdxMap, "DiffArchRegNums")
   })
+  addSink(pIdxMap, s"DiffArchRegNum")
 }

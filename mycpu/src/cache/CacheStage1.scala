@@ -50,16 +50,16 @@ class CacheStage1(
   })
   // Reg stage
   val lowAddr  = Wire(new CacheLowAddr)
-  val stageReg = RegEnable(new CacheStage1In(isDcache), 0.U.asTypeOf(new CacheStage1In(isDcache)), io.in.valid)
-  if (isDcache) {
+  val stageReg = RegEnable(io.in.bits, 0.U.asTypeOf(new CacheStage1In(isDcache)), io.in.valid)
+  if (!isDcache) {
     lowAddr := Mux(io.in.valid, io.in.bits.ifReq.get, stageReg.ifReq.get)
   } else {
-    lowAddr := Mux(io.in.valid, io.in.bits.rwReq.get, stageReg.rwReq.get)
+    lowAddr := Mux(io.in.valid, io.in.bits.rwReq.get.lowAddr, stageReg.rwReq.get.lowAddr)
   }
-  val r2data = List.fill(roads)(Flipped(new DPReadBus(Vec(wordNum, UWord), lineNum)))
-  val w2data = List.fill(roads)(Flipped(new DPWriteBus(Vec(wordNum, UWord), lineNum)))
-  val w2meta = List.fill(roads)(Flipped(new DPWriteBus(new CacheMeta(isDcache), lineNum)))
-  val metas  = List.fill(roads)(Module(new DPTemplate(new CacheMeta, lineNum, true)))
+  val r2data = List.fill(roads)(Wire(Flipped(new DPReadBus(Vec(wordNum, UWord), lineNum))))
+  val w2data = List.fill(roads)(Wire(Flipped(new DPWriteBus(Vec(wordNum, UWord), lineNum))))
+  val w2meta = List.fill(roads)(Wire(Flipped(new DPWriteBus(new CacheMeta(isDcache), lineNum))))
+  val metas  = List.fill(roads)(Module(new DPTemplate(new CacheMeta(isDcache), lineNum, true)))
   val datas  = List.fill(roads)(Module(new DPTemplate(Vec(wordNum, UWord), lineNum, true)))
   (0 until roads).foreach(i => {
     if (isDcache) {
@@ -72,6 +72,8 @@ class CacheStage1(
       addSink(w2meta(i), s"IcacheStage2WriteMeta$i")
     }
     metas(i).io.r(true.B, lowAddr.index)
+    //val reqValid = Wire(Bool())
+    //reqValid := r2data(i).req.valid
     datas(i).io.r(true.B, Mux(r2data(i).req.valid, r2data(i).req.bits.setIdx, lowAddr.index))
     r2data(i).resp := datas(i).io.r.resp
     val writeFromStage2 = w2data(i).req.valid

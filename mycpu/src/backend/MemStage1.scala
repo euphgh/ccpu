@@ -87,25 +87,61 @@ class MemStage1 extends MycpuModule {
     //   3.U -> Cat(validBytes(0), validBytes(3), validBytes(2), validBytes(1))
     // )
   )
-  import chisel3.experimental.conversions._
-  (lsSize, wStrb, wWord) := MuxCase(
-    (0.U, 0.U),
-    Seq(
-      (inBits.memType.asUInt === MemType.bytePat)  -> (0.U, byteStrob, Fill(4, inBits.mem1Req.rwReq.wWord(7, 0))),
-      (inBits.memType.asUInt === MemType.halfPat)  -> (1.U, halfStrob, Fill(2, inBits.mem1Req.rwReq.wWord(15, 0))),
-      (inBits.memType.asUInt === MemType.wordPat)  -> (2.U, "b1111".U, inBits.mem1Req.rwReq.wWord),
-      (inBits.memType.asUInt === MemType.leftPat)  -> (leftSize, leftStrob, swl),
-      (inBits.memType.asUInt === MemType.rightPat) -> (rightSize, rightStrob, swr)
+
+  def selectByMemType[T <: Data](datas: Seq[T], default: T) = {
+    require(datas.length == 5)
+    MuxCase(
+      default,
+      Seq(
+        (inBits.memType.asUInt === MemType.bytePat),
+        (inBits.memType.asUInt === MemType.halfPat),
+        (inBits.memType.asUInt === MemType.wordPat),
+        (inBits.memType.asUInt === MemType.leftPat),
+        (inBits.memType.asUInt === MemType.rightPat)
+      ).zip(datas)
     )
+  }
+  toSQbits.rwReq.size := selectByMemType(
+    Seq(
+      0.U(2.W),
+      1.U(2.W),
+      2.U(2.W),
+      leftSize,
+      rightSize
+    ),
+    0.U
   )
-  toSQbits.rwReq                                                    := inBits.mem1Req.rwReq
-  (toSQbits.rwReq.size, toSQbits.rwReq.wStrb, toSQbits.rwReq.wWord) := (lsSize, wStrb, wWord)
+  toSQbits.rwReq.wStrb := selectByMemType(
+    Seq(
+      byteStrob,
+      halfStrob,
+      "b1111".U(4.W),
+      leftStrob,
+      rightStrob
+    ),
+    0.U
+  )
+  toSQbits.rwReq.wWord := BytesWordUtils.maskWord(
+    selectByMemType(
+      Seq(
+        Fill(4, inBits.mem1Req.rwReq.wWord(7, 0)),
+        Fill(2, inBits.mem1Req.rwReq.wWord(15, 0)),
+        inBits.mem1Req.rwReq.wWord,
+        swl,
+        swr
+      ),
+      0.U
+    ),
+    toSQbits.rwReq.wStrb
+  )
+  toSQbits.rwReq := inBits.mem1Req.rwReq
+
   // >> select ========================================================
   // >> tlb
   val imm    = SignExt(inROplus.immOffset, 32)
   val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
   val tlbRes = io.tlb.res
-  asg(io.tlb.req, Cat(vTag, 0.U(22.W)))
+  asg(io.tlb.req.bits, Cat(vTag, 0.U(22.W)))
   io.tlb.req.valid := io.in.valid
   toSQbits.pTag    := tlbRes.pTag
   toSQbits.cAttr   := tlbRes.ccAttr
@@ -123,7 +159,7 @@ class MemStage1 extends MycpuModule {
       MemType.LHU -> (l2sb(0) =/= "b0".U)
     )
   )
-  val badAddr = Valid(UWord)
+  val badAddr = Wire(Valid(UWord))
   badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exDetect.happen
   badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
   addSource(badAddr, "mem1BadAddr")

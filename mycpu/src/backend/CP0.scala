@@ -94,9 +94,9 @@ class CP0 extends BasicCOP with MycpuParam {
 
   // TLB instr ===========================================
   // >> tlbp  ============================================
-  val tlbpWreq  = Bool()
-  val tlbpFound = Bool()
-  val tlbpIndex = UInt(6.W)
+  val tlbpWreq  = Wire(Bool())
+  val tlbpFound = Wire(Bool())
+  val tlbpIndex = Wire(UInt(tlbIndexWidth.W))
   addSink(tlbpWreq, "tlbpRes") // when tlb set tlbpRes to mdu, data ok
   addSink(tlbpFound, "tlbpFound")
   addSink(tlbpIndex, "tlbpIndex")
@@ -105,8 +105,8 @@ class CP0 extends BasicCOP with MycpuParam {
     asg(indexReg.index, tlbpIndex)
   }
   // >> tlbr  =============================================
-  val tlbrReq   = Bool()
-  val tlbrEntry = new TLBEntry
+  val tlbrReq   = Wire(Bool())
+  val tlbrEntry = Wire(new TLBEntry)
   addSink(tlbrReq, "tlbrReq")
   addSink(tlbrEntry, "tlbrEntry")
   when(tlbrReq) {
@@ -140,19 +140,20 @@ class CP0 extends BasicCOP with MycpuParam {
   asg(causeReg.iph4, io.in.extInt(2))
   asg(causeReg.iph3, io.in.extInt(1))
   asg(causeReg.iph2, io.in.extInt(0))
-  val hasInt =
-    ((Cat(
-      causeReg.iph7,
-      causeReg.iph6,
-      causeReg.iph5,
-      causeReg.iph4,
-      causeReg.iph3,
-      causeReg.iph2,
-      causeReg.ips1,
-      causeReg.ips0
-    ) & statusReg.im) =/= 0.U(8.W)) &&
-      statusReg.ie === 1.U(1.W) &&
-      statusReg.exl === 0.U(1.W)
+  val hasInt = Wire(Bool())
+  hasInt := ((Cat(
+    causeReg.iph7,
+    causeReg.iph6,
+    causeReg.iph5,
+    causeReg.iph4,
+    causeReg.iph3,
+    causeReg.iph2,
+    causeReg.ips1,
+    causeReg.ips0
+  ) & statusReg.im) =/= 0.U(8.W)) &&
+    statusReg.ie === 1.U(1.W) &&
+    statusReg.exl === 0.U(1.W)
+
   addSource(hasInt, "hasInterrupt")
 
   // DiffTest ===============================================

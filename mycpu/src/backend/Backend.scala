@@ -15,8 +15,8 @@ class Backend extends MycpuModule {
     val extInt        = Input(UInt(6.W))
     val fronTlbSearch = Flipped(new TLBSearchIO)
 
-    val dram          = new DramReadIO
-    val redirectFront = Flipped(new FrontRedirctIO)
+    val dram          = new DramIO
+    val redirectFront = new FrontRedirctIO
   })
 
   //component
@@ -26,8 +26,8 @@ class Backend extends MycpuModule {
   val rob        = Module(new ROB)
   val mAluRS     = Module(new RS(rsKind = FuType.MainAlu, rsSize = 4))
   val sAluRS     = Module(new RS(rsKind = FuType.SubAlu, rsSize = 4))
-  val mduRS      = Module(new RS(rsKind = FuType.Mdu, rsSize = 4))
   val lsuRS      = Module(new RS(rsKind = FuType.Lsu, rsSize = 4))
+  val mduRS      = Module(new RS(rsKind = FuType.Mdu, rsSize = 4))
   val mAluFU     = Module(new Alu(main = true))
   val sAluFU     = Module(new Alu(main = false))
   val lsuFU      = Module(new Lsu)
@@ -39,7 +39,7 @@ class Backend extends MycpuModule {
   val dperIO            = dispatcher.io
   val (dperIn, dperOut) = (dperIO.in, dperIO.out)
   val (robIn, robOut)   = (rob.io.in, rob.io.out)
-  val dperToRs          = List(dperOut.toMainAluRs, dperOut.toSubAluRs, dperOut.toMduRs, dperOut.toLsuRs)
+  val dperToRs          = List(dperOut.toMainAluRs, dperOut.toSubAluRs, dperOut.toLsuRs, dperOut.toMduRs)
   val rsIO              = List(mAluRS.io, sAluRS.io, lsuRS.io, mduRS.io)
   val fuIO              = List(mAluFU.io, sAluFU.io, lsuFU.io, mduFU.io)
   val fuWb              = (0 until issueNum).map(i => fuIO(i).out)
@@ -60,9 +60,9 @@ class Backend extends MycpuModule {
     fuWSrat(i).pDest := fuWb(i).bits.wPrf.pDest
   })
   //channel：writeBack at most wBNum=3 inst in 1 cycle
-  val wPrf  = Vec(wBNum, Valid(new WPrfBundle))
-  val wRob  = Vec(wBNum, Valid(new WbRobBundle))
-  val wSrat = Vec(wBNum, Valid(new RATWriteBackIO))
+  val wPrf  = Wire(Vec(wBNum, Valid(new WPrfBundle)))
+  val wRob  = Wire(Vec(wBNum, Valid(new WbRobBundle)))
+  val wSrat = Wire(Vec(wBNum, Valid(new RATWriteBackIO)))
   //channel connect
   List.tabulate(wBNum)(i => { //WBNUM=3
     val (wen, wBits) = (fuWb(i).valid, fuWb(i).bits)
@@ -114,9 +114,13 @@ class Backend extends MycpuModule {
   (0 until 4).map(i => {
     val rsIn = rsIO(i).in
     rsIn.fromDispatcher <> dperToRs(i)
-    rsIn.wPrf         := wPrf
     rsIn.flush        := flushBackend
     rsIn.oldestRobIdx := robOut.oldestIdx
+    (0 until wBNum).map(j => {
+      val wbPIdx = rsIn.wPrfPIdx(j)
+      asg(wbPIdx.bits, wPrf(j).bits.pDest)
+      asg(wbPIdx.valid, wPrf(j).valid)
+    })
     PipelineConnect(rsIO(i).out, fuIn(i), fuIO(i).roOutFire, flushBackend)
     fuIO(i).flush := flushBackend
   })
@@ -142,13 +146,13 @@ class Backend extends MycpuModule {
   asg(saBpIn.bits, mAluFU.io.out.bits.wPrf)
 
   //ROB
-  asg(robIn.fromDispatcher, dperOut.toRob)
+  robIn.fromDispatcher <> dperOut.toRob
   asg(robIn.wbRob, wRob)
   asg(robIn.misPredictIdx, aluMisPre.robIdx)
   val mulRe = robOut.multiRetire
 
   //arat
-  val robToArat = Vec(retireNum, Valid(new RATWriteBackIO))
+  val robToArat = Wire(Vec(retireNum, Valid(new RATWriteBackIO)))
   (0 until retireNum).map(i => {
     robToArat(i).valid := mulRe(i).valid
     robToArat(i).bits  := mulRe(i).bits.toArat

@@ -10,9 +10,10 @@ object BurstType extends ChiselEnum {
   val RESERVED = Value("b11".U)
 }
 object SizeType extends ChiselEnum {
-  val Byte = Value("b000".U)
-  val Half = Value("b001".U)
-  val Word = Value("b010".U)
+  val Byte  = Value("b000".U)
+  val Half  = Value("b001".U)
+  val Word  = Value("b010".U)
+  val other = Value("b100".U) //填宽度用
 }
 
 class ARChannel(var idLen: Int = 4) extends MycpuBundle {

@@ -101,7 +101,7 @@ class AluComponent extends MycpuModule {
   val norRes = ~(src1 | src2)
   val xorRes = src1 ^ src2
   val sllRes = (src2 << src1(4, 0))(31, 0) //UInt左移会使位宽增加
-  val srlRes = UWord
+  val srlRes = Wire(UWord)
   srlRes := src2 >> src1(4, 0) //TODO:
   val sraRes = (src2.asSInt >> src1(4, 0)).asUInt
   val luiRes = Cat(src2(15, 0), 0.U(16.W))
@@ -185,13 +185,13 @@ class BrHandler extends MycpuModule {
   }
 }
 
-class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
+class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.SubAlu) {
 
   val bpuUpdate = if (main) Some(IO(new BpuUpdateIO)) else None
   val mispre    = if (main) Some(IO(new MispreSignal)) else None
 
   //stage connect
-  val exeStageIO = new ExeStageIO(FuType.MainAlu)
+  val exeStageIO = Wire(new ExeStageIO(if (main) FuType.MainAlu else FuType.SubAlu))
   exeStageIO.out <> io.out
   PipelineConnect(roStage.io.out, exeStageIO.in, exeStageIO.out.fire, io.flush)
   val exeIn     = exeStageIO.in.bits
@@ -274,7 +274,7 @@ class Alu(main: Boolean) extends FuncUnit(FuType.MainAlu) {
     }
     when(io.flush) { asg(mispreBlkReg, false.B) }
     //special:jrhb
-    val jrhbSignal = Valid(UWord)
+    val jrhbSignal = Wire(Valid(UWord))
     asg(jrhbSignal.valid, brValid && brType === BranchType.JRHB)
     asg(jrhbSignal.bits, inBrInfo.realTarget)
     BoringUtils.addSource(jrhbSignal, "hbdest")

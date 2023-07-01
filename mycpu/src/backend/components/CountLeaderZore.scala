@@ -16,7 +16,7 @@ class CountLeadZero extends MycpuModule {
   val widthCounter              = Counter(32)
   val sum                       = RegInit(0.U(32.W))
   val tmp                       = RegInit(0.U(32.W))
-  val idle :: run :: res :: Nil = Enum(6)
+  val idle :: run :: res :: Nil = Enum(3)
   val state                     = RegInit(run)
   switch(state) {
     is(idle) {

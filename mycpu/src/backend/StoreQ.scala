@@ -42,14 +42,22 @@ class StoreQueue(entries: Int) extends MycpuModule {
   asg(io.full, full)
   asg(io.empty, empty)
   //=================== query ====================
-  import chisel3.experimental.conversions._
-  (io.query.res.data, io.query.res.sqMask) := MuxCase(
-    (0.U(32.W), 0.U(4.W)),
+  (io.query.res.data) := MuxCase(
+    (0.U(32.W)),
     (0 until entries).map(i => {
       val entryData    = ram(i).data
       val entryLowAddr = entryData.rwReq.lowAddr
       val entryAddr    = Cat(entryData.pTag, entryLowAddr.index, entryLowAddr.offset)
-      (entryAddr === io.query.req.addr && ram(i).valid) -> (entryData.rwReq.wWord, entryData.rwReq.wStrb)
+      (entryAddr === io.query.req.addr && ram(i).valid) -> entryData.rwReq.wWord
+    })
+  )
+  io.query.res.sqMask := MuxCase(
+    0.U(4.W),
+    (0 until entries).map(i => {
+      val entryData    = ram(i).data
+      val entryLowAddr = entryData.rwReq.lowAddr
+      val entryAddr    = Cat(entryData.pTag, entryLowAddr.index, entryLowAddr.offset)
+      (entryAddr === io.query.req.addr && ram(i).valid) -> entryData.rwReq.wStrb
     })
   )
   val resMemMask = Wire(Vec(4, Bool()))

@@ -6,7 +6,6 @@ import chisel3.util._
 import cache._
 import utils._
 import chisel3.util.experimental.BoringUtils._
-import chisel3.experimental.conversions._
 
 /**
   * for now,no load inst wake up
@@ -88,19 +87,52 @@ class MemStage1 extends MycpuModule {
     //   3.U -> Cat(validBytes(0), validBytes(3), validBytes(2), validBytes(1))
     // )
   )
-  import chisel3.experimental.conversions._
-  (lsSize, wStrb, wWord) := MuxCase(
-    (0.U(2.W), 0.U(4.W), 0.U(32.W)),
-    Seq(
-      (inBits.memType.asUInt === MemType.bytePat)  -> (0.U(2.W), byteStrob, Fill(4, inBits.mem1Req.rwReq.wWord(7, 0))),
-      (inBits.memType.asUInt === MemType.halfPat)  -> (1.U(2.W), halfStrob, Fill(2, inBits.mem1Req.rwReq.wWord(15, 0))),
-      (inBits.memType.asUInt === MemType.wordPat)  -> (2.U(2.W), "b1111".U(4.W), inBits.mem1Req.rwReq.wWord),
-      (inBits.memType.asUInt === MemType.leftPat)  -> (leftSize, leftStrob, swl),
-      (inBits.memType.asUInt === MemType.rightPat) -> (rightSize, rightStrob, swr)
+
+  def selectByMemType[T <: Data](datas: Seq[T], default: T) = {
+    require(datas.length == 5)
+    MuxCase(
+      default,
+      Seq(
+        (inBits.memType.asUInt === MemType.bytePat),
+        (inBits.memType.asUInt === MemType.halfPat),
+        (inBits.memType.asUInt === MemType.wordPat),
+        (inBits.memType.asUInt === MemType.leftPat),
+        (inBits.memType.asUInt === MemType.rightPat)
+      ).zip(datas)
     )
+  }
+  toSQbits.rwReq.size := selectByMemType(
+    Seq(
+      0.U(2.W),
+      1.U(2.W),
+      2.U(2.W),
+      leftSize,
+      rightSize
+    ),
+    0.U
   )
-  toSQbits.rwReq                                                    := inBits.mem1Req.rwReq
-  (toSQbits.rwReq.size, toSQbits.rwReq.wStrb, toSQbits.rwReq.wWord) := (lsSize, wStrb, wWord)
+  toSQbits.rwReq.wStrb := selectByMemType(
+    Seq(
+      leftStrob,
+      rightStrob,
+      "b1111".U(4.W),
+      halfStrob,
+      byteStrob
+    ),
+    0.U
+  )
+  toSQbits.rwReq.wWord := selectByMemType(
+    Seq(
+      swl,
+      inBits.mem1Req.rwReq.wWord,
+      swr,
+      Fill(2, inBits.mem1Req.rwReq.wWord(15, 0)),
+      Fill(4, inBits.mem1Req.rwReq.wWord(7, 0))
+    ),
+    0.U
+  )
+  toSQbits.rwReq := inBits.mem1Req.rwReq
+
   // >> select ========================================================
   // >> tlb
   val imm    = SignExt(inROplus.immOffset, 32)

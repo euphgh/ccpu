@@ -138,7 +138,7 @@ class Decoder extends MycpuModule {
 
   //decode
   val instr   = io.in.instr
-  val decoder = new DecodeInstInfoBundle
+  val decoder = Wire(new DecodeInstInfoBundle)
   decoder.decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
   asg(io.out.decoded, decoder)
 
@@ -258,6 +258,7 @@ class Dispatcher extends MycpuModule {
   val freeList = Module(
     new MultiQueue(enqNum = retireNum, deqNum = dispatchNum, gen = PRegIdx, size = freeListSize, allIn = false)
   )
+  asg(freeList.io.flush, false.B)
   (0 until retireNum).map(i => {
     asg(freeList.io.push(i).valid, io.pushFl(i).valid)
     asg(freeList.io.push(i).bits, io.pushFl(i).bits)
@@ -412,9 +413,10 @@ class Dispatcher extends MycpuModule {
   val rsKind = List(FuType.MainAlu, FuType.SubAlu, FuType.Lsu, FuType.Mdu)
   List.tabulate(toRs.length)(i => {
 
-    val thisSlot = Mux1H(rsSlotSel(i), (0 to dispatchNum).map(slots(_)))
+    val thisSlot = Mux1H(rsSlotSel(i), (0 until dispatchNum).map(slots(_)))
     val toRsBits = toRs(i).bits
     toRs(i).valid  := false.B //only valid is important
+    toRsBits       := DontCare //init(for extra)
     toRsBits.basic := thisSlot.toRsBasic
 
     when(rsSlotSel(i).orR) {

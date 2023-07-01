@@ -35,9 +35,9 @@ object PriorityMask {
 object PriorityCount {
   def apply(input: UInt): UInt = {
     val n = input.getWidth
-    val pair = (0 until n).map(i => {
-      val left  = "b" + "?" * (n - i - 1) + "1" + "0" * i
-      val right = i.U
+    val pair = (0 to n).map(i => {
+      val left  = "b" + "0" * (n - i) + "1" * i
+      val right = i.U(n.W)
       BitPat(left) -> BitPat(right)
     })
     decoder(QMCMinimizer, input, TruthTable(pair, BitPat("b" + "1" * n)))
@@ -94,9 +94,10 @@ object CountMask {
     val bitPats = binaryStrings
       .map(str => {
         val onesCount = str.count(_ == '1')
+        val left      = BitPat("b" + str.reverse.padTo(maxWidth, '0').reverse)
+        val right     = BitPat("b" + "0" * (maxWidth - onesCount) + "1" + "0 " * (onesCount - 1))
         (
-          BitPat("b" + str.reverse.padTo(maxWidth, '0').reverse),
-          BitPat("b" + "0" * (maxWidth - onesCount) + "1" + "0 " * (onesCount - 1))
+          left -> BitPat("b" + "0" * maxWidth) //TODO:
         )
       })
       .toList

@@ -51,19 +51,20 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD))
   mulIn.isAdd  := mduType.isOneOf(MADD, MADDU)
   mulIn.isSub  := mduType.isOneOf(MSUB, MSUBU)
-  (0 to srcDataNum).foreach(i => { mulIn.srcs(i) := srcs(i) })
+  (0 until srcDataNum).foreach(i => { mulIn.srcs(i) := srcs(i) })
   val multRes = mul.io.out.bits
 
   // divider =========================================================
   val div   = Module(new Divider)
   val divIn = div.io.in.bits
   divIn.isSign := mduType === DIV
-  (0 to srcDataNum).foreach(i => { divIn.srcs(i) := srcs(i) })
+  (0 until srcDataNum).foreach(i => { divIn.srcs(i) := srcs(i) })
   val divRes = div.io.out.bits
 
   // count leader ====================================================
   val clz = Module(new CountLeadZero)
-  clz.io.in.bits := srcs(0)
+  clz.io.in.bits.src  := srcs(0)
+  clz.io.in.bits.zero := true.B
 
   //mfc0 =============================================================
   val c0Addr = srcs(0)(7, 0)
@@ -73,11 +74,11 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   // tlb instr ========================================================
   import chisel3.util.experimental.BoringUtils._
   // only tlbp will block, need res
-  val tlbpReq  = Bool()
-  val tlbpRes  = Bool()
-  val tlbrReq  = Bool()
-  val tlbwiReq = Bool()
-  val tlbwrReq = Bool()
+  val tlbpReq  = Wire(Bool())
+  val tlbpRes  = Wire(Bool())
+  val tlbrReq  = Wire(Bool())
+  val tlbwiReq = Wire(Bool())
+  val tlbwrReq = Wire(Bool())
   addSource(tlbpReq, "tlbpReq")
   addSink(tlbpRes, "tlbpRes")
   addSource(tlbrReq, "tlbrReq")
@@ -85,11 +86,14 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   addSource(tlbwrReq, "tlbwrReq")
 
   val fuOutValid = List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
-  val fuOutData  = List(multRes, divRes, clz.io.out.bits, 0.U)
+  //List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
+  val fuOutData = List(multRes, divRes, clz.io.out.bits, 0.U)
 
   // speculate ============================================================================
-  val specHi    = RegInit(UWord, 0.U)
-  val specLo    = RegInit(UWord, 0.U)
+  val specHi = RegInit(UWord, 0.U)
+  val specLo = RegInit(UWord, 0.U)
+  addSource(specHi, "specHIdata")
+  addSource(specLo, "specLOdata")
   val data64Q   = Module(new Queue(gen = UInt(64.W), entries = 4, hasFlush = true)) //muldiv
   val data32Q   = Module(new Queue(gen = UWord, entries = 4, hasFlush = true)) //mtc0 mthi mtlo
   val mtc0AddrQ = Module(new Queue(gen = CP0Idx, entries = 4, hasFlush = true)) //mtc0 addr
@@ -102,7 +106,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val blockDone           = RegInit(false.B)
   // state
   val state    = RegInit(run)
-  val blockRes = UInt(64.W) // save res for clz mul mult div ...
+  val blockRes = Wire(UInt(64.W)) // save res for clz mul mult div ...
   exeStageIO.out.valid := false.B //default
   switch(state) {
     is(run) {

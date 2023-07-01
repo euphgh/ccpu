@@ -18,43 +18,49 @@ class StoreQueue(entries: Int) extends MycpuModule {
     val flush = Input(Bool()) // only flush not retire
     val empty = Output(Bool())
     val full  = Output(Bool())
+    val query = Flipped(new QuerySQ)
   })
-  val query = IO(Flipped(new QuerySQ))
+
   class StoreQEntry extends MycpuBundle {
     val data    = new StoreQIO
     val valid   = Bool()
     val retired = Bool()
   }
   val ram        = Mem(entries, new StoreQEntry)
-  val enq_ptr    = RegInit(UInt(log2Ceil(entries).W))
-  val ret_ptr    = RegInit(UInt(log2Ceil(entries).W))
-  val deq_ptr    = RegInit(UInt(log2Ceil(entries).W))
+  val enq_ptr    = RegInit(0.U(log2Ceil(entries).W))
+  val ret_ptr    = RegInit(0.U(log2Ceil(entries).W))
+  val deq_ptr    = RegInit(0.U(log2Ceil(entries).W))
   val maybe_full = RegInit(false.B)
+  val do_enq     = WireDefault(io.enq.fire)
+  val do_deq     = WireDefault(io.deq.back)
   when(do_enq =/= do_deq) {
     maybe_full := do_enq
   }
   val ptr_match = enq_ptr === deq_ptr
   val empty     = ptr_match && !maybe_full
   val full      = ptr_match && maybe_full
+  asg(io.full, full)
+  asg(io.empty, empty)
   //=================== query ====================
   import chisel3.experimental.conversions._
-  (query.res.data, query.res.sqMask) := MuxCase(
-    (0.U, 0.U),
+  (io.query.res.data, io.query.res.sqMask) := MuxCase(
+    (0.U(32.W), 0.U(4.W)),
     (0 until entries).map(i => {
       val entryData    = ram(i).data
       val entryLowAddr = entryData.rwReq.lowAddr
       val entryAddr    = Cat(entryData.pTag, entryLowAddr.index, entryLowAddr.offset)
-      (entryAddr === query.req.addr && ram(i).valid) -> (entryData.rwReq.wWord, entryData.rwReq.wStrb)
+      (entryAddr === io.query.req.addr && ram(i).valid) -> (entryData.rwReq.wWord, entryData.rwReq.wStrb)
     })
   )
-  (0 to 3).foreach(i => {
-    query.res.memMask(i) := query.req.needMask(i) && !query.res.sqMask(i)
+  val resMemMask = Wire(Vec(4, Bool()))
+  (0 to 3).map(i => {
+    resMemMask(i) := io.query.req.needMask(i) && !io.query.res.sqMask(i)
   })
+  asg(io.query.res.memMask, resMemMask.asUInt)
 
   //=================== enq =======================
   io.enq.ready    := !full || io.deq.back
   io.deq.req.bits := ram(deq_ptr).data
-  val do_enq = WireDefault(io.enq.fire)
   when(do_enq) {
     ram(enq_ptr).data    := io.enq.bits
     ram(enq_ptr).valid   := true.B
@@ -63,8 +69,8 @@ class StoreQueue(entries: Int) extends MycpuModule {
   }
 
   //=================== deq =======================
-  val state                  = RegInit(idle)
   val idle :: waitDeq :: Nil = Enum(2)
+  val state                  = RegInit(idle)
   io.deq.req.valid := !empty && (state === idle) && (ret_ptr =/= deq_ptr)
   switch(state) {
     is(idle) {
@@ -79,7 +85,6 @@ class StoreQueue(entries: Int) extends MycpuModule {
     }
   }
   //deq back
-  val do_deq = WireDefault(io.deq.back)
   when(do_deq) {
     deq_ptr := deq_ptr + 1.U
   }

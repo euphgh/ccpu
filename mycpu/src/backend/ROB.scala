@@ -270,7 +270,7 @@ class ROB extends MycpuModule {
   val waitNextMask = Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
   // JMP HB =======================================================
   val findHBinRob  = RegInit(false.B)
-  val dstHBFromAlu = Flipped(Valid(UWord))
+  val dstHBFromAlu = Wire(Flipped(Valid(UWord)))
   addSink(dstHBFromAlu, "hbdest")
   val dstHB = Module(new Mark(UWord))
   dstHB.start <> dstHBFromAlu
@@ -339,7 +339,7 @@ class ROB extends MycpuModule {
   // Mem badAddress =========================================
   val memReqVaddr     = Wire(UWord)
   val memException    = Wire(Bool())
-  val badAddrFromMem1 = Flipped(Valid(UWord))
+  val badAddrFromMem1 = Wire(Flipped(Valid(UWord)))
   addSink(badAddrFromMem1, "mem1BadAddr")
   val badAddr = Module(new Mark(UWord))
   badAddr.start <> badAddrFromMem1
@@ -436,7 +436,7 @@ class ROB extends MycpuModule {
     val checkRetire = Module(new DifftestInstrCommit)
     checkRetire.io.retireNum := PriorityEncoder((0 until retireNum).map(io.out.multiRetire(_).valid))
     checkRetire.io.lastPC := PriorityMux(
-      (0 to retireNum)
+      (0 until retireNum)
         .map(i => {
           io.out.multiRetire(i).valid -> retirePcVal(i)
         })
@@ -444,7 +444,8 @@ class ROB extends MycpuModule {
     )
     checkRetire.io.interrSeq := Mux(io.out.exCommit.bits.detect.excCode === ExcCode.Int, 0.U, retireNum.U)
     checkRetire.io.en        := true.B
-    val validRetire = checkRetire.io.retireNum > 0.U
+    val validRetire = Wire(Bool())
+    validRetire := checkRetire.io.retireNum > 0.U
     addSource(validRetire, "hasValidRetire")
   }
 }

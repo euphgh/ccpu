@@ -6,6 +6,7 @@ import chisel3.util._
 import cache._
 import utils._
 import chisel3.util.experimental.BoringUtils._
+import chisel3.experimental.conversions._
 
 /**
   * for now,no load inst wake up
@@ -89,11 +90,11 @@ class MemStage1 extends MycpuModule {
   )
   import chisel3.experimental.conversions._
   (lsSize, wStrb, wWord) := MuxCase(
-    (0.U, 0.U),
+    (0.U(2.W), 0.U(4.W), 0.U(32.W)),
     Seq(
-      (inBits.memType.asUInt === MemType.bytePat)  -> (0.U, byteStrob, Fill(4, inBits.mem1Req.rwReq.wWord(7, 0))),
-      (inBits.memType.asUInt === MemType.halfPat)  -> (1.U, halfStrob, Fill(2, inBits.mem1Req.rwReq.wWord(15, 0))),
-      (inBits.memType.asUInt === MemType.wordPat)  -> (2.U, "b1111".U, inBits.mem1Req.rwReq.wWord),
+      (inBits.memType.asUInt === MemType.bytePat)  -> (0.U(2.W), byteStrob, Fill(4, inBits.mem1Req.rwReq.wWord(7, 0))),
+      (inBits.memType.asUInt === MemType.halfPat)  -> (1.U(2.W), halfStrob, Fill(2, inBits.mem1Req.rwReq.wWord(15, 0))),
+      (inBits.memType.asUInt === MemType.wordPat)  -> (2.U(2.W), "b1111".U(4.W), inBits.mem1Req.rwReq.wWord),
       (inBits.memType.asUInt === MemType.leftPat)  -> (leftSize, leftStrob, swl),
       (inBits.memType.asUInt === MemType.rightPat) -> (rightSize, rightStrob, swr)
     )
@@ -105,7 +106,7 @@ class MemStage1 extends MycpuModule {
   val imm    = SignExt(inROplus.immOffset, 32)
   val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
   val tlbRes = io.tlb.res
-  asg(io.tlb.req, Cat(vTag, 0.U(22.W)))
+  asg(io.tlb.req.bits, Cat(vTag, 0.U(22.W)))
   io.tlb.req.valid := io.in.valid
   toSQbits.pTag    := tlbRes.pTag
   toSQbits.cAttr   := tlbRes.ccAttr
@@ -123,7 +124,7 @@ class MemStage1 extends MycpuModule {
       MemType.LHU -> (l2sb(0) =/= "b0".U)
     )
   )
-  val badAddr = Valid(UWord)
+  val badAddr = Wire(Valid(UWord))
   badAddr.valid := (tlbExp || addrErrExp) && io.in.valid && !inBits.exDetect.happen
   badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
   addSource(badAddr, "mem1BadAddr")

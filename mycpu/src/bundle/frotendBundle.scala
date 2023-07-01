@@ -237,7 +237,6 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     val memType = if (kind == FuType.Lsu) Some(Output(MemType())) else None
     val mduType = if (kind == FuType.Mdu) Some(Output(MduType())) else None
   }
-
   val srcData = Vec(2, Output(UInt(dataWidth.W)))
 
   val branch =

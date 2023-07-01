@@ -44,6 +44,8 @@ object MemType extends ChiselEnum {
   // group right
   val LWR = Value("b0100".U)
   val SWR = Value("b0101".U)
+  //cacheinst
+  val CACHEINST = Value("b0110".U)
   // group byte0
   val LB  = Value("b1000".U)
   val LBU = Value("b1001".U)
@@ -52,8 +54,6 @@ object MemType extends ChiselEnum {
   val LH  = Value("b1100".U)
   val LHU = Value("b1101".U)
   val SH  = Value("b1110".U)
-  //cacheinst
-  val CACHEINST = Value("b0110".U)
 
   def wordPat  = BitPat("b000?")
   def leftPat  = BitPat("b001?")

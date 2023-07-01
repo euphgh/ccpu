@@ -136,7 +136,7 @@ class IfStage2 extends Module with MycpuParam {
     */
   val validMask = io.in.bits.validMask
   val dsReg     = RegInit(false.B)
-  val lastDs    = WireInit(0.U(log2Up(fetchNum).W))
+  val lastDs    = WireInit(0.U((1 + log2Up(fetchNum)).W))
   val validNum  = PriorityCount(validMask.asUInt)
   when(validMask(0) && io.in.valid) { dsReg := false.B } //注意io.in.valid
   when(validBr.asUInt.orR && io.in.valid) {

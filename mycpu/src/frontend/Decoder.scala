@@ -67,7 +67,7 @@ object AllInsts {
       BGEZAL  -> List(SRCType.RS, DSTType.to31, ChiselFuType.MainALU),
       //J type
       J    -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
-      JAL  -> List(SRCType.noSRC, DSTType.to31, ChiselFuType.MainALU),
+      JAL  -> List(SRCType.noSRC, DSTType.to31, ChiselFuType.MainALU, BranchType.JAL),
       JR   -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU),
       JALR -> List(SRCType.RS, DSTType.toRD, ChiselFuType.MainALU),
       // for uboot

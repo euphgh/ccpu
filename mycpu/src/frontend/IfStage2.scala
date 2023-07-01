@@ -29,9 +29,10 @@ import decodemacro.MacroDecode
   */
 class IfStage2 extends Module with MycpuParam {
   val io = IO(new Bundle {
-    val in   = Flipped(Decoupled(new IfStage1OutIO))
-    val out  = Decoupled(new IfStage2OutIO)
-    val imem = new DramReadIO
+    val in      = Flipped(Decoupled(new IfStage1OutIO))
+    val out     = Decoupled(new IfStage2OutIO)
+    val imem    = new DramReadIO
+    val flushIn = Input(Bool())
 
     val noBrMispreRedirect = new FrontRedirctIO
     val bpuUpdate          = Decoupled(new BpuUpdateIO)
@@ -70,7 +71,7 @@ class IfStage2 extends Module with MycpuParam {
 
   @MacroDecode
   class IF2PreDecodeOut extends MycpuBundle {
-    val brType = BranchType()
+    val brType = BranchType.NON
   }
   import chisel3.util.experimental.decode.QMCMinimizer
   val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
@@ -84,6 +85,7 @@ class IfStage2 extends Module with MycpuParam {
   asg(io.noBrMispreRedirect.target, 0.U(vaddrWidth.W))
   asg(bpuUpdateQueue.io.enq.valid, false.B)
   asg(bpuUpdateQueue.io.enq.bits, 0.U.asTypeOf(new BpuUpdateIO))
+  //asg(bpuUpdateQueue.io.flush.get, io.flush)
 
   //predecode
   (0 until fetchNum).foreach(i => {
@@ -148,4 +150,5 @@ class IfStage2 extends Module with MycpuParam {
   val isBd = io.out.bits.isBd
   (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
   asg(isBd(0), dsReg)
+  when(io.flushIn) { dsReg := false.B }
 }

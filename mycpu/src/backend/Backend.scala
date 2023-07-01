@@ -15,8 +15,10 @@ class Backend extends MycpuModule {
     val extInt        = Input(UInt(6.W))
     val fronTlbSearch = Flipped(new TLBSearchIO)
 
-    val dram          = new DramIO
-    val redirectFront = new FrontRedirctIO
+    val dram           = new DramIO
+    val redirectFront  = new FrontRedirctIO
+    val bpuUpdate      = Valid(new BpuUpdateIO)
+    val dperOutFireNum = Output(UInt())
   })
 
   //component
@@ -103,12 +105,14 @@ class Backend extends MycpuModule {
   dperIn.fromInstBuffer <> io.in
   asg(dispatcher.io.dsAllow, robOut.dsAllow)
   asg(dperIn.robIndex, robOut.robIndex)
+  asg(dperIn.flushBackend, flushBackend)
   asg(dperIn.fuWbSrat, wSrat)
   asg(dperIO.recoverSrat.bits, arat.io.recover)
   asg(dperIO.recoverSrat.valid, flushBackend)
   asg(dperIO.fromAluMispre.happen, aluMisPre.happen)
   asg(dperIO.fromAluMispre.realTarget, aluMisPre.realTarget)
   asg(dperIO.pushFl, robOut.flRecover)
+  asg(io.dperOutFireNum, dperIO.outFireNum)
 
   //RS->FU
   (0 until 4).map(i => {
@@ -202,4 +206,9 @@ class Backend extends MycpuModule {
       )
     )
   )
+
+  //bpu update
+  val aluUpdateBpu = mAluFU.bpuUpdate.get
+  asg(io.bpuUpdate.valid, aluUpdateBpu.btb.valid || aluUpdateBpu.pht.valid)
+  asg(io.bpuUpdate.bits, aluUpdateBpu)
 }

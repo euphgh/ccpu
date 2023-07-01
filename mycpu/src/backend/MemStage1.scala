@@ -121,19 +121,21 @@ class MemStage1 extends MycpuModule {
     ),
     0.U
   )
-  toSQbits.rwReq.wWord := BytesWordUtils.maskWord(
-    selectByMemType(
-      Seq(
-        Fill(4, inBits.mem1Req.rwReq.wWord(7, 0)),
-        Fill(2, inBits.mem1Req.rwReq.wWord(15, 0)),
-        inBits.mem1Req.rwReq.wWord,
-        swl,
-        swr
+  toSQbits.rwReq.wWord := BytesWordUtils
+    .maskWord(
+      selectByMemType(
+        Seq(
+          Fill(4, inBits.mem1Req.rwReq.wWord(7, 0)),
+          Fill(2, inBits.mem1Req.rwReq.wWord(15, 0)),
+          inBits.mem1Req.rwReq.wWord,
+          swl,
+          swr
+        ),
+        0.U
       ),
-      0.U
-    ),
-    toSQbits.rwReq.wStrb
-  )
+      toSQbits.rwReq.wStrb
+    )
+    .asUInt
   toSQbits.rwReq := inBits.mem1Req.rwReq
 
   // >> select ========================================================

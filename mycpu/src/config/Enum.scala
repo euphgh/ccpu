@@ -25,6 +25,7 @@ object MduType extends ChiselEnum {
   val MFHI, MFLO, MTHI, MTLO = Value
   val MTC0, MFC0             = Value
   val TLBR, TLBWI, TLBWR     = Value
+  val NON                    = Value
   def isC0Inst(op: MduType.Type): Bool = op === MTC0 || op === MFC0
 }
 object SpecialType extends ChiselEnum {
@@ -46,6 +47,7 @@ object MemType extends ChiselEnum {
   val SWR = Value("b0101".U)
   //cacheinst
   val CACHEINST = Value("b0110".U)
+  val NON       = Value("b0111".U)
   // group byte0
   val LB  = Value("b1000".U)
   val LBU = Value("b1001".U)

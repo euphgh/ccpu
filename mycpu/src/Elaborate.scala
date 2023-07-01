@@ -7,7 +7,7 @@ import frontend.Dispatcher
 import frontend._
 import backend.components.Multiplier
 object Elaborate extends App {
-  def top       = new InstFetch
+  def top       = new Frontend
   val generator = Seq(chisel3.stage.ChiselGeneratorAnnotation(() => top))
   (new ChiselStage).execute(args ++ Seq("--full-stacktrace"), generator :+ CIRCTTargetAnnotation(CIRCTTarget.Verilog))
 }

@@ -103,6 +103,7 @@ class Backend extends MycpuModule {
   dperIn.fromInstBuffer <> io.in
   asg(dispatcher.io.dsAllow, robOut.dsAllow)
   asg(dperIn.robIndex, robOut.robIndex)
+  asg(dperIn.flushBackend, flushBackend)
   asg(dperIn.fuWbSrat, wSrat)
   asg(dperIO.recoverSrat.bits, arat.io.recover)
   asg(dperIO.recoverSrat.valid, flushBackend)

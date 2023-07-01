@@ -59,4 +59,5 @@ class InstFetch extends MycpuModule {
   ifStage2.io.imem <> io.imem
   io.out <> ifStage2.io.out
   asg(ifStage2.io.bpuUpdate.ready, !io.bpuUpdateIn.valid)
+  asg(ifStage2.io.flushIn, io.redirect.flush)
 }

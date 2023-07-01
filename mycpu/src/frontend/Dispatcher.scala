@@ -212,6 +212,7 @@ class Dispatcher extends MycpuModule {
       val fromInstBuffer = Vec(decodeNum, Flipped(Valid(new InstBufferOutIO)))
       val fuWbSrat       = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
       val robIndex       = Input(ROBIdx)
+      val flushBackend   = Input(Bool())
     }
     val outFireNum = Output(UInt())
 
@@ -354,6 +355,7 @@ class Dispatcher extends MycpuModule {
       when(io.recoverSrat.valid) { asg(state, normal) }
     }
   }
+  when(io.in.flushBackend) { asg(state, normal) }
 
   //deal with readyGo
   slots(0).readyGo := slots(0).robReady && slots(0).pDestOk && slots(0).rsReady && state =/= block

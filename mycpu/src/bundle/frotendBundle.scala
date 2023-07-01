@@ -43,11 +43,11 @@ class BasicInstInfoBundle extends MycpuBundle {
   */
 @MacroDecode
 class DecodeInstInfoBundle extends MycpuBundle {
-  val specialType   = SpecialType() //带有Non，ROB里啥都有
-  val aluType       = AluType() //带有Non，因为mAlu里不止走aluInst
-  val memType       = MemType() //不带Non
-  val mduType       = MduType() //不带Non
-  val decodeExcType = DeExType() //靠解码就可以得到的例外，需要NON
+  val specialType   = SpecialType.NON //带有Non，ROB里啥都有
+  val aluType       = AluType.NON //带有Non，因为mAlu里不止走aluInst
+  val memType       = MemType.NON //不带Non
+  val mduType       = MduType.NON //不带Non
+  val decodeExcType = DeExType.NON //靠解码就可以得到的例外，需要NON
 }
 
 //no need a wen,pDest===0 means !wen

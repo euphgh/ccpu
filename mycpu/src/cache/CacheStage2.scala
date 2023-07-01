@@ -208,7 +208,7 @@ class CacheStage2[T <: Data](
       // default: cancel || unvalid
       io.in.ready                          := io.out.ready
       io.out.valid                         := io.in.valid
-      if (!isDcache) io.out.bits.idata.get := 0.U
+      if (!isDcache) io.out.bits.idata.get := VecInit(Seq.fill(fetchNum)(0.U(32.W)))
       when(!inBits.cancel && io.in.valid) {
         when(isCacheInst) {
           mainState := instr

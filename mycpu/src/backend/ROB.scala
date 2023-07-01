@@ -329,7 +329,7 @@ class ROB extends MycpuModule {
     }
   }
   val retirePcVal = retireInst(0).exception.basic.pc //pc记录在robEntry中
-  asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.exCommit.valid || io.out.eretFlush)
+  asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.flushAll)
   asg(io.out.robRedirect.target, Mux(state === exerFlush, retirePcVal, dstHB.value.bits)) //CI_NEXT或DSTHB
 
   //exception connect

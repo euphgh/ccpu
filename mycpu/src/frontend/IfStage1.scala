@@ -14,6 +14,53 @@ class BtbOutIO extends MycpuBundle {
   val target   = UWord
 }
 
+class BasicBPU[T <: Data](gen: T, val idxWidth: Int = 10) extends MycpuModule {
+  val update = IO(new Bundle {
+    val pc   = Input(UWord)
+    val data = Flipped(Valid(gen))
+  })
+  val readAddr = List.fill(fetchNum)(IO(Input(UWord)))
+  val readRes  = List.fill(fetchNum)(IO(Output(gen)))
+  def access(address: UInt, ports: Int) = {
+    this.readAddr(ports) := address
+    this.readRes(ports)
+  }
+  class BPUEntry[T](gen: T) extends MycpuBundle {
+    val tag  = UInt(10.W)
+    val info = gen
+  }
+  val lowWidth    = log2Ceil(fetchNum)
+  val bpuTagWidth = 32 - idxWidth - lowWidth
+
+  // can be change for better design
+  def hash(address:   UInt) = address(idxWidth + lowWidth - 1, lowWidth)
+  def missFunc(entry: T, addr: UInt): T = entry
+  def getTag(address: UInt) = address(31, idxWidth + 2)
+  (0 until fetchNum).foreach(i => {
+    val ram   = SyncReadMem(math.pow(2, idxWidth).toInt, new BPUEntry(gen))
+    val valid = RegInit(0.U(math.pow(2, idxWidth).toInt.W))
+    // write ========================================
+    when(update.data.valid && update.pc(lowWidth - 1, 0) === i.U) {
+      ram.write(
+        hash(update.pc), {
+          val wdata = Wire(new BPUEntry(gen))
+          wdata.info := update.data.bits
+          wdata.tag  := getTag(update.pc)
+          wdata
+        }
+      )
+    }
+    // read ========================================
+    val bpuIdx = hash(readAddr(i))
+    val entry  = ram.read(bpuIdx)
+    when(valid(bpuIdx) && (entry.tag === getTag(readAddr(i)))) {
+      readRes(i) := entry.info
+    }.otherwise {
+      readRes(i) := missFunc(entry.info, readAddr(i))
+    }
+  })
+}
+
 /**
   * single write port and single read port
   * when write and read to same addr in a cycle
@@ -21,90 +68,18 @@ class BtbOutIO extends MycpuBundle {
   *
   * out should keep out until posedge that in.search.valid is true
   */
-class BranchTargetBuffer extends MycpuModule {
-  val update = IO(new Bundle {
-    val pc   = Input(UWord)
-    val data = Flipped(Valid(new BtbOutIO))
-  })
-  val readAddr = IO(Input(UWord))
-  val readRes  = IO(Output(new BtbOutIO))
-
-  val btbIdxWidth = 10
-  val btbTagWidth = 32 - btbIdxWidth - 2
-  def getBTBTag(address: UInt) = address(31, btbIdxWidth + 2)
-  class BTBEntry extends MycpuBundle {
-    val valid = Bool()
-    val tag   = UInt(btbTagWidth.W)
-    val data  = new BtbOutIO()
+class BranchTargetBuffer extends BasicBPU(new BtbOutIO()) {
+  override def missFunc(entry: BtbOutIO, addr: UInt): BtbOutIO = {
+    val out = new BtbOutIO
+    out.target   := addr + 4.U
+    out.instType := BtbType.non
+    out
   }
-  val ram = SyncReadMem(math.pow(2, btbIdxWidth).toInt, new BTBEntry)
-
-  // can be change for better design
-  def hash(address: UInt) = address(btbIdxWidth + 2 - 1, 2)
-
-  // write ========================================
-  when(update.data.valid) {
-    val wdata = Wire(new BTBEntry)
-    wdata.data  := update.data.bits
-    wdata.valid := true.B
-    wdata.tag   := getBTBTag(update.pc)
-    ram.write(hash(update.pc), wdata)
-  }
-
-  // read ========================================
-  val entry = ram.read(hash(readAddr))
-  when(entry.valid && (entry.tag === getBTBTag(readAddr))) {
-    readRes := entry.data
-  }.otherwise {
-    readRes.target   := readAddr
-    readRes.instType := BtbType.non
-  }
-  def access(address: UInt) = {
-    this.readAddr := address
-    this.readRes
-  }
-
 }
-class PatternHistoryTable extends MycpuModule {
-  val update = IO(new Bundle {
-    val pc   = Input(UWord)
-    val data = Flipped(Valid(UInt(2.W)))
-  })
-  val readAddr = IO(Input(UWord))
-  val readRes  = IO(Output(UInt(2.W)))
 
-  val phtIdxWidth = 10
-  val phtTagWidth = 32 - phtIdxWidth - 2
-  def getphtTag(address: UInt) = address(31, phtIdxWidth + 2)
-  class phtEntry extends MycpuBundle {
-    val valid = Bool()
-    val tag   = UInt(phtTagWidth.W)
-    val data  = UInt(2.W)
-  }
-  val ram = SyncReadMem(math.pow(2, phtIdxWidth).toInt, new phtEntry)
-
-  // can be change for better design
-  def hash(address: UInt) = address(phtIdxWidth + 2 - 1, 2)
-
-  // write ========================================
-  when(update.data.valid) {
-    val wdata = Wire(new phtEntry)
-    wdata.valid := true.B
-    wdata.tag   := getphtTag(update.pc)
-    wdata.data  := update.data.bits
-    ram.write(hash(update.pc), wdata)
-  }
-
-  // read ========================================
-  val entry = ram.read(hash(readAddr))
-  when(entry.valid && (entry.tag === getphtTag(readAddr))) {
-    readRes := entry.data
-  }.otherwise {
-    readRes := 0.U
-  }
-  def access(address: UInt) = {
-    this.readAddr := address
-    this.readRes
+class PatternHistoryTable extends BasicBPU(UInt(2.W)) {
+  override def missFunc(entry: UInt, addr: UInt): UInt = {
+    0.U(2.W)
   }
 }
 
@@ -182,7 +157,8 @@ class IfStage1 extends MycpuModule {
   icache1.io.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
   io.out.bits.iCache <> icache1.io.out
   // >> bpu ===============================================
-  val PCs = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
+  val PCs   = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
+  val bpuPC = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), i.U(log2Ceil(fetchNum).W), "b00".U))
   // >> >> module ============================================
   val btb = Module(new BranchTargetBuffer())
   val pht = Module(new PatternHistoryTable())
@@ -192,15 +168,15 @@ class IfStage1 extends MycpuModule {
   pht.update.pc := io.bpuUpdateIn.pc
   pht.update.data <> io.bpuUpdateIn.pht
   // >> >> >> read =========================================
-  val btbout = Wire(Vec(fetchNum, new BtbOutIO))
-  val phtout = Wire(Vec(fetchNum, UInt(2.W)))
   val bpuout = Wire(Vec(fetchNum, new PredictResultBundle))
   (0 until fetchNum).foreach(i => {
-    btbout(i)         := btb.access(PCs(i))
-    phtout(i)         := pht.access(PCs(i))
-    bpuout(i).btbType := btbout(i).instType
-    bpuout(i).target  := btbout(i).target
-    bpuout(i).counter := phtout(i)
+    val alignIdx = i
+    val orderIdx = (4.U - i.U)(1, 0)
+    val btbRes   = btb.access(Cat(io.in.npc(31, 4), 0.U(4.W)), alignIdx)
+    val phtRes   = pht.access(Cat(io.in.npc(31, 4), 0.U(4.W)), alignIdx)
+    bpuout(orderIdx).btbType := btbRes.instType
+    bpuout(orderIdx).target  := btbRes.target
+    bpuout(orderIdx).counter := phtRes
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================
@@ -222,7 +198,7 @@ class IfStage1 extends MycpuModule {
       )
     )
   )
-  val validBranch = Wire(Vec(fetchNum, Bool()))
+  val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
   val takeMask    = Wire(Vec(fetchNum, Bool()))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
   (0 until fetchNum).foreach(i => {

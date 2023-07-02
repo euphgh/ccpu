@@ -161,6 +161,7 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
 
   val c0Addr    = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
   val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
+  val cacheOp   = if (kind == FuType.Lsu) Some(Output(CacheOp())) else None
   val mAluExtra =
     if (kind == FuType.MainAlu) Some(new Bundle {
       val pcVal         = Output(UWord) //用于updateBpu.pc 以及计算 dsPc

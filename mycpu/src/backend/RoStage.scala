@@ -92,7 +92,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val imm       = low26(15, 0)
       //count target
       val brType            = inUop.brType.get
-      val dsPcVal           = maExtraIn.pcVal
+      val dsPcVal           = maExtraIn.pcVal // what is ds ???
       val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
       val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
       val jDest             = Cat(dsPcVal(31, 28), low26, 0.U(2.W))
@@ -120,12 +120,22 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
   //lsu special
   if (fuKind == FuType.Lsu) {
+    import MemType._
     val outMem    = outBits.mem.get
     val addrL12sb = inBits.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
     outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(cacheOffsetWidth - 1, 0)
     outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, cacheOffsetWidth)
-    outMem.immOffset                      := inBits.immOffset.get
-    outMem.carryout                       := addrL12sb(12)
+    outMem.cache.rwReq.get.isWrite        := inBits.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR)
+    outMem.cache.rwReq.get.wWord          := outSrcs(1)
+    outMem.cache.rwReq.get.size           := DontCare
+    outMem.cache.rwReq.get.wStrb          := DontCare
+    if (enableCacheInst) {
+      outMem.cache.cacheInst.get.valid      := inBits.uOp.memType.get.isOneOf(CACHEINST)
+      outMem.cache.cacheInst.get.bits.op    := inBits.cacheOp.get
+      outMem.cache.cacheInst.get.bits.taglo := 0.U
+    }
+    outMem.immOffset := inBits.immOffset.get
+    outMem.carryout  := addrL12sb(12)
   }
 
   //wake up others

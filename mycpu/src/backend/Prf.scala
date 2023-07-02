@@ -64,6 +64,7 @@ class Prf extends MycpuModule {
     val pRegNumOfArchReg = Wire(Vec(aRegNum, PRegIdx))
     addSink(pRegNumOfArchReg, s"DiffArchRegNum")
     val checkArchRegs = Module(new DifftestArchIntRegState)
+    checkArchRegs.io.clock := clock
     (0 until 32).foreach(i => {
       checkArchRegs.io.gpr(i) := phyRegs(pRegNumOfArchReg(i))
     })

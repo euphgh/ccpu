@@ -213,5 +213,6 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     checkHILORegs.io.hi := archHi
     checkHILORegs.io.lo := archLo
     addSink(checkHILORegs.io.en, "hasValidRetire")
+    checkHILORegs.io.clock := clock
   }
 }

@@ -434,6 +434,7 @@ class ROB extends MycpuModule {
   if (verilator) {
     import chisel3.util.experimental.BoringUtils._
     val checkRetire = Module(new DifftestInstrCommit)
+    checkRetire.io.clock     := clock
     checkRetire.io.retireNum := PriorityEncoder((0 until retireNum).map(io.out.multiRetire(_).valid))
     checkRetire.io.lastPC := PriorityMux(
       (0 until retireNum)

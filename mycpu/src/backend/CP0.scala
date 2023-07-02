@@ -160,6 +160,7 @@ class CP0 extends BasicCOP with MycpuParam {
   import difftest.DifftestArchCP0
   if (verilator) {
     val checkCP0Regs = Module(new DifftestArchCP0)
+    checkCP0Regs.io.clock    := clock
     checkCP0Regs.io.index    := indexReg.read
     checkCP0Regs.io.random   := randomReg.read
     checkCP0Regs.io.entrylo0 := entrylo0Reg.read

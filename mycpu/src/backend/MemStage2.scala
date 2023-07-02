@@ -51,14 +51,16 @@ class MemStage2 extends MycpuModule {
   cache2.io.in.valid := io.in.valid
   cache2.io.in.valid := io.in.valid
   io.dmem <> cache2.io.dram
-  io.in.ready := cache2.io.in.ready // LSU is always priori to LSU
+  io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = io.in.valid && cache2.io.out.valid
-  io.out.valid := cacheFinish && !inBits.isSQ
-  io.doneSQ    := cacheFinish && inBits.isSQ
+  io.out.valid        := cacheFinish && !inBits.isSQ
+  io.doneSQ           := cacheFinish && inBits.isSQ
+  cache2.io.out.ready := io.out.ready
   assert(inBits.isSQ ^ inBits.toCache2.cacheInst.get.valid)
   // ===================== select ===============================
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))
+  asg(io.querySQ.req.needMask, inBits.toCache2.dCacheReq.get.wStrb)
   val validWord  = maskWord(coutBit.ddata.get, io.querySQ.res.memMask).asUInt | io.querySQ.res.data
   val validBytes = word2Bytes(validWord)
   val l2sb       = inBits.toCache2.dCacheReq.get.lowAddr.offset(1, 0)

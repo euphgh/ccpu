@@ -15,7 +15,7 @@ class MultiplierIP extends BlackBox with HasBlackBoxInline {
   })
   setInline(
     "MultiplierIP",
-    """ module ip_multiplier (
+    """ module MultiplierIP (
       |    input wire clk,rst,
       |    input wire [32:0] A,
       |    input wire [32:0] B,

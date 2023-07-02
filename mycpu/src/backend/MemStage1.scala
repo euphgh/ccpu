@@ -207,6 +207,8 @@ class MemStage1 extends MycpuModule {
   when(inBits.isRoStage) {
     toM2Bits.toCache2.dCacheReq.get.size := toSQbits.rwReq.size
   }
+  // do not important for lsu will not see this signal
+  io.cacheIn.ready := cache1.io.in.ready
 
   if (enableCacheInst) {
     val ci = cache1.io.out.cacheInst.get

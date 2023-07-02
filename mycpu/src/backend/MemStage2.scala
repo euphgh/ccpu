@@ -30,6 +30,7 @@ class MemStage2 extends MycpuModule {
     val querySQ = new QuerySQ
     val doneSQ  = Output(Bool()) //connect storeQ deq.back
     val dmem    = new DramIO
+    val flush   = Input(Bool()) // for cache instr
   })
   val outBits = io.out.bits
   val inBits  = io.in.bits
@@ -144,5 +145,6 @@ class MemStage2 extends MycpuModule {
     val inci = io.in.bits.toCache2.cacheInst.get
     assert(inBits.isSQ ^ inci.valid)
     io.out.valid := Mux(inci.valid, cache2.io.cacheInst.finish.get, cacheFinish && !inBits.isSQ)
+    asg(cache2.io.cacheInst.redirect.get, io.flush)
   }
 }

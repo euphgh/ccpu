@@ -61,6 +61,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   memStage1.io.out.toStoreQ <> storeQ.io.enq
 
   dram <> memStage2.io.dmem
-  storeQ.io.flush := io.flush
+  memStage2.io.flush := io.flush
+  storeQ.io.flush    := io.flush
   (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
 }

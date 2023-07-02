@@ -91,6 +91,7 @@ class PatternHistoryTable extends MycpuModule {
     val wdata = Wire(new phtEntry)
     wdata.valid := true.B
     wdata.tag   := getphtTag(update.pc)
+    wdata.data  := update.data.bits
     ram.write(hash(update.pc), wdata)
   }
 
@@ -163,6 +164,7 @@ class IfStage1 extends MycpuModule {
   // stage regs ==========================================
   val fakeCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
   fakeCacheInst.valid := false.B
+  fakeCacheInst.bits  := DontCare
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready

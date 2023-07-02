@@ -32,9 +32,6 @@ class InstFetch extends MycpuModule {
     val tlb         = new TLBSearchIO
     val imem        = new DramReadIO
     val bpuUpdateIn = Flipped(Valid(new BpuUpdateIO))
-    val icacheInst =
-      if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
-      else None
   })
 
   val preIfStage = Module(new PreIf)
@@ -48,13 +45,11 @@ class InstFetch extends MycpuModule {
   //If1 in
   asg(ifStage1.io.in, preIfStage.io.out)
   ifStage1.io.tlb <> io.tlb
-  if (enableCacheInst) { asg(ifStage1.io.icacheInst.get, io.icacheInst.get) }
   asg(ifStage1.io.bpuUpdateIn, Mux(ifStage2.io.bpuUpdate.fire, ifStage2.io.bpuUpdate.bits, io.bpuUpdateIn.bits))
   when(!io.bpuUpdateIn.valid && !ifStage2.io.bpuUpdate.valid) {
     asg(ifStage1.io.bpuUpdateIn.btb.valid, false.B)
     asg(ifStage1.io.bpuUpdateIn.pht.valid, false.B)
   }
-  if (enableCacheInst) BoringUtils.addSink(ifStage1.io.icacheInst.get, "ICacheInstrReq")
 
   //IF2 in
   PipelineConnect(ifStage1.io.out, ifStage2.io.in, ifStage2.io.out.fire, preIfStage.io.in.redirect.flush)

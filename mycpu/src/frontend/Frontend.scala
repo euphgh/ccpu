@@ -15,9 +15,6 @@ class Frontend extends MycpuModule {
     val tlbSearch   = new TLBSearchIO
     val imem        = new DramReadIO
     val bpuUpdateIn = Flipped(Valid(new BpuUpdateIO))
-    val icacheInst =
-      if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
-      else None
   })
 
   val instFetch  = Module(new InstFetch)
@@ -27,7 +24,6 @@ class Frontend extends MycpuModule {
   instFetch.io.imem <> io.imem
   asg(instFetch.io.redirect, io.redirect)
   instFetch.io.tlb <> io.tlbSearch
-  if (enableCacheInst) { asg(instFetch.io.icacheInst.get, io.icacheInst.get) }
 
   instFetch.io.out <> instBuffer.io.in //not pipeline connect
   io.out <> instBuffer.io.out

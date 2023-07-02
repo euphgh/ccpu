@@ -18,7 +18,7 @@ class Backend extends MycpuModule {
     val dram           = new DramIO
     val redirectFront  = new FrontRedirctIO
     val bpuUpdate      = Valid(new BpuUpdateIO)
-    val dperOutFireNum = Output(UInt())
+    val dperOutFireNum = Output(UInt((log2Up(dispatchNum) + 1).W))
   })
 
   //component

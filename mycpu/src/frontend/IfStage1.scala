@@ -7,6 +7,7 @@ import chisel3.util._
 import cache._
 import utils.asg
 import chisel3.util.experimental.decode._
+import chisel3.util.experimental.BoringUtils
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -150,14 +151,19 @@ class IfStage1 extends MycpuModule {
     val tlb     = new TLBSearchIO
 
     val bpuUpdateIn = Flipped(new BpuUpdateIO)
-    val icacheInst =
-      if (enableCacheInst) Some(Flipped(Valid(new ICacheInstIO)))
-      else None
   })
+
+  val icacheInst =
+    if (enableCacheInst) Some(Wire(Flipped(Valid(new ICacheInstIO))))
+    else None
+  if (enableCacheInst) {
+    BoringUtils.addSink(icacheInst.get, "ICacheInstrReq")
+  }
+
   // stage regs ==========================================
   val fakeCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
   fakeCacheInst.valid := false.B
-  val usableCacheInst = io.icacheInst.getOrElse(fakeCacheInst)
+  val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready
   val pc              = RegEnable(io.in.npc, "hbfc00000".U, update)
@@ -274,7 +280,7 @@ class IfStage1 extends MycpuModule {
   )
   io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
   if (enableCacheInst) {
-    val ci = io.icacheInst.get
+    val ci = icacheInst.get
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
     io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)

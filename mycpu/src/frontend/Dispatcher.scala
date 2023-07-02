@@ -214,7 +214,7 @@ class Dispatcher extends MycpuModule {
       val robIndex       = Input(ROBIdx)
       val flushBackend   = Input(Bool())
     }
-    val outFireNum = Output(UInt())
+    val outFireNum = Output(UInt((log2Up(dispatchNum) + 1).W))
 
     val fromAluMispre = new Bundle {
       val happen     = Input(Bool())

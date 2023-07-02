@@ -9,10 +9,10 @@ import bundle._
 class CCPU extends MycpuModule {
   val io = IO(new Bundle {
     val extInt = Input(UInt(6.W))
-    val dram   = new DramIO
+    val axi    = new AxiIO
   })
-  val frontend = new Frontend
-  val backend  = new Backend
+  val frontend = Module(new Frontend)
+  val backend  = Module(new Backend)
   val fIO      = frontend.io
   val bIO      = backend.io
   val flush    = bIO.redirectFront.flush
@@ -23,6 +23,8 @@ class CCPU extends MycpuModule {
   bIO.fronTlbSearch <> fIO.tlbSearch
   IbfConnectDper(new InstBufferOutIO, fIO.out, bIO.in, bIO.dperOutFireNum, flush)
 
-  //TODO:访存和ICACHE
-
+  val axi2to1Arbiter = Module(new Axi2to1Arbiter)
+  axi2to1Arbiter.io.dmem <> backend.io.dram
+  axi2to1Arbiter.io.imem <> frontend.io.imem
+  io.axi <> axi2to1Arbiter.io.master
 }

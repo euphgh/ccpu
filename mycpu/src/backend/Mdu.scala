@@ -106,7 +106,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val blockDone           = RegInit(false.B)
   // state
   val state    = RegInit(run)
-  val blockRes = Wire(UInt(64.W)) // save res for clz mul mult div ...
+  val blockRes = WireInit(0.U(64.W))
   exeStageIO.out.valid := false.B //default
   switch(state) {
     is(run) {

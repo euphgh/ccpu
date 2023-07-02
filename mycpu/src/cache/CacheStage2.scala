@@ -176,7 +176,6 @@ class CacheStage2[T <: Data](
   asg(ar.bits.addr, Cat(inBits.ptag, lowAddr.index, 0.U(cacheOffsetWidth.W)))
   asg(ar.bits.burst, BurstType.INCR) //TODO: key word first
   asg(ar.bits.size, SizeType.Word.asUInt)
-  println(SizeType.Word.asUInt)
   asg(ar.bits.len, (wordNum - 1).U(8.W))
   asg(ar.bits.id, id)
   // >> AW channel ==============================================================

@@ -197,6 +197,7 @@ class MemStage1 extends MycpuModule {
   io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.ready)
   toM2Bits.isSQ      := !inBits.isRoStage
   toM2Bits.wbInfo    := inBits.wbInfo
+  toM2Bits.memType   := inBits.memType
   toM2Bits.pTag      := tlbRes.pTag
   toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
   //======================== Cache Stage 1 ============================

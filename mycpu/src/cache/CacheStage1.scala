@@ -49,6 +49,7 @@ class CacheStage1(
     val out = new CacheStage1OutIO(roads, wordNum, isDcache)
   })
   // Reg stage
+  io.in.ready := true.B // ifstage1 and mem1 should keep
   val lowAddr  = Wire(new CacheLowAddr)
   val stageReg = RegEnable(io.in.bits, 0.U.asTypeOf(new CacheStage1In(isDcache)), io.in.valid)
   if (!isDcache) {
@@ -62,6 +63,7 @@ class CacheStage1(
   val metas  = List.fill(roads)(Module(new DPTemplate(new CacheMeta(isDcache), lineNum, true)))
   val datas  = List.fill(roads)(Module(new DPTemplate(Vec(wordNum, UWord), lineNum, true)))
   (0 until roads).foreach(i => {
+    r2data(i).req.ready := true.B
     if (isDcache) {
       addSink(r2data(i), s"DcacheStage2ReadData$i")
       addSink(w2data(i), s"DcacheStage2WriteData$i")
@@ -72,8 +74,6 @@ class CacheStage1(
       addSink(w2meta(i), s"IcacheStage2WriteMeta$i")
     }
     metas(i).io.r(true.B, lowAddr.index)
-    //val reqValid = Wire(Bool())
-    //reqValid := r2data(i).req.valid
     datas(i).io.r(true.B, Mux(r2data(i).req.valid, r2data(i).req.bits.setIdx, lowAddr.index))
     r2data(i).resp := datas(i).io.r.resp
     val writeFromStage2 = w2data(i).req.valid

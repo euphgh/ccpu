@@ -5,12 +5,17 @@ import frontend._
 import backend._
 import utils._
 import bundle._
+import bundle.AXIBundle._
+import chisel3.experimental.dataview._
+import chisel3.experimental._
+import chisel3.util._
 
 class CCPU extends MycpuModule {
-  val io = IO(new Bundle {
-    val extInt = Input(UInt(6.W))
-    val axi    = new AxiIO
-  })
+  val extInt = IO(Input(UInt(6.W)))
+  val bus    = IO(new VerilogAXIBundle)
+  val axi    = bus.viewAs[AxiIO]
+  extInt.suggestName("ext_int")
+
   val frontend = Module(new Frontend)
   val backend  = Module(new Backend)
   val fIO      = frontend.io
@@ -19,12 +24,12 @@ class CCPU extends MycpuModule {
 
   asg(fIO.bpuUpdateIn, bIO.bpuUpdate)
   asg(fIO.redirect, bIO.redirectFront)
-  asg(bIO.extInt, io.extInt)
+  asg(bIO.extInt, extInt)
   bIO.fronTlbSearch <> fIO.tlbSearch
   IbfConnectDper(new InstBufferOutIO, fIO.out, bIO.in, bIO.dperOutFireNum, flush)
 
   val axi2to1Arbiter = Module(new Axi2to1Arbiter)
   axi2to1Arbiter.io.dmem <> backend.io.dram
   axi2to1Arbiter.io.imem <> frontend.io.imem
-  io.axi <> axi2to1Arbiter.io.master
+  axi <> axi2to1Arbiter.io.master
 }

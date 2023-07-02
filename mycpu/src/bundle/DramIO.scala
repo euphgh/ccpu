@@ -16,37 +16,37 @@ object SizeType extends ChiselEnum {
   val other = Value("b100".U) //填宽度用
 }
 
-class ARChannel(var idLen: Int = 4) extends MycpuBundle {
+class ARChannel(val idLen: Int = 4) extends MycpuBundle {
   val id    = UInt(idLen.W)
   val addr  = UWord
-  val len   = UInt(8.W) // burst number
+  val len   = UInt(4.W) // burst number
   val size  = UInt(3.W) // bytes number - 1
   val burst = BurstType()
 }
 
-class RChannel(var idLen: Int = 4) extends MycpuBundle {
+class RChannel(val idLen: Int = 4) extends MycpuBundle {
   val id   = UInt(idLen.W)
   val data = UWord
   val last = Bool()
 }
 
-class AWChannel(var idLen: Int = 4) extends MycpuBundle {
+class AWChannel(val idLen: Int = 4) extends MycpuBundle {
   val id    = UInt(idLen.W)
   val addr  = UWord
-  val len   = UInt(8.W) // burst number
+  val len   = UInt(4.W) // burst number
   val size  = UInt(3.W) // bytes number - 1
   val burst = BurstType()
 
 }
 
-class WChannel(var idLen: Int = 4) extends MycpuBundle {
+class WChannel(val idLen: Int = 4) extends MycpuBundle {
   val id   = UInt(idLen.W)
   val data = UWord
   val strb = UInt((vaddrWidth / 8).W)
   val last = Bool()
 }
 
-class BChannel(var idLen: Int = 4) extends MycpuBundle {
+class BChannel(val idLen: Int = 4) extends MycpuBundle {
   val id = UInt(idLen.W)
 }
 

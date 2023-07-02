@@ -198,7 +198,7 @@ class CacheStage2[T <: Data](
   asg(ar.bits.addr, Cat(inBits.ptag, lowAddr.index, 0.U(cacheOffsetWidth.W)))
   asg(ar.bits.burst, BurstType.INCR) //TODO: key word first
   asg(ar.bits.size, SizeType.Word.asUInt)
-  asg(ar.bits.len, (wordNum - 1).U(8.W))
+  asg(ar.bits.len, (wordNum - 1).U(4.W))
   asg(ar.bits.id, id)
   asg(ar.valid, false.B)
   asg(r.ready, true.B)
@@ -213,7 +213,7 @@ class CacheStage2[T <: Data](
   )
   asg(aw.bits.burst, BurstType.INCR)
   asg(aw.bits.size, SizeType.Word.asUInt)
-  asg(aw.bits.len, (wordNum - 1).U(8.W))
+  asg(aw.bits.len, (wordNum - 1).U(4.W))
   asg(aw.bits.id, id)
   asg(aw.valid, false.B)
   // >> W channel ==============================================================

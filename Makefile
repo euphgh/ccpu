@@ -1,4 +1,5 @@
 BUILD_DIR = ./build
+TEST_DIR = ./test_run_dir
 MainModule = mycpu
 
 export PATH := $(PATH):$(abspath ./utils)
@@ -25,5 +26,6 @@ bsp:
 
 clean:
 	-rm -rf $(BUILD_DIR)
+	-rm -rf $(TEST_DIR)
 
 .PHONY: test verilog help compile bsp clean

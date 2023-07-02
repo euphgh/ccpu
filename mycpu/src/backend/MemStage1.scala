@@ -55,9 +55,6 @@ class MemStage1 extends MycpuModule {
   val l2sb       = lowAddr.offset(1, 0)
   val leftSize   = LookupUIntDefault(l2sb, 2.U, Seq(0.U -> 0.U, 1.U -> 1.U))
   val rightSize  = LookupUIntDefault(l2sb, 2.U, Seq(3.U -> 0.U, 2.U -> 1.U))
-  val lsSize     = Wire(UInt(2.W))
-  val wStrb      = Wire(UInt(4.W))
-  val wWord      = Wire(UInt(32.W))
   val byteStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0010".U, 2.U -> "b0100".U, 3.U -> "b1000".U))
   val halfStrob  = LookupUInt(l2sb, Seq(0.U -> "b0011".U, 2.U -> "b1100".U))
   val leftStrob  = LookupUInt(l2sb, Seq(0.U -> "b0001".U, 1.U -> "b0011".U, 2.U -> "b0111".U, 3.U -> "b1111".U))
@@ -208,7 +205,7 @@ class MemStage1 extends MycpuModule {
   cache1.io.in.valid := io.cacheIn.valid && io.in.ready
   toM2Bits.toCache2 <> cache1.io.out
   when(inBits.isRoStage) {
-    toM2Bits.toCache2.dCacheReq.get.size := lsSize
+    toM2Bits.toCache2.dCacheReq.get.size := toSQbits.rwReq.size
   }
 
   if (enableCacheInst) {

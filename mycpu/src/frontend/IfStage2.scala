@@ -44,6 +44,14 @@ class IfStage2 extends Module with MycpuParam {
   asg(icache2.io.in.bits.cancel, io.in.bits.exception =/= FrontExcCode.NONE)
   asg(icache2.io.in.bits.isUncached, io.in.bits.isUncached)
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
+  if (enableCacheInst) {
+    icache2.io.cacheInst.redirect.get := io.flushIn
+  }
+  io.imem.ar <> icache2.dram.ar
+  io.imem.r <> icache2.dram.r
+  icache2.dram.aw <> DontCare
+  icache2.dram.w <> DontCare
+  icache2.dram.b <> DontCare
   val inBits  = io.in.bits
   val outBits = io.out.bits
   (0 until fetchNum).foreach(i => {
@@ -127,9 +135,7 @@ class IfStage2 extends Module with MycpuParam {
     asg(updatePht.valid, true.B)
     asg(updatePht.bits, 0.U(2.W))
   }
-  //bpuUpdateQ deq
-  asg(io.bpuUpdate.valid, bpuUpdateQueue.io.deq.valid)
-  asg(bpuUpdateQueue.io.deq.ready, io.bpuUpdate.ready)
+  io.bpuUpdate <> bpuUpdateQueue.io.deq
 
   /**
     * is延迟槽

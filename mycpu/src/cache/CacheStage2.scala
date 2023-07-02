@@ -60,7 +60,7 @@ class CacheStage2[T <: Data](
     val dram = new DramIO
   })
 
-  // alias ============================================================
+  // alias and utils ============================================================
   val inBits      = io.in.bits
   val outBits     = io.out.bits
   val stage1      = inBits.fromStage1
@@ -74,12 +74,31 @@ class CacheStage2[T <: Data](
   val dreq        = stage1.dCacheReq.getOrElse(0.U.asTypeOf(new CacheRWReq))
   val id          = if (isDcache) "b0001".U(4.W) else "b0010".U(4.W)
   val isCacheInst = stage1.cacheInst.fold(false.B)(_.valid)
+  def dirtyMeta(meta: CacheMeta) = {
+    val newMeta = WireInit(meta)
+    newMeta.dirty.get := true.B
+    newMeta
+  }
+  def unvalidMeta(meta: CacheMeta) = {
+    val newMeta = WireInit(meta)
+    newMeta.valid := false.B
+    newMeta
+  }
+  def selectMetasByWay(way: UInt) = {
+    LookupUInt(
+      way,
+      (0 until roads).map(i => {
+        i.U -> stage1.meta(i)
+      })
+    )
+  }
   // HIT Logic =================================================================
   val hitMask = VecInit((0 until roads).map(i => {
     val meta = stage1.meta(i)
     (meta.tag === inBits.ptag) && meta.valid
   }))
   val hit = hitMask.asUInt.orR
+  io.out.bits.toUser.foreach(_ := DontCare)
   if (isDcache) {
     asg(outBits.ddata.get, Mux1H(hitMask, stage1.ddata.get)) //default
   } else {
@@ -172,6 +191,7 @@ class CacheStage2[T <: Data](
     asg(w1meta(i).req.bits.data.tag, inBits.ptag)
     asg(w1meta(i).req.bits.data.valid, true.B)
     asg(w1data(i).req.bits.data, newLineVec)
+    if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, false.B)
   })
   // Default Bus Assign ========================================================
   // >> AR channel =============================================================
@@ -239,7 +259,9 @@ class CacheStage2[T <: Data](
           io.out.valid := true.B
           if (isDcache) {
             (0 until roads).foreach(i => {
-              w1data(i).req.valid := hitMask(i) && dreq.isWrite
+              w1data(i).req.valid     := hitMask(i) && dreq.isWrite
+              w1meta(i).req.valid     := hitMask(i) && dreq.isWrite
+              w1meta(i).req.bits.data := dirtyMeta(inBits.fromStage1.meta(i))
             })
           }
         }.elsewhen(!stage1.cacheInst.get.valid) {
@@ -438,19 +460,7 @@ class CacheStage2[T <: Data](
   }
   // Cache Inst ======================================================
   if (enableCacheInst) {
-    def unvalidMeta(meta: CacheMeta) = {
-      val newMeta = meta
-      newMeta.valid := false.B
-      newMeta
-    }
-    def selectMetasByWay(way: UInt) = {
-      LookupUInt(
-        way,
-        (0 until roads).map(i => {
-          i.U -> stage1.meta(i)
-        })
-      )
-    }
+
     def invalidWriteBack(way: UInt, isWB: Bool) = {
       // unvalid tag meta
       w1meta(way).req.valid     := true.B

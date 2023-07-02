@@ -92,7 +92,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val imm       = low26(15, 0)
       //count target
       val brType            = inUop.brType.get
-      val dsPcVal           = maExtraIn.pcVal // what is ds ???
+      val dsPcVal           = maExtraIn.pcVal + 4.U(32.W)
       val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
       val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
       val jDest             = Cat(dsPcVal(31, 28), low26, 0.U(2.W))
@@ -103,6 +103,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       asg(outBranch.realBtbType, realBtbType)
       asg(outBranch.realTarget, Mux(isJ, jDest, Mux(isJr, jrDest, bDest)))
       asg(outBranch.predict, maExtraIn.predictResult)
+      asg(outBranch.pcVal, maExtraIn.pcVal)
       //srcs select
       when(AluType.useImm(aluType)) { asg(outSrcs(1), SignExt(imm, 32)) }
       when(AluType.needSa(aluType)) { asg(outSrcs(0), ZeroExt(imm(10, 6), 32)) }

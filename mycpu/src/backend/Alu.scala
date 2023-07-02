@@ -260,7 +260,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     //pht update
     val cat = Cat(preCnt, genTaken)
     asg(pht.valid, brValid && cat.andR =/= cat.orR)
-    asg(pht.bits, Mux(genTaken, pht.bits + 1.U, pht.bits - 1.U))
+    asg(pht.bits, Mux(genTaken, preCnt + 1.U, preCnt - 1.U))
     /*==================== MisPre Signal to Dper/ROB ====================*/
     val misSignal  = mispre.get
     val takenWrong = genTaken ^ preCnt(1)

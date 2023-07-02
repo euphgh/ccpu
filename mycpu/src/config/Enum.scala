@@ -79,7 +79,7 @@ object BranchType extends ChiselEnum {
   def lez(op:    BranchType.Type): Bool = op === BLEZ
   def ltz(op:    BranchType.Type): Bool = op === BLTZ || op === BLTZAL
   def noCond(op: BranchType.Type): Bool = isJ(op) || isJr(op)
-
+  //trans
   def toBtbType(op: BranchType.Type, rs: UInt): BtbType.Type =
     MuxCase(
       BtbType.non,
@@ -91,6 +91,7 @@ object BranchType extends ChiselEnum {
         (op === J)             -> BtbType.jmp
       )
     )
+  def isBr(op: BranchType.Type): Bool = op =/= NON
 }
 object AluType extends ChiselEnum {
   val ADD, ADDI, ADDU, ADDIU, SUB, SUBU, AND, ANDI, OR, ORI, XOR, XORI, NOR, SLT, SLTI, SLTU, SLTIU, SLL, SRL, SRA,

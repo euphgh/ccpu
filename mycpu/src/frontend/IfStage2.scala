@@ -52,16 +52,16 @@ class IfStage2 extends Module with MycpuParam {
   icache2.dram.aw <> DontCare
   icache2.dram.w <> DontCare
   icache2.dram.b <> DontCare
-  val inBits  = io.in.bits
-  val outBits = io.out.bits
+  val inBits      = io.in.bits
+  val outBits     = io.out.bits
+  val inValidMask = inBits.validMask
   (0 until fetchNum).foreach(i => {
     val outBasic = outBits.basicInstInfo(i)
     val inPcVal  = inBits.pcVal
     outBits.predictResult(i) := inBits.predictResult(i)
     asg(outBasic.pcVal, Cat(inPcVal(31, 5), inPcVal(4, 2) + i.U, inPcVal(1, 0)))
     asg(outBasic.instr, icache2.io.out.bits.idata.get(i)) //要求cache根据自动机状态返回全0
-    //asg(outBasic.instr, Mux(inBits.exception === FrontExcCode.AdEL, 0.U(32.W), icache2.io.out.bits.idata.get(i)))
-    outBits.validMask(i) := inBits.validMask(i)
+    outBits.validMask(i) := inBits.validMask(i) //default noBrMispre May change it
   })
   asg(outBits.exception, inBits.exception)
   asg(io.out.valid, icache2.io.out.valid)
@@ -83,7 +83,6 @@ class IfStage2 extends Module with MycpuParam {
   }
   import chisel3.util.experimental.decode.QMCMinimizer
   val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
-  val validBr        = Wire(Vec(fetchNum, Bool()))
   val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
   val firNonBrMispre = WireDefault(0.U(log2Up(retireNum).W))
   val bpuUpdateQueue = Module(new Queue(gen = new BpuUpdateIO, entries = 4))
@@ -100,12 +99,11 @@ class IfStage2 extends Module with MycpuParam {
     val instr     = io.out.bits.basicInstInfo(i).instr
     val preRes    = io.out.bits.predictResult(i)
     val preTake   = preRes.counter > 1.U
-    val instValid = io.out.bits.validMask(i) && io.in.valid
+    val instValid = inValidMask(i) && io.in.valid //inValid
     preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
     val realBrType = preDecoder(i).brType
-    nonBrMisPreVec(i) := (realBrType === BranchType.NON && preTake && instValid) //注意io.in.valid
+    nonBrMisPreVec(i) := (realBrType === BranchType.NON && preTake && instValid)
     asg(io.out.bits.realBrType(i), realBrType)
-    asg(validBr(i), realBrType =/= BranchType.NON && instValid) //注意io.in.valid
   })
 
   when(nonBrMisPreVec.asUInt.orR && io.in.valid) {
@@ -114,8 +112,8 @@ class IfStage2 extends Module with MycpuParam {
     val misPreRes = io.out.bits.predictResult(firNonBrMispre)
     //mask the inst behind it
     (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
-    //change its preResult
-    misPreRes.counter := 0.U
+    //change its preResult      ATTENTION:这里preRes无所谓改不改，因为ALU里会根据realBrType来操作
+    //misPreRes.counter := 0.U  ATTENTION:这里改了会造成组合环路
     misPreRes.btbType := BtbType.non
     //redirect frontend
     asg(io.noBrMispreRedirect.flush, true.B)
@@ -142,18 +140,20 @@ class IfStage2 extends Module with MycpuParam {
     *   目前放在IF2段处理
     *   PRE-IF那还不太一样，如果分支没被预测跳转，是不会进入单走延迟槽的状态的
     */
-  val validMask = io.in.bits.validMask
-  val dsReg     = RegInit(false.B)
-  val lastDs    = WireInit(0.U((1 + log2Up(fetchNum)).W))
-  val validNum  = PriorityCount(validMask.asUInt)
-  when(validMask(0) && io.in.valid) { dsReg := false.B } //注意io.in.valid
-  when(validBr.asUInt.orR && io.in.valid) {
+  val validBr = WireInit(
+    VecInit((0 until fetchNum).map(i => BranchType.isBr(outBits.realBrType(i)) && outBits.validMask(i))) //outValid
+  )
+  val dsReg       = RegInit(false.B)
+  val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
+  val outValidNum = PriorityCount(outBits.validMask.asUInt)
+  when(outBits.validMask(0)) { dsReg := false.B }
+  when(validBr.asUInt.orR) {
     asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
-    when(lastDs >= validNum) {
+    when(lastDs >= outValidNum) {
       dsReg := true.B
     }
   }
-  val isBd = io.out.bits.isBd
+  val isBd = outBits.isBd
   (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
   asg(isBd(0), dsReg)
   when(io.flushIn) { dsReg := false.B }

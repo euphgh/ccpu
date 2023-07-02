@@ -13,4 +13,6 @@ class Divider extends MycpuModule {
     }))
     val out = Valid(UInt(63.W))
   })
+
+  io.out := DontCare //TODO:
 }

@@ -71,4 +71,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   memStage2.io.flush := io.flush
   storeQ.io.flush    := io.flush
   (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
+
+  io.out <> memStage2.io.out
+
 }

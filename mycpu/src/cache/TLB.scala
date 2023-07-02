@@ -36,6 +36,7 @@ class TLB extends MycpuModule {
   val tlbwiReq = Wire(Bool())
   val tlbwrReq = Wire(Bool())
   addSink(tlbpReq, "tlbpReq")
+  addSink(tlbrReq, "tlbrReq")
   addSource(tlbpRes, "tlbpRes")
   addSink(tlbwiReq, "tlbwiReq")
   addSink(tlbwrReq, "tlbwrReq")

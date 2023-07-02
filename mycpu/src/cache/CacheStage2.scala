@@ -162,13 +162,15 @@ class CacheStage2[T <: Data](
       addSource(w1meta(i), s"IcacheStage2WriteMeta$i")
     }
     // default
-    r1data(i).req.valid       := false.B
-    r1data(i).req.bits.setIdx := lowAddr.index
-    w1data(i).req.valid       := false.B
+    r1data(i).req.valid := false.B
+    w1data(i).req.valid := false.B
+    w1meta(i).req.valid := false.B
     // not default but for permenant assign
+    asg(w1meta(i).req.bits.setIdx, lowAddr.index)
+    asg(r1data(i).req.bits.setIdx, lowAddr.index)
+    asg(w1data(i).req.bits.setIdx, lowAddr.index)
     asg(w1meta(i).req.bits.data.tag, inBits.ptag)
     asg(w1meta(i).req.bits.data.valid, true.B)
-    asg(w1meta(i).req.bits.setIdx, lowAddr.index)
     asg(w1data(i).req.bits.data, newLineVec)
   })
   // Default Bus Assign ========================================================
@@ -178,6 +180,8 @@ class CacheStage2[T <: Data](
   asg(ar.bits.size, SizeType.Word.asUInt)
   asg(ar.bits.len, (wordNum - 1).U(8.W))
   asg(ar.bits.id, id)
+  asg(ar.valid, false.B)
+  asg(r.ready, true.B)
   // >> AW channel ==============================================================
   asg(
     aw.bits.addr,
@@ -190,15 +194,23 @@ class CacheStage2[T <: Data](
   asg(aw.bits.burst, BurstType.INCR)
   asg(aw.bits.size, SizeType.Word.asUInt)
   asg(aw.bits.len, (wordNum - 1).U(8.W))
-  asg(ar.bits.id, id)
+  asg(aw.bits.id, id)
+  asg(aw.valid, false.B)
   // >> W channel ==============================================================
-  w.bits.id   := id
-  w.bits.strb := "b1111".U
+  asg(w.bits.id, id)
+  asg(w.bits.strb, "b1111".U)
+  asg(w.valid, false.B)
+  w.bits.data := DontCare
+  w.bits.last := DontCare
+  // >> B channel ==============================================================
+  b.ready := true.B
 
   val firstMissCycle = RegInit(false.B)
   val ucICounter     = if (!isDcache) Some(Counter(fetchNum)) else None
-  val ucIBuffer      = if (!isDcache) Some(Wire(Vec(fetchNum, UWord))) else None
-  val ucDBuffer      = if (isDcache) Some(Wire(UWord)) else None
+  val ucIBuffer      = if (!isDcache) Some(RegInit(VecInit.fill(fetchNum)(0.U(32.W)))) else None
+  val ucDBuffer      = if (isDcache) Some(RegInit(0.U(32.W))) else None
+  io.in.ready  := false.B // default, only in run state assign
+  io.out.valid := false.B // defualt, only in run state assign
   switch(mainState) {
     is(run) {
       // set refill write sram valid = false.B
@@ -465,7 +477,7 @@ class CacheStage2[T <: Data](
 
     val tagWay            = inBits.ptag(cacheIndexWidth + log2Ceil(roads) - 1, cacheIndexWidth)
     val ciOp              = io.in.bits.fromStage1.cacheInst.get.bits.op
-    val iCacheFinishInstr = Wire(Bool()) // for reflect icache finish to dcache
+    val iCacheFinishInstr = WireInit(false.B) // for reflect icache finish to dcache
     if (isDcache) {
       addSink(iCacheFinishInstr, "iCacheFinishInstr")
     }

@@ -85,7 +85,7 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
         }
     }
     // (1) DPI-C function prototype
-    val dpicInterfaces = interfaces.filterNot(_._1 == "io_clock")
+    val dpicInterfaces = interfaces.filterNot(in => in._1 == "io_clock" || in._1 == "io_en")
     val dpicName       = s"v_difftest_${moduleName.replace("Difftest", "")}"
     val dpicDecl =
       s"""
@@ -101,7 +101,7 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
          |  $modPorts
          |);
          |`ifndef SYNTHESIS
-         |`ifdef DIFFTEST
+         |`ifdef VERILATOR
          |$dpicDecl
          |  always @(posedge io_clock) begin
          |    if (io_en) begin

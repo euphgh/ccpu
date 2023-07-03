@@ -27,15 +27,16 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
   }
   val lowWidth    = log2Ceil(fetchNum)
   val bpuTagWidth = 32 - idxWidth - lowWidth
+  val entriesyNum = math.pow(2, idxWidth).toInt
 
   // can be change for better design
   def hash(address:   UInt) = address(idxWidth + lowWidth - 1, lowWidth)
   def missFunc(entry: T, addr: UInt): T = entry
   def getTag(address: UInt) = address(31, idxWidth + 2)
   (0 until fetchNum).foreach(i => {
-    val infoRam = SyncReadMem(math.pow(2, idxWidth).toInt, gen)
-    val tagRam  = SyncReadMem(math.pow(2, idxWidth).toInt, UInt(bpuTagWidth.W))
-    val valid   = RegInit(0.U(math.pow(2, idxWidth).toInt.W))
+    val infoRam = SyncReadMem(entriesyNum, gen)
+    val tagRam  = SyncReadMem(entriesyNum, UInt(bpuTagWidth.W))
+    val valid   = RegInit(0.U(entriesyNum.W))
     // write ========================================
     when(update.data.valid && update.pc(lowWidth - 1, 0) === i.U) {
       infoRam.write(hash(update.pc), update.data.bits)
@@ -127,30 +128,32 @@ class IfStage1 extends MycpuModule {
   if (enableCacheInst) {
     BoringUtils.addSink(icacheInst.get, "ICacheInstrReq")
   }
+  // alias ===============================================
+  val npc = io.in.npc
 
   // stage regs ==========================================
   val fakeCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
   fakeCacheInst.valid := false.B
-  fakeCacheInst.bits  := DontCare
+  fakeCacheInst.bits  := 0.U.asTypeOf(new ICacheInstIO)
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready
-  val pc              = RegEnable(io.in.npc, "hbfc00000".U, update)
+  val pc              = RegEnable(npc, "hbfc00000".U, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
 
   // use wire io.in direct ================================
   // >> cache =============================================
   val icache1 = Module(new CacheStage1())
   icache1.io.in.valid                         := update
-  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(io.in.npc))
-  icache1.io.in.bits.ifReq.get.offset         := getOffset(io.in.npc)
+  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(npc))
+  icache1.io.in.bits.ifReq.get.offset         := getOffset(npc)
   icache1.io.in.bits.cacheInst.get.valid      := isCacheInst
   icache1.io.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
   icache1.io.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
   io.out.bits.iCache <> icache1.io.out
   // >> bpu ===============================================
-  val PCs   = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), (io.in.npc(3, 2) + i.U), "b00".U))
-  val bpuPC = (0 until fetchNum).map(i => Cat(io.in.npc(31, 4), i.U(log2Ceil(fetchNum).W), "b00".U))
+  val PCs   = (0 until fetchNum).map(i => Cat(npc(31, 4), (npc(3, 2) + i.U), "b00".U))
+  val bpuPC = (0 until fetchNum).map(i => Cat(npc(31, 4), i.U(log2Ceil(fetchNum).W), "b00".U))
   // >> >> module ============================================
   val btb = Module(new BranchTargetBuffer())
   val pht = Module(new PatternHistoryTable())
@@ -164,13 +167,15 @@ class IfStage1 extends MycpuModule {
   val btbRes = Wire(Vec(fetchNum, new BtbOutIO))
   val phtRes = Wire(Vec(fetchNum, UInt(2.W)))
   (0 until fetchNum).foreach(i => {
-    btbRes(i) := btb.access(Cat(io.in.npc(31, 4), 0.U(4.W)), i)
-    phtRes(i) := pht.access(Cat(io.in.npc(31, 4), 0.U(4.W)), i)
+    btb.readAddr(i) := Cat(npc(31, 4), 0.U(4.W))
+    pht.readAddr(i) := Cat(npc(31, 4), 0.U(4.W))
+    btbRes(i)       := btb.readRes(i)
+    phtRes(i)       := pht.readRes(i)
   })
   (0 until fetchNum).foreach(i => {
-    bpuout(i).btbType := btbRes(io.in.npc(3, 2)).instType
-    bpuout(i).target  := btbRes(io.in.npc(3, 2)).target
-    bpuout(i).counter := phtRes(io.in.npc(3, 2))
+    bpuout(i).btbType := btbRes(npc(3, 2)).instType
+    bpuout(i).target  := btbRes(npc(3, 2)).target
+    bpuout(i).counter := phtRes(npc(3, 2))
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================
@@ -209,8 +214,10 @@ class IfStage1 extends MycpuModule {
     res
   }
   io.toPreIf.predictDst := getByVB(bpuout.map(_.target))
-  io.toPreIf.dsFetched  := getByVB(Seq(alignMask(1), alignMask(2), alignMask(3), false.B))
-  dsMask                := getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
+  // io.toPreIf.predictDst := 0.U
+  io.toPreIf.dsFetched := getByVB(Seq(alignMask(1), alignMask(2), alignMask(3), false.B))
+  // io.toPreIf.dsFetched := false.B
+  dsMask := getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
   // (io.toPreIf.predictDst, io.toPreIf.dsFetched, dsMask) := PriorityMux(
   //   Seq(
   //     validBranch(0) -> (bpuout(0).target, alignMask(1), "b0011".U(4.W)),

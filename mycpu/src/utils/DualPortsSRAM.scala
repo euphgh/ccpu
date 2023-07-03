@@ -40,7 +40,7 @@ class DPReadBus[T <: Data](private val gen: T, val set: Int) extends Bundle {
 class DPWriteBus[T <: Data](private val gen: T, val set: Int) extends Bundle {
   val req = Decoupled(new DPBundleAW(gen, set))
 
-  def apply(valid: Bool, data: T, setIdx: UInt, waymask: UInt) = {
+  def apply(valid: Bool, data: T, setIdx: UInt) = {
     this.req.bits.apply(data = data, setIdx = setIdx)
     this.req.valid := valid
     this
@@ -88,8 +88,7 @@ class DPTemplate[T <: Data](
   io.w.req.ready := true.B
 }
 
-class DPTemplateWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, way: Int = 1, shouldReset: Boolean = false)
-    extends Module {
+class DPTemplateWithArbiter[T <: Data](nRead: Int, gen: T, set: Int, shouldReset: Boolean = false) extends Module {
   val io = IO(new Bundle {
     val r = Flipped(Vec(nRead, new DPReadBus(gen, set)))
     val w = Flipped(new DPWriteBus(gen, set))

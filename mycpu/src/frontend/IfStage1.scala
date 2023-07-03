@@ -173,9 +173,9 @@ class IfStage1 extends MycpuModule {
     phtRes(i)       := pht.readRes(i)
   })
   (0 until fetchNum).foreach(i => {
-    bpuout(i).btbType := btbRes(npc(3, 2)).instType
-    bpuout(i).target  := btbRes(npc(3, 2)).target
-    bpuout(i).counter := phtRes(npc(3, 2))
+    bpuout(i).btbType := btbRes(pc(3, 2)).instType
+    bpuout(i).target  := btbRes(pc(3, 2)).target
+    bpuout(i).counter := phtRes(pc(3, 2))
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================

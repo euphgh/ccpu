@@ -14,9 +14,9 @@ TopName = sys.argv[2]
 
 def replace(match):
     if match.group(1) == ',':
-        return 'aresetn'
+        return "aresetn" + match.group(1)
     else:
-        return '(!aresetn)'
+        return "(!aresetn)" + match.group(1)
 
 # 需要替换的正则
 patterns = [

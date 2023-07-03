@@ -207,12 +207,14 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   }
 
   // DiffTest ============================================================
+  val checkHiLoEn = robRetire.valid && (commit.muldiv || commit.mthi || commit.mtlo)
   import difftest.DifftestArchHILO
   if (verilator) {
     val checkHILORegs = Module(new DifftestArchHILO)
     checkHILORegs.io.hi := archHi
     checkHILORegs.io.lo := archLo
-    addSink(checkHILORegs.io.en, "hasValidRetire")
+    //addSink(checkHILORegs.io.en, "hasValidRetire")
+    asg(checkHILORegs.io.en, checkHiLoEn)
     checkHILORegs.io.clock := clock
   }
 }

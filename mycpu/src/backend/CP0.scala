@@ -43,7 +43,6 @@ class CP0 extends BasicCOP with MycpuParam {
       val rdata = Output(UWord)
     }
     val redirectTarget = Output(UWord) //eret exception redirect target
-
   })
   val exCommit = io.in.exCommit.bits
   val badVaddr = exCommit.badVaddr
@@ -57,7 +56,6 @@ class CP0 extends BasicCOP with MycpuParam {
   asg(io.mfc0.rdata, mfc0(sel = c0Raddr(2, 0), rd = c0Raddr(7, 3)))
 
   //redirect Target
-  //TODO:remember to select from cache inst redirect target in backend
   val trapBase =
     Mux(statusReg.bev === 1.U, "hbfc0_0200".U(32.W), (ebaseReg.eptbase << 12 | "h8000_0000".U(32.W)))
   val trapOffs = WireInit(0x180.U(32.W))
@@ -179,7 +177,8 @@ class CP0 extends BasicCOP with MycpuParam {
     checkCP0Regs.io.ebase    := ebaseReg.read
     checkCP0Regs.io.config0  := config0Reg.read
     checkCP0Regs.io.config1  := config1Reg.read
-    addSink(checkCP0Regs.io.en, "hasValidRetire")
+    val checkCp0En = io.in.eretFlush || io.in.mtc0.wen || io.in.exCommit.valid || tlbpWreq || tlbrReq
+    asg(checkCP0Regs.io.en, checkCp0En)
   }
 
 }

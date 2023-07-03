@@ -10,7 +10,7 @@ test:
 
 verilog:
 	mkdir -p $(BUILD_DIR)
-	mill -i $(MainModule).runMain Elaborate -td $(BUILD_DIR)
+	mill -i $(MainModule).runMain SubMain -td $(BUILD_DIR)
 
 mycpu:
 	mkdir -p $(BUILD_DIR)

@@ -11,11 +11,18 @@ else:
     sys.exit(1)
 
 TopName = sys.argv[2]
+
+def replace(match):
+    if match.group(1) == ',':
+        return 'aresetn'
+    else:
+        return '(!aresetn)'
+
 # 需要替换的正则
 patterns = [
     (r"module "+TopName, "module mycpu_top"),
     (r"(?<!\.)\bclock\b", "aclk"), # clock -> aclk, but .clock not replace
-    (r"(?<!\.)\breset\b", "aresetn"),  # reset -> aresetn, but .reset not replace
+    (r"(?<!\.)\breset\s*(,|\S)", replace),  # reset -> aresetn, but .reset not replace
     (r"\bbus_(\w+)\b", r"\1"),  # prefix_xxx -> xxx
 ]
 

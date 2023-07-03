@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util._
 
 import cache._
-import utils.asg
+import utils._
 import chisel3.util.experimental.decode._
 import chisel3.util.experimental.BoringUtils
 
@@ -37,21 +37,32 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
     val infoRam = SyncReadMem(entriesyNum, gen)
     val tagRam  = SyncReadMem(entriesyNum, UInt(bpuTagWidth.W))
     val valid   = RegInit(VecInit.fill(entriesyNum)(false.B))
+
+    // val infoRam = Module(new DPTemplate(gen, entriesyNum, true, true))
+    // val tagRam  = Module(new DPTemplate(UInt(bpuTagWidth.W), entriesyNum, true, true))
+    // val valid   = RegInit(VecInit.fill(entriesyNum)(false.B))
     // write ========================================
-    when(update.data.valid && update.pc(lowWidth - 1, 0) === i.U) {
-      infoRam.write(hash(update.pc), update.data.bits)
-      tagRam.write(hash(update.pc), getTag(update.pc))
-      valid(hash(update.pc)) := true.B
-    }
+    val wen = update.data.valid && update.pc(lowWidth - 1, 0) === i.U
+    infoRam.write(hash(update.pc), update.data.bits)
+    tagRam.write(hash(update.pc), getTag(update.pc))
+
+    // infoRam.io.w(wen, update.data.bits, hash(update.pc))
+    // tagRam.io.w(wen, getTag(update.pc), hash(update.pc))
+    valid(hash(update.pc)) := true.B
     // read ========================================
-    val bpuIdx    = hash(readAddr(i))
-    val entry     = infoRam.read(bpuIdx)
-    val tag       = tagRam.read(bpuIdx)
+    val bpuIdx = hash(readAddr(i))
+    val entry  = infoRam.read(bpuIdx)
+    val tag    = tagRam.read(bpuIdx)
+
+    // val entry = infoRam.io.r(true.B, bpuIdx).resp.data
+    // val tag   = tagRam.io.r(true.B, bpuIdx).resp.data
+
     val validBits = RegNext(valid(bpuIdx))
-    when(validBits && (tag === getTag(readAddr(i)))) {
+    val lastAddr  = RegNext(readAddr(i))
+    when(validBits && (tag === getTag(lastAddr))) {
       readRes(i) := entry
     }.otherwise {
-      readRes(i) := missFunc(entry, readAddr(i))
+      readRes(i) := missFunc(entry, lastAddr)
     }
   })
 }

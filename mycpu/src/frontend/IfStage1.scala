@@ -36,17 +36,19 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
   (0 until fetchNum).foreach(i => {
     val infoRam = SyncReadMem(entriesyNum, gen)
     val tagRam  = SyncReadMem(entriesyNum, UInt(bpuTagWidth.W))
-    val valid   = RegInit(0.U(entriesyNum.W))
+    val valid   = RegInit(VecInit.fill(entriesyNum)(false.B))
     // write ========================================
     when(update.data.valid && update.pc(lowWidth - 1, 0) === i.U) {
       infoRam.write(hash(update.pc), update.data.bits)
       tagRam.write(hash(update.pc), getTag(update.pc))
+      valid(hash(update.pc)) := true.B
     }
     // read ========================================
-    val bpuIdx = hash(readAddr(i))
-    val entry  = infoRam.read(bpuIdx)
-    val tag    = tagRam.read(bpuIdx)
-    when(valid(bpuIdx) && (tag === getTag(readAddr(i)))) {
+    val bpuIdx    = hash(readAddr(i))
+    val entry     = infoRam.read(bpuIdx)
+    val tag       = tagRam.read(bpuIdx)
+    val validBits = RegNext(valid(bpuIdx))
+    when(validBits && (tag === getTag(readAddr(i)))) {
       readRes(i) := entry
     }.otherwise {
       readRes(i) := missFunc(entry, readAddr(i))

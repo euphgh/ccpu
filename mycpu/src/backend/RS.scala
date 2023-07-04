@@ -117,12 +117,11 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   //listen to wPrfPIdx
   List.tabulate(wBNum)(i =>
     List.tabulate(rsSize)(j => {
-      rsEntries(j).basic
-        .srcPregs(0)
-        .inPrf := (io.in.wPrfPIdx(i).bits === rsEntries(j).basic.srcPregs(0).pIdx && io.in.wPrfPIdx(i).valid)
-      rsEntries(j).basic
-        .srcPregs(1)
-        .inPrf := (io.in.wPrfPIdx(i).bits === rsEntries(j).basic.srcPregs(1).pIdx && io.in.wPrfPIdx(i).valid)
+      val src0 = rsEntries(j).basic.srcPregs(0)
+      val src1 = rsEntries(j).basic.srcPregs(1)
+      val wprf = io.in.wPrfPIdx(i)
+      when(wprf.bits === src0.pIdx && wprf.valid) { src0.inPrf := true.B }
+      when(wprf.bits === src1.pIdx && wprf.valid) { src1.inPrf := true.B }
     })
   )
 
@@ -153,8 +152,8 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   wakeUpBroad.foreach(e =>
     List.tabulate(rsSize)(j => {
       val pSrcs = rsEntries(j).basic.srcPregs
-      asg(srcsWaken(j)(0), e.bits === pSrcs(0).pIdx && e.valid)
-      asg(srcsWaken(j)(1), e.bits === pSrcs(1).pIdx && e.valid)
+      when(e.bits === pSrcs(0).pIdx && e.valid) { srcsWaken(j)(0) := true.B }
+      when(e.bits === pSrcs(1).pIdx && e.valid) { srcsWaken(j)(1) := true.B }
     })
   )
 
@@ -206,6 +205,8 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     (0 until rsSize).foreach(i => {
       when(deqSel(i)) {
         asg(slotsValid(i), false.B)
+        asg(srcsWaken(i)(0), false.B)
+        asg(srcsWaken(i)(1), false.B)
       }
     })
   }
@@ -215,6 +216,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     List.tabulate(rsSize)(i => {
       ageMask(i)    := VecInit(Seq.fill(rsSize)(false.B))
       slotsValid(i) := false.B
+      srcsWaken     := VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B))))
     })
   }
 }

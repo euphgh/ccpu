@@ -41,7 +41,7 @@ class PreIf extends MycpuModule {
     }
     val out = new PreIfOutIO
   })
-  val alignPC = Cat(io.in.fromIf1.pcVal(31, 4) + 1.U, "b0000".U)
+  val alignPC = Cat(io.in.fromIf1.pcVal(31, 4) + 1.U, 0.U(4.W))
   object PreIfState extends ChiselEnum {
     val normal, keepDest = Value
   }

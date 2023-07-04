@@ -446,15 +446,18 @@ class Dispatcher extends MycpuModule {
         asg(toRs(i).bits.c0Addr.get, Cat(instr(15, 11), instr(2, 0)))
         asg(toRsBits.uOp.mduType.get, thisSlot.decoded.mduType)
       }
-      if (rsKind(i) == FuType.Lsu || rsKind(i) == FuType.SubAlu) {
+      if (rsKind == FuType.Lsu) {
         val instr = thisSlot.inst.basicInstInfo.instr
         val imm   = instr(15, 0)
         asg(toRs(i).bits.immOffset.get, imm)
-        if (rsKind == FuType.Lsu) {
-          asg(toRsBits.uOp.memType.get, thisSlot.decoded.memType)
-          asg(toRsBits.cacheOp.get, CacheOp.safe(instr(25, 21))._1)
-        }
-        if (rsKind == FuType.SubAlu) { asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType) }
+        asg(toRsBits.uOp.memType.get, thisSlot.decoded.memType)
+        asg(toRsBits.cacheOp.get, CacheOp.safe(instr(25, 21))._1)
+      }
+      if (rsKind(i) == FuType.SubAlu) {
+        val instr = thisSlot.inst.basicInstInfo.instr
+        val imm   = instr(15, 0)
+        asg(toRs(i).bits.immOffset.get, imm)
+        asg(toRsBits.uOp.aluType.get, thisSlot.decoded.aluType)
       }
     }
   })

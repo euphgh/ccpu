@@ -451,7 +451,8 @@ class ROB extends MycpuModule {
     )
     difftestRetire.io.interrSeq := RegNext(Mux(io.out.exCommit.bits.detect.excCode === ExcCode.Int, 0.U, retireNum.U))
     difftestRetire.io.en        := true.B
-    val validRetire = RegNext(difftestRetire.io.retireNum > 0.U)
+    val validRetire = Wire(Bool())
+    validRetire := difftestRetire.io.retireNum > 0.U
     addSource(validRetire, "hasValidRetire")
   }
 }

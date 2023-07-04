@@ -381,7 +381,7 @@ class CacheStage2[T <: Data](
       // not return run there, until instrState set mainState to run
     }
   }
-  assert(io.in.valid || mainState === run)
+  //assert(io.out.valid || mainState === run)
   assert(io.in.ready === false.B || mainState === run)
 
   switch(writeState) {

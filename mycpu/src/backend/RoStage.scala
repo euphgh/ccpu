@@ -94,7 +94,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       val brType            = inUop.brType.get
       val dsPcVal           = maExtraIn.pcVal + 4.U(32.W)
       val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
-      val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32)
+      val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32) + dsPcVal
       val jDest             = Cat(dsPcVal(31, 28), low26, 0.U(2.W))
       val jrDest            = outSrcs(0)
       //extra take:select target,connect preRes

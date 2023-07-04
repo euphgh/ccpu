@@ -402,7 +402,7 @@ class CacheStage2[T <: Data](
       ar.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       ar.bits.burst := BurstType.INCR
       ar.bits.size  := SizeType.Word.asUInt
-      ar.bits.len   := (if (isDcache) 4.U else 0.U)
+      ar.bits.len   := (if (!isDcache) 3.U else 0.U)
       ar.bits.id    := id
       // wait until ar.fire
       io.dram.whenARfire {

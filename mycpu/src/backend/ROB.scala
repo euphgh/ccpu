@@ -329,9 +329,12 @@ class ROB extends MycpuModule {
       }
     }
   }
-  val retirePcVal = retireInst(0).exception.basic.pc //pc记录在robEntry中
+  val retirePcVal =
+    WireInit(
+      VecInit((0 until retireNum).map(i => retireInst(i).exception.basic.pc))
+    ) //pc记录在robEntry中
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.flushAll)
-  asg(io.out.robRedirect.target, Mux(state === exerFlush, retirePcVal, dstHB.value.bits)) //CI_NEXT或DSTHB
+  asg(io.out.robRedirect.target, Mux(state === exerFlush, retirePcVal(0), dstHB.value.bits)) //CI_NEXT或DSTHB
 
   //exception connect
   val oldestInst = retireInst(0)
@@ -436,15 +439,17 @@ class ROB extends MycpuModule {
     import chisel3.util.experimental.BoringUtils._
     val difftestRetire = Module(new DifftestInstrCommit)
     difftestRetire.io.clock     := clock
-    difftestRetire.io.retireNum := PopCount((0 until retireNum).map(io.out.multiRetire(_).valid))
-    difftestRetire.io.lastPC := PriorityMux(
-      (0 until retireNum)
-        .map(i => {
-          io.out.multiRetire(i).valid -> retirePcVal(i)
-        })
-        .reverse
+    difftestRetire.io.retireNum := RegNext(PopCount((0 until retireNum).map(io.out.multiRetire(_).valid)))
+    difftestRetire.io.lastPC := RegNext(
+      PriorityMux(
+        (0 until retireNum)
+          .map(i => {
+            io.out.multiRetire(i).valid -> retirePcVal(i)
+          })
+          .reverse
+      )
     )
-    difftestRetire.io.interrSeq := Mux(io.out.exCommit.bits.detect.excCode === ExcCode.Int, 0.U, retireNum.U)
+    difftestRetire.io.interrSeq := RegNext(Mux(io.out.exCommit.bits.detect.excCode === ExcCode.Int, 0.U, retireNum.U))
     difftestRetire.io.en        := true.B
     val validRetire = RegNext(difftestRetire.io.retireNum > 0.U)
     addSource(validRetire, "hasValidRetire")

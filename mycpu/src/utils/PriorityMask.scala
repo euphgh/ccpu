@@ -36,7 +36,7 @@ object PriorityMask {
 object PriorityCount {
   def apply(input: UInt): UInt = {
     val n        = input.getWidth
-    val outWidth = log2Ceil(n)+1
+    val outWidth = log2Ceil(n) + 1
     val pair = (0 to n).map(i => {
       val left  = "b" + "0" * (n - i) + "1" * i
       val right = i.U(outWidth.W)
@@ -46,6 +46,19 @@ object PriorityCount {
   }
   def apply(input: Vec[Bool]): UInt = {
     apply(input.asUInt)
+  }
+  // return trun when is consecutive 1 else false
+  def consecutive(input: UInt): Bool = {
+    val n = input.getWidth
+    val pair = (0 to n).map(i => {
+      val left  = "b" + "0" * (n - i) + "1" * i
+      val right = true.B
+      BitPat(left) -> BitPat(right)
+    })
+    decoder(QMCMinimizer, input, TruthTable(pair, BitPat(false.B))).asBool
+  }
+  def consecutive(input: Vec[Bool]): Bool = {
+    consecutive(input.asUInt)
   }
 }
 

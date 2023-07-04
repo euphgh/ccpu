@@ -55,6 +55,7 @@ class TLB extends MycpuModule {
   val tlbRes  = List.fill(2)(Wire(new TLBSearchRes))
   val hitMask = List.fill(2)(Wire(UInt(tlbEntriesNum.W)))
   val dir     = List.fill(2)(Wire(Bool())) // search is use tlb or not
+  def getTag(address: UInt) = address(31, 31 - tagWidth + 1)
 
   (0 until 2).foreach(i => {
     val searchAddr = search(i).req.bits
@@ -64,7 +65,7 @@ class TLB extends MycpuModule {
     dirRes.refill := false.B
     dirRes.hit    := true.B
     dirRes.dirty  := false.B
-    dirRes.pTag   := searchAddr & "h1fff_ffff".U
+    asg(dirRes.pTag, getTag(searchAddr & "h1fff_ffff".U(32.W)))
     dirRes.ccAttr := Mux(searchAddr(29), CCAttr.Uncached, CCAttr.safe(k0)._1)
 
     // when not use tlb translate, use tlb for probe
@@ -84,9 +85,9 @@ class TLB extends MycpuModule {
     val isOdd    = searchAddr(12)
     tlbRes(i).refill := hitMask(i).asUInt.orR
     // if refill set hit will not valid
-    tlbRes(i).hit    := Mux(isOdd, hitEntry.v1, hitEntry.v0)
-    tlbRes(i).dirty  := Mux(isOdd, hitEntry.d1, hitEntry.d0)
-    tlbRes(i).pTag   := Cat(Mux(isOdd, hitEntry.pfn1, hitEntry.pfn0), (searchAddr(i) & "hfff".U(12.W)))
+    tlbRes(i).hit   := Mux(isOdd, hitEntry.v1, hitEntry.v0)
+    tlbRes(i).dirty := Mux(isOdd, hitEntry.d1, hitEntry.d0)
+    asg(tlbRes(i).pTag, getTag(Cat(Mux(isOdd, hitEntry.pfn1, hitEntry.pfn0), (searchAddr(i) & "hfff".U(12.W)))))
     tlbRes(i).ccAttr := Mux(isOdd, CCAttr.safe(hitEntry.c1)._1, CCAttr.safe(hitEntry.c0)._1)
 
     // only make sure res.pTag(log2(way number)) not change in index type cache Instr

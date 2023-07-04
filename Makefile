@@ -2,6 +2,7 @@ BUILD_DIR = ./build
 TEST_DIR = ./test_run_dir
 MainModule = mycpu
 TOPNAME = CCPU
+VSRC := $(BUILD_DIR)/mycpu_top.v
 
 export PATH := $(PATH):$(abspath ./utils)
 
@@ -12,11 +13,16 @@ verilog:
 	mkdir -p $(BUILD_DIR)
 	mill -i $(MainModule).runMain SubMain -td $(BUILD_DIR)
 
-mycpu:
+mycpu: $(VSRC)
+
+$(VSRC):
 	mkdir -p $(BUILD_DIR)
 	mill -i $(MainModule).runMain Elaborate -td $(BUILD_DIR)
 	mv $(BUILD_DIR)/$(TOPNAME).v $(BUILD_DIR)/mycpu_top.v
 	nix run sys#python3 -- utils/MycpuReplace.py $(BUILD_DIR)/mycpu_top.v $(TOPNAME)
+
+sim: $(VSRC)
+	cd hitd; nix develop --command make sim;
 
 help:
 	mill -i $(MainModule).test.runMain Elaborate --help

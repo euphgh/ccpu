@@ -6,6 +6,7 @@ import bundle._
 import chisel3._
 import chisel3.util._
 import utils.BytesWordUtils._
+import utils._
 import chisel3.util.experimental.BoringUtils._
 
 /**
@@ -47,6 +48,7 @@ class CacheStage2[T <: Data](
       val isUncached = Bool()
       val fromStage1 = new CacheStage1OutIO(roads, wordNum, isDcache)
       val cancel     = Bool() // find in SQ or has Exception
+      val imask      = if (!isDcache) Some(Vec(fetchNum, Bool())) else None
     }))
     val out = Decoupled(new Bundle {
       val toUser = Output(Vec(fetchNum, userGen))
@@ -74,6 +76,8 @@ class CacheStage2[T <: Data](
   val dreq        = stage1.dCacheReq.getOrElse(0.U.asTypeOf(new CacheRWReq))
   val id          = if (isDcache) "b0001".U(4.W) else "b0010".U(4.W)
   val isCacheInst = stage1.cacheInst.fold(false.B)(_.valid)
+  val imask       = io.in.bits.imask.fold(0.U)(_.asUInt)
+  val ivalidNum   = PriorityCount(imask) //count how much instr is valid
   def dirtyMeta(meta: CacheMeta) = {
     val newMeta = WireInit(meta)
     newMeta.dirty.get := true.B
@@ -264,7 +268,7 @@ class CacheStage2[T <: Data](
               w1meta(i).req.bits.data := dirtyMeta(inBits.fromStage1.meta(i))
             })
           }
-        }.elsewhen(!stage1.cacheInst.get.valid) {
+        }.otherwise { //cache not hit
           mainState      := miss
           firstMissCycle := true.B
           // block when not hit
@@ -272,6 +276,12 @@ class CacheStage2[T <: Data](
           io.in.ready  := false.B
           // perpare data for next miss state
           (0 until roads).foreach(r1data(_).req.valid := true.B)
+        }
+        if (!isDcache) {
+          when(io.in.valid && !isCacheInst) {
+            assert(PriorityCount.consecutive(imask))
+            assert(imask.asUInt =/= 0.U)
+          }
         }
       }
     }
@@ -402,15 +412,18 @@ class CacheStage2[T <: Data](
       ar.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       ar.bits.burst := BurstType.INCR
       ar.bits.size  := SizeType.Word.asUInt
-      ar.bits.len   := (if (!isDcache) 3.U else 0.U)
+      ar.bits.len   := (if (!isDcache) ivalidNum - 1.U else 0.U)
       ar.bits.id    := id
       // wait until ar.fire
       io.dram.whenARfire {
         ucState := ucRWait
       }
       // instr fetch need burst
-      if (!isDcache) {
+      if (isDcache) {
+        ucDBuffer.get := 0.U(32.W)
+      } else {
         ucICounter.get.reset()
+        ucIBuffer.get := VecInit.fill(fetchNum)(0.U(32.W))
       }
     }
     is(ucRWait) {
@@ -424,7 +437,8 @@ class CacheStage2[T <: Data](
           val icounter = ucICounter.get
           ucIBuffer.get(icounter.value) := r.bits.data
           icounter.inc()
-          assert(r.bits.last && icounter.value === (fetchNum - 1).U || !r.bits.last)
+          val finish = icounter.value === ivalidNum - 1.U
+          assert(r.bits.last && finish || !r.bits.last)
           ucState := Mux(r.bits.last, ucIdel, ucRWait)
         }
       }

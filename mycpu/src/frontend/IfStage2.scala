@@ -44,6 +44,7 @@ class IfStage2 extends Module with MycpuParam {
   asg(icache2.io.in.bits.cancel, io.in.bits.exception =/= FrontExcCode.NONE)
   asg(icache2.io.in.bits.isUncached, io.in.bits.isUncached)
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
+  asg(icache2.io.in.bits.imask.get, io.in.bits.validMask)
   if (enableCacheInst) {
     icache2.io.cacheInst.redirect.get := io.flushIn
   }

@@ -19,7 +19,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
     val pc   = Input(UWord)
     val data = Flipped(Valid(gen))
   })
-  val readAddr = List.fill(fetchNum)(IO(Input(UWord)))
+  val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
   val readRes  = List.fill(fetchNum)(IO(Output(gen)))
   def access(address: UInt, ports: Int) = {
     this.readAddr(ports) := address
@@ -29,6 +29,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
   val bpuTagWidth = 32 - idxWidth - lowWidth
   val entriesyNum = math.pow(2, idxWidth).toInt
 
+  when(reset.asBool) {}
   // can be change for better design
   def hash(address:   UInt) = address(idxWidth + lowWidth - 1, lowWidth)
   def missFunc(entry: T, addr: UInt): T = entry
@@ -50,7 +51,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
     // tagRam.io.w(wen, getTag(update.pc), hash(update.pc))
     valid(hash(update.pc)) := true.B
     // read ========================================
-    val bpuIdx = hash(readAddr(i))
+    val bpuIdx = HoldUnless(hash(readAddr(i).bits), readAddr(i).valid)
     val entry  = infoRam.read(bpuIdx)
     val tag    = tagRam.read(bpuIdx)
 
@@ -58,7 +59,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
     // val tag   = tagRam.io.r(true.B, bpuIdx).resp.data
 
     val validBits = RegNext(valid(bpuIdx))
-    val lastAddr  = RegNext(readAddr(i))
+    val lastAddr  = RegEnable(readAddr(i).bits, 0.U, readAddr(i).valid)
     when(validBits && (tag === getTag(lastAddr))) {
       readRes(i) := entry
     }.otherwise {
@@ -180,10 +181,12 @@ class IfStage1 extends MycpuModule {
   val btbRes = Wire(Vec(fetchNum, new BtbOutIO))
   val phtRes = Wire(Vec(fetchNum, UInt(2.W)))
   (0 until fetchNum).foreach(i => {
-    btb.readAddr(i) := Cat(npc(31, 4), 0.U(4.W))
-    pht.readAddr(i) := Cat(npc(31, 4), 0.U(4.W))
-    btbRes(i)       := btb.readRes(i)
-    phtRes(i)       := pht.readRes(i)
+    asg(btb.readAddr(i).bits, Cat(npc(31, 4), 0.U(4.W)))
+    asg(pht.readAddr(i).bits, Cat(npc(31, 4), 0.U(4.W)))
+    asg(btb.readAddr(i).valid, update)
+    asg(pht.readAddr(i).valid, update)
+    asg(btbRes(i), btb.readRes(i))
+    asg(phtRes(i), pht.readRes(i))
   })
   (0 until fetchNum).foreach(i => {
     bpuout(i).btbType := btbRes(pc(3, 2)).instType

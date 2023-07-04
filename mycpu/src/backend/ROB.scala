@@ -110,6 +110,7 @@ class ROB extends MycpuModule {
       val robRedirect        = Output(new FrontRedirctIO) //serve as recover rat and hilo
     }
   })
+
   class ROBQueue extends MultiQueue(dispatchNum, retireNum, new RobEntry, robNum) {
     val wb = IO(
       Vec(

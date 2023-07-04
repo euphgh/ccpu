@@ -65,19 +65,23 @@ object IbfConnectDper {
     })
 
     //rightOutFireNum = first notFire slot's index
-    val inRight = Reg(Vec(size, Valid(gen)))
+    val inRightValid = RegInit(VecInit(Seq.fill(size)(false.B)))
+    val inRightBits  = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
+    //val inRight      = Reg(Vec(size, Valid(gen)))
     List.tabulate(size)(i => {
       when(i.U < stayNum) {
-        inRight(i).bits  := right(i.U + rightOutFireNum).bits
-        inRight(i).valid := right(i.U + rightOutFireNum).valid
+        inRightBits(i)  := right(i.U + rightOutFireNum).bits
+        inRightValid(i) := right(i.U + rightOutFireNum).valid
       }.otherwise {
-        inRight(i).bits  := left(i.U - stayNum).bits
-        inRight(i).valid := left(i.U - stayNum).valid
+        inRightBits(i)  := left(i.U - stayNum).bits
+        inRightValid(i) := left(i.U - stayNum).valid
       }
     })
 
-    when(flush) { (0 until size).map(i => inRight(i).valid := false.B) }
-    (0 until size).map(i => right(i) := inRight(i))
-
+    when(flush) { (0 until size).map(i => inRightValid(i) := false.B) }
+    (0 until size).map(i => {
+      right(i).bits  := inRightBits(i)
+      right(i).valid := inRightValid(i)
+    })
   }
 }

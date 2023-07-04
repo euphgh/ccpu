@@ -206,6 +206,7 @@ class dispatchSlot extends MycpuBundle {
   * 4. cache inst, cp0 read inst<block inst>
   * 5. mispredict
   */
+
 class Dispatcher extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
@@ -244,20 +245,26 @@ class Dispatcher extends MycpuModule {
   )
   def getMainALUSlot(): UInt = {
     val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
-    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
+    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.SubALU).asUInt
     val hasMain  = mainMask.orR
     Mux(hasMain, PriorityEncoderOH(mainMask), PriorityEncoderOH(subMask))
   }
   def getSubALUSlot(): UInt = {
     val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
-    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
+    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.SubALU).asUInt
     val hasMain  = mainMask.orR
     Mux(hasMain, PriorityEncoderOH(subMask), SecondPriEncoder(subMask))
   }
 
-  val freeListSize = 32
   val freeList = Module(
-    new MultiQueue(enqNum = retireNum, deqNum = dispatchNum, gen = PRegIdx, size = freeListSize, allIn = false)
+    new MultiQueue(
+      enqNum = retireNum,
+      deqNum = dispatchNum,
+      gen    = PRegIdx,
+      size   = freeListSize,
+      allIn  = false,
+      isFL   = true
+    )
   )
   asg(freeList.io.flush, false.B)
   (0 until retireNum).map(i => {

@@ -31,7 +31,13 @@ import backend.RobEntry
   *              false:  it will assert some enq.ready
   */
 
-class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, allIn: Boolean = false)
+class MultiQueue[T <: Data](
+  enqNum: Int,
+  deqNum: Int,
+  gen:    T,
+  size:   Int     = 32,
+  allIn:  Boolean = false,
+  isFL:   Boolean = false)
     extends MycpuModule {
   require(isPow2(size))
   val counterWidth = log2Ceil(size)
@@ -46,8 +52,11 @@ class MultiQueue[T <: Data](enqNum: Int, deqNum: Int, gen: T, size: Int = 32, al
   })
 
   //ring means "+"
-  val ringBuffer = RegInit(VecInit(Seq.fill(size)(0.U.asTypeOf(gen))))
-  val headPtr    = RegInit(UInt(ptrWidth.W), 0.U)
+  val initZero   = Seq.fill(size)(0.U.asTypeOf(gen))
+  val initFl     = (0 until size).map(i => (i + 32).U.asTypeOf(gen))
+  val ringBuffer = RegInit(VecInit(if (isFL) initFl else initZero))
+
+  val headPtr    = RegInit(UInt(ptrWidth.W), if (isFL) size.U else 0.U)
   val tailPtr    = RegInit(UInt(ptrWidth.W), 0.U)
   val deqFireNum = PopCount(io.pop.map(_.fire))
   val enqFireNum = PopCount(io.push.map(_.fire))

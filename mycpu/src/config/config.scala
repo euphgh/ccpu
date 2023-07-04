@@ -124,6 +124,7 @@ trait MycpuParam {
   val pRegAddrWidth = log2Up(pRegNum)
   val robNum        = 32
   val robIndexWidth = log2Up(robNum)
+  val freeListSize  = 32
 
   def ARegIdx = UInt(aRegAddrWidth.W)
   def PRegIdx = UInt(pRegAddrWidth.W)

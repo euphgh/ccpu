@@ -157,28 +157,28 @@ class CP0 extends BasicCOP with MycpuParam {
   // DiffTest ===============================================
   import difftest.DifftestArchCP0
   if (verilator) {
-    val checkCP0Regs = Module(new DifftestArchCP0)
-    checkCP0Regs.io.clock    := clock
-    checkCP0Regs.io.index    := indexReg.read
-    checkCP0Regs.io.random   := randomReg.read
-    checkCP0Regs.io.entrylo0 := entrylo0Reg.read
-    checkCP0Regs.io.entrylo1 := entrylo1Reg.read
-    checkCP0Regs.io.context  := contextReg.read
-    checkCP0Regs.io.pagemask := pagemaskReg.read
-    checkCP0Regs.io.wire     := wireReg.read
-    checkCP0Regs.io.badvaddr := badvaddrReg.read
-    checkCP0Regs.io.count    := countReg.read
-    checkCP0Regs.io.entryhi  := entryhiReg.read
-    checkCP0Regs.io.compare  := compareReg.read
-    checkCP0Regs.io.status   := statusReg.read
-    checkCP0Regs.io.cause    := causeReg.read
-    checkCP0Regs.io.epc      := epcReg.read
-    checkCP0Regs.io.prid     := pridReg.read
-    checkCP0Regs.io.ebase    := ebaseReg.read
-    checkCP0Regs.io.config0  := config0Reg.read
-    checkCP0Regs.io.config1  := config1Reg.read
-    val checkCp0En = io.in.eretFlush || io.in.mtc0.wen || io.in.exCommit.valid || tlbpWreq || tlbrReq
-    asg(checkCP0Regs.io.en, checkCp0En)
+    val difftestCP0 = Module(new DifftestArchCP0)
+    difftestCP0.io.clock    := clock
+    difftestCP0.io.index    := indexReg.read
+    difftestCP0.io.random   := randomReg.read
+    difftestCP0.io.entrylo0 := entrylo0Reg.read
+    difftestCP0.io.entrylo1 := entrylo1Reg.read
+    difftestCP0.io.context  := contextReg.read
+    difftestCP0.io.pagemask := pagemaskReg.read
+    difftestCP0.io.wire     := wireReg.read
+    difftestCP0.io.badvaddr := badvaddrReg.read
+    difftestCP0.io.count    := countReg.read
+    difftestCP0.io.entryhi  := entryhiReg.read
+    difftestCP0.io.compare  := compareReg.read
+    difftestCP0.io.status   := statusReg.read
+    difftestCP0.io.cause    := causeReg.read
+    difftestCP0.io.epc      := epcReg.read
+    difftestCP0.io.prid     := pridReg.read
+    difftestCP0.io.ebase    := ebaseReg.read
+    difftestCP0.io.config0  := config0Reg.read
+    difftestCP0.io.config1  := config1Reg.read
+    val checkCp0En = RegNext(io.in.eretFlush || io.in.mtc0.wen || io.in.exCommit.valid || tlbpWreq || tlbrReq)
+    asg(difftestCP0.io.en, checkCp0En)
   }
 
 }

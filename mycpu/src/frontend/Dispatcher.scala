@@ -241,18 +241,22 @@ class Dispatcher extends MycpuModule {
   //some inst can go to main/sub alurs;some can only goto sub aluRs
   val noInst = (dispatchNum).U
   def getRsSel(rsType: UInt): UInt = PriorityEncoderOH(
-    (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType(rsType)).asUInt
+    (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType(rsType) && slots(i).valid)).asUInt
   )
   def getMainALUSlot(): UInt = {
-    val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
-    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.SubALU).asUInt
-    val hasMain  = mainMask.orR
+    val mainMask =
+      (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType.MainALU && slots(i).valid)).asUInt
+    val subMask =
+      (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType.SubALU && slots(i).valid)).asUInt
+    val hasMain = mainMask.orR
     Mux(hasMain, PriorityEncoderOH(mainMask), PriorityEncoderOH(subMask))
   }
   def getSubALUSlot(): UInt = {
-    val mainMask = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.MainALU).asUInt
-    val subMask  = (0 until dispatchNum).map(slots(_).inst.whichFu === ChiselFuType.SubALU).asUInt
-    val hasMain  = mainMask.orR
+    val mainMask =
+      (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType.MainALU && slots(i).valid)).asUInt
+    val subMask =
+      (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType.SubALU && slots(i).valid)).asUInt
+    val hasMain = mainMask.orR
     Mux(hasMain, PriorityEncoderOH(subMask), SecondPriEncoder(subMask))
   }
 

@@ -111,6 +111,8 @@ object AluType extends ChiselEnum {
 
   def useImm(op: AluType.Type): Bool =
     op === ADDI || op === ADDIU || op === ANDI || op === ORI || op === XORI || op === SLTI || op === SLTIU || op === LUI
+  def zeroExt(op: AluType.Type): Bool =
+    op === ANDI || op === ORI || op === XORI
   def mayOverflow(op: AluType.Type): Bool = op === ADD || op === ADDI || op === SUB
   def isSll(op:       AluType.Type): Bool = op === SLL
   def isSrl(op:       AluType.Type): Bool = op === SRL

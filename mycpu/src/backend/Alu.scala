@@ -28,10 +28,10 @@ class Adder extends MycpuModule {
   /*====================  op  ====================*/
   val (src1, src2, op) = (io.in.src1, io.in.src2, io.in.op)
   assert(io.in.op.length == 4)
-  val useAdd  = op(3)
-  val useSub  = op(2)
-  val useSlt  = op(1)
-  val useSltu = op(0)
+  val useAdd  = op(0)
+  val useSub  = op(1)
+  val useSlt  = op(2)
+  val useSltu = op(3)
   /*====================Function Code====================*/
   val cin   = Mux((useSub | useSlt | useSltu), 1.U, 0.U)
   val dataA = src1

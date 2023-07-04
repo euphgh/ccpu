@@ -3,6 +3,7 @@ TEST_DIR = ./test_run_dir
 MainModule = mycpu
 TOPNAME = CCPU
 VSRC := $(BUILD_DIR)/mycpu_top.v
+SSRC := $(shell find . -path '*/src/*' -name '*.scala')
 
 export PATH := $(PATH):$(abspath ./utils)
 
@@ -13,13 +14,14 @@ verilog:
 	mkdir -p $(BUILD_DIR)
 	mill -i $(MainModule).runMain SubMain -td $(BUILD_DIR)
 
-mycpu: $(VSRC)
 
-$(VSRC):
+$(VSRC): $(SSRC)
 	mkdir -p $(BUILD_DIR)
 	mill -i $(MainModule).runMain Elaborate -td $(BUILD_DIR)
 	mv $(BUILD_DIR)/$(TOPNAME).v $(BUILD_DIR)/mycpu_top.v
 	nix run sys#python3 -- utils/MycpuReplace.py $(BUILD_DIR)/mycpu_top.v $(TOPNAME)
+
+mycpu: $(VSRC)
 
 sim: $(VSRC)
 	cd hitd; nix develop --command make sim;

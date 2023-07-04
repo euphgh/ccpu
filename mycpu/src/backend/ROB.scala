@@ -197,8 +197,10 @@ class ROB extends MycpuModule {
     *             else retire it,send mispreFlush next cycle
     */
 
-  val retireInst   = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
-  val readyRetire  = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).valid && retireInst(i).done)))
+  val retireInst  = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
+  val doneMask    = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).valid && retireInst(i).done)))
+  val readyRetire = (0 until retireNum).map(i => doneMask.asUInt(i, 0).andR)
+
   val retireSpType = WireInit(VecInit((0 until retireNum).map(i => retireInst(i).uOp.specialType)))
   //waitNext--msipredict | cacheinst
   val waitNextVec = WireInit(

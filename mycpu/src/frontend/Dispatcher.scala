@@ -274,6 +274,9 @@ class Dispatcher extends MycpuModule {
   (0 until retireNum).map(i => {
     asg(freeList.io.push(i).valid, io.pushFl(i).valid)
     asg(freeList.io.push(i).bits, io.pushFl(i).bits)
+    when(io.pushFl(i).valid) {
+      assert(io.pushFl(i).bits =/= 0.U)
+    }
   })
 
   val decoder = List.fill(decodeNum)(Module(new Decoder()))

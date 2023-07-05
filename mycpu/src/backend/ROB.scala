@@ -418,26 +418,27 @@ class ROB extends MycpuModule {
     })
     flrState := recover
   }
-  when(flrHeadPtr === flrTailPtr) { flrState := idle }
   when(flrState === recover) {
-    val flrPopValid = VecInit((0 until retireNum).map(flrQueue(_) === 0.U)).asUInt
-    flrTailPtr := PriorityEncoder(flrPopValid)
+    val flrPopMask = VecInit((0 until retireNum).map(i => {
+      (0 to i).map(i => flrQueue(flrTailPtr + i.U) =/= 0.U).foldLeft(1.U)(_ & _)
+    })).asUInt
+    flrTailPtr := flrTailPtr + PriorityCount(flrPopMask)
     // FreeList Push Valid ==========================================================
     (0 until retireNum).foreach { i =>
-      val recoverValid = VecInit((0 to i).map(flrQueue(_) =/= 0.U)).asUInt.andR
-      io.out.flRecover(i).valid :=
-        (0 to i).map(i => flrQueue(i) =/= 0.U).foldLeft(0.U)(_ & _)
-      io.out.flRecover(i).bits := flrQueue(i)
+      io.out.flRecover(i).valid := flrPopMask(i)
+      io.out.flRecover(i).bits  := flrQueue(flrTailPtr + i.U)
     }
     // ROB push ready ===============================================================
     (0 until dispatchNum).foreach(i => {
       io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr <= 8.U
     })
+    // back to normal state
+    when(flrHeadPtr === flrTailPtr) { flrState := idle }
   }.otherwise {
     // FreeList Push Valid ==========================================================
     (0 until retireNum).foreach { i =>
-      val recoverValid = VecInit((0 to i).map(flrQueue(_) =/= 0.U)).asUInt.andR
-      io.out.flRecover(i).valid := io.out.multiRetire(i).valid
+      val backPDest = retireInst(i).uOp.prevPDest
+      io.out.flRecover(i).valid := io.out.multiRetire(i).valid && backPDest.orR // only not zero should retire
       io.out.flRecover(i).bits  := retireInst(i).uOp.prevPDest
     }
     // ROB push ready ===============================================================

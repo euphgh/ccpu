@@ -50,12 +50,12 @@ class CacheStage1(
   })
   // Reg stage
   io.in.ready := true.B // ifstage1 and mem1 should keep
-  val lowAddr  = Wire(new CacheLowAddr)
-  val stageReg = RegEnable(io.in.bits, 0.U.asTypeOf(new CacheStage1In(isDcache)), io.in.valid)
+  val searchIndex = Wire(UInt(cacheIndexWidth.W)) // becasue bram should take one cycle
+  val stageReg    = RegEnable(io.in.bits, 0.U.asTypeOf(new CacheStage1In(isDcache)), io.in.valid)
   if (!isDcache) {
-    lowAddr := Mux(io.in.valid, io.in.bits.ifReq.get, stageReg.ifReq.get)
+    asg(searchIndex, Mux(io.in.valid, io.in.bits.ifReq.get.index, stageReg.ifReq.get.index))
   } else {
-    lowAddr := Mux(io.in.valid, io.in.bits.rwReq.get.lowAddr, stageReg.rwReq.get.lowAddr)
+    asg(searchIndex, Mux(io.in.valid, io.in.bits.rwReq.get.lowAddr.index, stageReg.rwReq.get.lowAddr.index))
   }
   val r2data = List.fill(roads)(Wire(Flipped(new DPReadBus(Vec(wordNum, UWord), lineNum))))
   val w2data = List.fill(roads)(Wire(Flipped(new DPWriteBus(Vec(wordNum, UWord), lineNum))))
@@ -73,8 +73,8 @@ class CacheStage1(
       addSink(w2data(i), s"IcacheStage2WriteData$i")
       addSink(w2meta(i), s"IcacheStage2WriteMeta$i")
     }
-    metas(i).io.r(true.B, lowAddr.index)
-    datas(i).io.r(true.B, Mux(r2data(i).req.valid, r2data(i).req.bits.setIdx, lowAddr.index))
+    metas(i).io.r(true.B, searchIndex)
+    datas(i).io.r(true.B, Mux(r2data(i).req.valid, r2data(i).req.bits.setIdx, searchIndex))
     r2data(i).resp := datas(i).io.r.resp
     val writeFromStage2 = w2data(i).req.valid
     assert(w2data(i).req.valid === w2meta(i).req.valid)
@@ -86,10 +86,12 @@ class CacheStage1(
     io.out.meta(i) := metasOut
     // out datas and req ============================================
     if (isDcache) {
+      // offset should delay
+      val selOffset = stageReg.rwReq.get.lowAddr.offset
       asg(
         io.out.ddata.get(i),
         LookupUInt(
-          lowAddr.offset >> 2,
+          selOffset >> 2,
           (0 until wordNum).map(j => {
             j.U -> datasOut(j)
           })
@@ -98,10 +100,11 @@ class CacheStage1(
       asg(io.out.dataline.get(i), datasOut)
       asg(io.out.dCacheReq.get, stageReg.rwReq.get)
     } else {
+      val selOffset = stageReg.ifReq.get.offset
       asg(
         io.out.idata.get(i),
         LookupUInt(
-          lowAddr.offset >> 2,
+          selOffset >> 2,
           (0 until wordNum).map(j => {
             val dataLine = datasOut
             j.U -> VecInit(

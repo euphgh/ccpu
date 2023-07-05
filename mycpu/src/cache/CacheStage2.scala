@@ -115,7 +115,10 @@ class CacheStage2[T <: Data](
         })
       )
     } // default
-    asg(outBits.idata.get, Mux1H(hitMask, stage1.idata.get)) //default
+    asg(
+      outBits.idata.get,
+      Mux(inBits.cancel, VecInit.fill(fetchNum)(0.U(32.W)), Mux1H(hitMask, stage1.idata.get))
+    ) //default
   }
 
   // Road Select Module ============================================================
@@ -241,9 +244,8 @@ class CacheStage2[T <: Data](
       w1data(victimRoad).req.valid := false.B
       w1meta(victimRoad).req.valid := false.B
       // default: cancel || unvalid
-      io.in.ready                          := io.out.ready
-      io.out.valid                         := io.in.valid
-      if (!isDcache) io.out.bits.idata.get := VecInit(Seq.fill(fetchNum)(0.U(32.W)))
+      io.in.ready  := io.out.ready
+      io.out.valid := io.in.valid
       when(!inBits.cancel && io.in.valid) {
         when(isCacheInst) {
           mainState := instr

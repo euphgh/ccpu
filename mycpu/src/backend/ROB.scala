@@ -8,7 +8,6 @@ import utils.MultiQueue
 import utils.asg
 import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestPhyRegInROB
-import difftest.DifftestPhyRegInFLR
 
 class SingleRetireBundle extends MycpuBundle {
   val muldiv = Output(Bool())
@@ -127,8 +126,8 @@ class ROB extends MycpuModule {
         }
       )
     )
-    val headIdx   = IO(Output(UInt(robIndexWidth.W)))
-    val tailIdx   = IO(Output(UInt(robIndexWidth.W)))
+    val headIdx   = IO(Output(UInt((robIndexWidth + 1).W)))
+    val tailIdx   = IO(Output(UInt((robIndexWidth + 1).W)))
     val isEmpty   = IO(Output(Bool()))
     val allPDest  = IO(Vec(robNum, Output(PRegIdx)))
     val mispreIdx = IO(Input(ROBIdx))
@@ -187,7 +186,7 @@ class ROB extends MycpuModule {
   })
 
   //io.out.robEmpty := robEntries.isEmpty
-  asg(io.out.robIndex, robEntries.headIdx)
+  asg(io.out.robIndex, robEntries.headIdx(robIndexWidth - 1, 0))
 
   /**
     * retire
@@ -474,17 +473,14 @@ class ROB extends MycpuModule {
     addSource(validRetire, "hasValidRetire")
 
     val difftestPyhROB = Module(new DifftestPhyRegInROB)
-    difftestPyhROB.io.clock   := clock
-    difftestPyhROB.io.en      := true.B
-    difftestPyhROB.io.robHead := robEntries.headIdx
-    difftestPyhROB.io.robTail := robEntries.tailIdx
-    difftestPyhROB.io.rob     := robEntries.allPDest
-    val difftestPyhFLR = Module(new DifftestPhyRegInFLR)
-    difftestPyhFLR.io.clock     := clock
-    difftestPyhFLR.io.en        := true.B
-    difftestPyhFLR.io.flrHead   := flrHeadPtr
-    difftestPyhFLR.io.flrTail   := flrTailPtr
-    difftestPyhFLR.io.flr       := flrQueue
-    difftestPyhFLR.io.isRecover := flrState === recover
+    difftestPyhROB.io.clock     := clock
+    difftestPyhROB.io.en        := true.B
+    difftestPyhROB.io.robHead   := robEntries.headIdx
+    difftestPyhROB.io.robTail   := robEntries.tailIdx
+    difftestPyhROB.io.rob       := robEntries.allPDest
+    difftestPyhROB.io.flrHead   := flrHeadPtr
+    difftestPyhROB.io.flrTail   := flrTailPtr
+    difftestPyhROB.io.flr       := flrQueue
+    difftestPyhROB.io.isRecover := flrState === recover
   }
 }

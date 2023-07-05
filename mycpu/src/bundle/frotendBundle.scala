@@ -61,6 +61,7 @@ class WbRobBundle extends MycpuBundle {
   val robIndex     = Output(UInt(robIndexWidth.W))
   val exDetect     = new DetectExInfoBundle
   val isMispredict = Output(Bool())
+  val debugPC      = if (debug) Some(UWord) else None
 }
 
 /*==================== 流水级OUT接口，不带valid-rdy ====================*/
@@ -134,6 +135,7 @@ class RsBasicEntry extends MycpuBundle {
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
+  val debugPC      = if (debug) Some(UWord) else None
 }
 
 /**
@@ -201,6 +203,7 @@ class FunctionUnitOutIO extends MycpuBundle {
   val wbRob        = new WbRobBundle
   val wPrf         = new WPrfBundle
   val destAregAddr = Output(ARegIdx)
+  val debugPC      = if (debug) Some(Output(UWord)) else None
 }
 
 /**
@@ -231,6 +234,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val exDetect     = new DetectExInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
+  val debugPC      = if (debug) Some(Output(UWord)) else None
 
   val uOp = new Bundle {
     val brType  = if (kind == FuType.MainAlu) Some(Output(BranchType())) else None

@@ -41,6 +41,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1inLeft.bits.mem1Req.ROplus.carryout, roOutBits.mem.get.carryout)
   asg(mem1inLeft.bits.mem1Req.SQplus.pTag, deqSQ.bits.pTag)
   asg(mem1inLeft.bits.mem1Req.SQplus.cAttr, deqSQ.bits.cAttr)
+  if (debug) asg(mem1inLeft.bits.debugPC.get, roOutBits.debugPC.get)
   // pipeline connect mem1in and Rostage
   PipelineConnect(mem1inLeft, mem1inRight, memStage1.io.out.toMem2.fire, io.flush)
   // cachein and Rostage, connect not pipeline,

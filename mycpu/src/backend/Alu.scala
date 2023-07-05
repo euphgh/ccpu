@@ -208,6 +208,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
   asg(exeOut.wPrf.pDest, exeIn.destPregAddr)
   asg(exeOut.wPrf.wmask, 15.U(4.W))
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
+  if (debug) asg(exeOut.debugPC.get, exeIn.debugPC.get)
 
   //may change signal
   val outExDetect = exeOut.wbRob.exDetect

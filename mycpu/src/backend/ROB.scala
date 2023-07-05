@@ -23,6 +23,7 @@ class RobEntry extends MycpuBundle {
   }
   val isMispredict = Bool()
   val done         = Bool()
+  val debugPC      = if (debug) Some(UWord) else None
 }
 
 /**
@@ -120,6 +121,7 @@ class ROB extends MycpuModule {
           val idx        = Input(UInt())
           val exDetect   = Input(new DetectExInfoBundle)
           val misPredict = Input(Bool())
+          val debugPC    = if (debug) Some(Input(Bool())) else None
         }
       )
     )
@@ -138,6 +140,8 @@ class ROB extends MycpuModule {
           ringBuffer(wb(i).idx).done             := true.B
           ringBuffer(wb(i).idx).exception.detect := wb(i).exDetect
           ringBuffer(wb(i).idx).isMispredict     := wb(i).misPredict
+
+          if (debug) ringBuffer(wb(i).idx).debugPC.get := wb(i).debugPC.get
         }
       }
     }
@@ -174,6 +178,8 @@ class ROB extends MycpuModule {
     robEntries.wb(i).idx        := wdata(i).robIndex
     robEntries.wb(i).exDetect   := wdata(i).exDetect
     robEntries.wb(i).misPredict := wdata(i).isMispredict
+
+    if (debug) robEntries.wb(i).debugPC.get := wdata(i).debugPC.get
   })
 
   //io.out.robEmpty := robEntries.isEmpty

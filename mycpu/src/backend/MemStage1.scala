@@ -200,6 +200,8 @@ class MemStage1 extends MycpuModule {
   toM2Bits.memType   := inBits.memType
   toM2Bits.pTag      := tlbRes.pTag
   toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
+
+  if (debug) toM2Bits.debugPC.get := inBits.debugPC.get
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
   cache1.io.in.bits <> io.cacheIn.bits

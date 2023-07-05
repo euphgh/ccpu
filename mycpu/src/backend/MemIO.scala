@@ -42,6 +42,7 @@ class MemStage1InIO extends MycpuBundle {
   val memType   = MemType()
   val srcData   = Vec(2, Output(UInt(dataWidth.W)))
   val mem1Req   = new Mem1ReqBus
+  val debugPC   = if (debug) Some(UWord) else None
 }
 
 class MemStage1OutIO extends MycpuBundle {
@@ -52,6 +53,7 @@ class MemStage1OutIO extends MycpuBundle {
   val pTag      = UInt(tagWidth.W)
   val isUncache = Bool()
   val memType   = MemType()
+  val debugPC   = if (debug) Some(UWord) else None
 }
 
 // needMask = sqMask | memMask

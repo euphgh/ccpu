@@ -39,6 +39,7 @@ class MemStage2 extends MycpuModule {
   outBits.wbRob.exDetect     := inBits.exDetect
   outBits.wPrf.pDest         := inBits.wbInfo.destPregAddr
   outBits.destAregAddr       := inBits.wbInfo.destAregAddr
+  if (debug) asg(outBits.debugPC.get, inBits.debugPC.get)
   // ======================  Cache ============================
   val cache2  = Module(new CacheStage2(DcachRoads, DcachLineBytes, true)())
   val cinBit  = cache2.io.in.bits

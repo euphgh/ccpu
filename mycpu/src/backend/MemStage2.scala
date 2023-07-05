@@ -57,9 +57,6 @@ class MemStage2 extends MycpuModule {
   io.out.valid        := cacheFinish && !inBits.isSQ
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := io.out.ready
-  when(io.in.valid) {
-    assert(inBits.isSQ ^ inBits.toCache2.cacheInst.get.valid)
-  }
   // ===================== select ===============================
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))
@@ -148,7 +145,9 @@ class MemStage2 extends MycpuModule {
   // CacheInst =====================================================
   if (enableCacheInst) {
     val inci = io.in.bits.toCache2.cacheInst.get
-    assert(inBits.isSQ ^ inci.valid)
+    when(io.in.valid) {
+      assert(!inBits.isSQ || !inci.valid)
+    }
     io.out.valid := Mux(inci.valid, cache2.io.cacheInst.finish.get, cacheFinish && !inBits.isSQ)
     asg(cache2.io.cacheInst.redirect.get, io.flush)
   }

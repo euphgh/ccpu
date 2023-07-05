@@ -46,15 +46,16 @@ class MemStage2 extends MycpuModule {
   val coutBit = cache2.io.out.bits
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
-  asg(cinBit.cancel, inBits.exDetect.happen)
   asg(cinBit.isUncached, inBits.isUncache)
-  asg(cinBit.cancel, io.querySQ.res.memMask === 0.U) // storeQ find
-  cache2.io.in.valid := io.in.valid
-  cache2.io.in.valid := io.in.valid
+  val ldHitSQ = !inBits.isWrite && !io.querySQ.res.memMask.orR // not write and mem mask==0.U
+  asg(cinBit.cancel, inBits.exDetect.happen || ldHitSQ)
+  // store req from rostage should not enter cache
+  cache2.io.in.valid := io.in.valid && (inBits.isSQ || !inBits.isWrite)
   io.dmem <> cache2.io.dram
   io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = io.in.valid && cache2.io.out.valid
-  io.out.valid        := cacheFinish && !inBits.isSQ
+  // store req from rostage should not wait cache
+  io.out.valid        := !inBits.isSQ && io.in.valid && (Mux(inBits.isWrite, true.B, cacheFinish))
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := io.out.ready
   // ===================== select ===============================
@@ -148,7 +149,10 @@ class MemStage2 extends MycpuModule {
     when(io.in.valid) {
       assert(!inBits.isSQ || !inci.valid)
     }
-    io.out.valid := Mux(inci.valid, cache2.io.cacheInst.finish.get, cacheFinish && !inBits.isSQ)
+    when(inci.valid) {
+      io.out.valid  := cache2.io.cacheInst.finish.get
+      cinBit.cancel := false.B
+    }
     asg(cache2.io.cacheInst.redirect.get, io.flush)
   }
 }

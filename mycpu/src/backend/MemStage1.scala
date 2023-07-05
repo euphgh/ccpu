@@ -140,9 +140,9 @@ class MemStage1 extends MycpuModule {
   // >> select ========================================================
   // >> tlb
   val imm    = SignExt(inROplus.immOffset, 32)
-  val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
+  val vTag   = inBits.srcData(0)(31, 12) + imm(31, 12) + inROplus.carryout
   val tlbRes = io.tlb.res
-  asg(io.tlb.req.bits, Cat(vTag, 0.U(22.W)))
+  asg(io.tlb.req.bits, Cat(vTag, 0.U(12.W)))
   io.tlb.req.valid := io.in.valid
   toSQbits.pTag    := tlbRes.pTag
   toSQbits.cAttr   := tlbRes.ccAttr

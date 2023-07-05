@@ -147,7 +147,7 @@ class IfStage2 extends Module with MycpuParam {
   val dsReg       = RegInit(false.B)
   val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
   val outValidNum = PriorityCount(outBits.validMask.asUInt)
-  when(outBits.validMask(0)) { dsReg := false.B }
+  when(outBits.validMask(0) && io.out.valid) { dsReg := false.B }
   when(validBr.asUInt.orR) {
     asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
     when(lastDs >= outValidNum) {

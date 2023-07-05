@@ -111,7 +111,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   exeStageIO.out.valid := false.B //default
   switch(state) {
     is(run) {
-      exeStageIO.out.valid := !isBlock
+      exeStageIO.out.valid := !isBlock && instValid
       state                := Mux(isBlock, block, run)
       blockDone            := false.B
     }

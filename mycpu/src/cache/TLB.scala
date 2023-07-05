@@ -111,7 +111,7 @@ class TLB extends MycpuModule {
       wEntry
     }
   }
-  tlbpRes   := dir(0) || dir(1)
+  tlbpRes   := (dir(0) || dir(1)) && tlbpReq
   tlbpFound := Mux(dir(0), hitMask(0).orR, hitMask(1).orR)
   tlbpIndex := Mux(dir(0), OHToUInt(hitMask(0)), OHToUInt(hitMask(1)))
 }

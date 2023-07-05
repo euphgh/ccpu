@@ -194,7 +194,7 @@ class CacheStage2[T <: Data](
     asg(w1data(i).req.bits.setIdx, lowAddr.index)
     asg(w1meta(i).req.bits.data.tag, inBits.ptag)
     asg(w1meta(i).req.bits.data.valid, true.B)
-    asg(w1data(i).req.bits.data, newLineVec)
+    asg(w1data(i).req.bits.data, newLineVec) // not default refill should change
     if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, false.B)
   })
   // Default Bus Assign ========================================================
@@ -359,6 +359,7 @@ class CacheStage2[T <: Data](
       }
       // write axi back data to cache data and metas
       w1data(victimRoad).req.valid := true.B
+      asg(w1data(victimRoad).req.bits.data, readBuffer)
       w1meta(victimRoad).req.valid := true.B
     }
     is(uncache) {

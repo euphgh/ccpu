@@ -47,6 +47,7 @@ class MemStage1InIO extends MycpuBundle {
 
 class MemStage1OutIO extends MycpuBundle {
   val isSQ      = Bool()
+  val isWrite   = Bool()
   val wbInfo    = new WriteBackIO
   val exDetect  = new DetectExInfoBundle
   val toCache2  = new CacheStage1OutIO(DcachRoads, 8, true)

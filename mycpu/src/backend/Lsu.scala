@@ -60,7 +60,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   )
 
   // pipeline connect storeQ/roStage => mem1Stage
-  PipelineConnect(memStage1.io.out.toMem2, memStage2.io.in, memStage2.io.out.fire, io.flush)
+  PipelineConnect(memStage1.io.out.toMem2, memStage2.io.in, memStage2.io.out.fire || memStage2.io.doneSQ, io.flush)
 
   // mem1 connect with outside
   memStage1.io.robOldestIdx := robOldestIdx
@@ -71,7 +71,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   memStage1.io.stqEmpty := storeQ.io.empty
 
   // stage2 connect with storeQ
-  storeQ.io.deq.back := memStage2.io.out.valid // when store finish, release storeQ
+  storeQ.io.deq.back := memStage2.io.doneSQ // when store finish, release storeQ
   memStage2.io.querySQ <> storeQ.io.query // search storeQ while load
 
   // mem2 to outside

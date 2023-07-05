@@ -451,7 +451,7 @@ class CacheStage2[T <: Data](
       aw.bits.len   := 0.U
       ar.bits.id    := id
       dram.whenAWfire {
-        ucState := ucRWait
+        ucState := ucWData
       }
       if (!isDcache) assert(false.B)
     }
@@ -461,7 +461,7 @@ class CacheStage2[T <: Data](
       w.bits.last := true.B
       dram.whenWfire {
         asg(w.bits.data, dreq.wWord)
-        writeState := Mux(w.bits.last, waitwBack, wData)
+        ucState := Mux(w.bits.last, ucWaitBack, ucWData)
       }
       if (!isDcache) assert(false.B)
     }

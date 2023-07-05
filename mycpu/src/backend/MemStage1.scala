@@ -98,6 +98,9 @@ class MemStage1 extends MycpuModule {
       ).zip(datas)
     )
   }
+  // default
+  toSQbits.rwReq := inBits.mem1Req.rwReq
+  // update
   toSQbits.rwReq.size := selectByMemType(
     Seq(
       0.U(2.W),
@@ -133,14 +136,13 @@ class MemStage1 extends MycpuModule {
       toSQbits.rwReq.wStrb
     )
     .asUInt
-  toSQbits.rwReq := inBits.mem1Req.rwReq
 
   // >> select ========================================================
   // >> tlb
   val imm    = SignExt(inROplus.immOffset, 32)
-  val vTag   = inBits.srcData(0)(31, 22) + imm(31, 22) + inROplus.carryout
+  val vTag   = inBits.srcData(0)(31, 12) + imm(31, 12) + inROplus.carryout
   val tlbRes = io.tlb.res
-  asg(io.tlb.req.bits, Cat(vTag, 0.U(22.W)))
+  asg(io.tlb.req.bits, Cat(vTag, 0.U(12.W)))
   io.tlb.req.valid := io.in.valid
   toSQbits.pTag    := tlbRes.pTag
   toSQbits.cAttr   := tlbRes.ccAttr
@@ -196,6 +198,7 @@ class MemStage1 extends MycpuModule {
   toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
   io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.ready)
   toM2Bits.isSQ      := !inBits.isRoStage
+  toM2Bits.isWrite   := isWriteReq
   toM2Bits.wbInfo    := inBits.wbInfo
   toM2Bits.memType   := inBits.memType
   toM2Bits.pTag      := tlbRes.pTag

@@ -7,6 +7,8 @@ import frontend._
 import utils.MultiQueue
 import utils.asg
 import chisel3.util.experimental.BoringUtils._
+import difftest.DifftestPhyRegInROB
+import difftest.DifftestPhyRegInFLR
 
 class SingleRetireBundle extends MycpuBundle {
   val muldiv = Output(Bool())
@@ -149,6 +151,7 @@ class ROB extends MycpuModule {
     })
     val ds = ringBuffer(mispreIdx + 1.U)
     dsAllow := (ds.done || ds.uOp.specialType =/= SpecialType.CACHEINST) && (headIdx =/= mispreIdx + 1.U)
+
   }
   val robEntries = Module(new ROBQueue)
   io.out.oldestIdx     := robEntries.io.tailPtr
@@ -469,5 +472,19 @@ class ROB extends MycpuModule {
     val validRetire = Wire(Bool())
     validRetire := difftestRetire.io.retireNum > 0.U
     addSource(validRetire, "hasValidRetire")
+
+    val difftestPyhROB = Module(new DifftestPhyRegInROB)
+    difftestPyhROB.io.clock   := clock
+    difftestPyhROB.io.en      := true.B
+    difftestPyhROB.io.robHead := robEntries.headIdx
+    difftestPyhROB.io.robTail := robEntries.tailIdx
+    difftestPyhROB.io.rob     := robEntries.allPDest
+    val difftestPyhFLR = Module(new DifftestPhyRegInFLR)
+    difftestPyhFLR.io.clock     := clock
+    difftestPyhFLR.io.en        := true.B
+    difftestPyhFLR.io.flrHead   := flrHeadPtr
+    difftestPyhFLR.io.flrTail   := flrTailPtr
+    difftestPyhFLR.io.flr       := flrQueue
+    difftestPyhFLR.io.isRecover := flrState === recover
   }
 }

@@ -22,6 +22,25 @@ class DiffArchIntRegStateIO extends DifftestBundle {
   val gpr = Input(Vec(32, UInt(32.W)))
 }
 
+class DiffPhyRegInROBIO extends DifftestBundle with MycpuParam {
+  val robHead = Input(ROBIdx)
+  val robTail = Input(ROBIdx)
+  val rob     = Input(Vec(robNum, PRegIdx))
+}
+
+class DiffPhyRegInFLRIO extends DifftestBundle with MycpuParam {
+  val flrHead   = Input(ROBIdx)
+  val flrTail   = Input(ROBIdx)
+  val flr       = Input(Vec(robNum, PRegIdx))
+  val isRecover = Input(Bool())
+}
+
+class DiffPhyRegInFreeListIO extends DifftestBundle with MycpuParam {
+  val flHead = Input(UInt(log2Ceil(freeListSize).W))
+  val flTail = Input(UInt(log2Ceil(freeListSize).W))
+  val fl     = Input(Vec(freeListSize, PRegIdx))
+}
+
 class DiffArchHiloIO extends DifftestBundle {
   val hi = Input(UInt(32.W))
   val lo = Input(UInt(32.W))
@@ -126,10 +145,6 @@ class DifftestInstrCommit extends DifftestBaseModule(new DiffInstrCommitIO)
 class DifftestArchHILO extends DifftestBaseModule(new DiffArchHiloIO)
 class DifftestArchCP0 extends DifftestBaseModule(new DiffArchCopIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
-
-class DifftestTop extends Module {
-  var difftest_instr_commit     = Module(new DifftestInstrCommit);
-  var difftest_arch_hilo        = Module(new DifftestArchHILO);
-  var difftest_arch_cp0         = Module(new DifftestArchCP0);
-  var difftest_arch_intregstate = Module(new DifftestArchIntRegState);
-}
+class DifftestPhyRegInROB extends DifftestBaseModule(new DiffPhyRegInROBIO)
+class DifftestPhyRegInFreeList extends DifftestBaseModule(new DiffPhyRegInFreeListIO)
+class DifftestPhyRegInFLR extends DifftestBaseModule(new DiffPhyRegInFLRIO)

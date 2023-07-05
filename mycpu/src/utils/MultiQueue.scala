@@ -62,7 +62,7 @@ class MultiQueue[T <: Data](
   val enqFireNum = PopCount(io.push.map(_.fire))
   def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth) //must look ahead a cycle
   def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth) //only considerate current
-  val nextBasicNum = RegNext(headPtr + enqFireNum - tailPtr - deqFireNum)
+  val nextBasicNum = RegNext(Mux(io.flush, 0.U(ptrWidth.W), (headPtr + enqFireNum - tailPtr - deqFireNum)))
   def overflowR(add:  UInt) = (nextBasicNum + add - deqFireNum)(counterWidth) //must look ahead a cycle
   def underflowR(sub: UInt) = (nextBasicNum - sub)(counterWidth) //only considerate current
   val counterMatch = headPtr(counterWidth - 1, 0) === tailPtr(counterWidth - 1, 0)

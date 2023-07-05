@@ -19,7 +19,7 @@ $(VSRC): $(SSRC)
 	mkdir -p $(BUILD_DIR)
 	mill -i $(MainModule).runMain Elaborate -td $(BUILD_DIR)
 	mv $(BUILD_DIR)/$(TOPNAME).v $(BUILD_DIR)/mycpu_top.v
-	nix run sys#python3 -- utils/MycpuReplace.py $(BUILD_DIR)/mycpu_top.v $(TOPNAME)
+	python3 -- utils/MycpuReplace.py $(BUILD_DIR)/mycpu_top.v $(TOPNAME)
 
 mycpu: $(VSRC)
 

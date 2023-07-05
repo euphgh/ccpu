@@ -98,6 +98,9 @@ class MemStage1 extends MycpuModule {
       ).zip(datas)
     )
   }
+  // default
+  toSQbits.rwReq := inBits.mem1Req.rwReq
+  // update
   toSQbits.rwReq.size := selectByMemType(
     Seq(
       0.U(2.W),
@@ -133,7 +136,6 @@ class MemStage1 extends MycpuModule {
       toSQbits.rwReq.wStrb
     )
     .asUInt
-  toSQbits.rwReq := inBits.mem1Req.rwReq
 
   // >> select ========================================================
   // >> tlb
@@ -196,6 +198,7 @@ class MemStage1 extends MycpuModule {
   toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
   io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.ready)
   toM2Bits.isSQ      := !inBits.isRoStage
+  toM2Bits.isWrite   := isWriteReq
   toM2Bits.wbInfo    := inBits.wbInfo
   toM2Bits.memType   := inBits.memType
   toM2Bits.pTag      := tlbRes.pTag

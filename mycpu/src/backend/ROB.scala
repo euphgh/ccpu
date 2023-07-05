@@ -261,8 +261,11 @@ class ROB extends MycpuModule {
   })
 
   List.tabulate(retireNum)(i => { asg(io.out.multiRetire(i).valid, robEntries.io.pop(i).fire) }) //default
-  val retireRdy = VecInit.fill(retireNum)(false.B) //default
-  (0 until retireNum).foreach(i => { robEntries.io.pop(i).ready := readyRetire(i) })
+  val allowRobPop =
+    WireInit(
+      VecInit((0 until retireNum).map(i => readyRetire(i)))
+    ) //default and may change,not all "readyRetire inst" can retire
+  (0 until retireNum).foreach(i => { robEntries.io.pop(i).ready := allowRobPop(i) })
   asg(io.out.singleRetire.valid, false.B) //default
 
   //automachine
@@ -276,8 +279,8 @@ class ROB extends MycpuModule {
   val state       = RegInit(normal)
   import utils._
   val normalSel    = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
-  val exerMask     = PriorityMask(exerVec.asUInt)
-  val waitNextMask = Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
+  val exerMask     = ~PriorityMask(exerVec.asUInt)
+  val waitNextMask = ~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
   // JMP HB =======================================================
   val findHBinRob  = RegInit(false.B)
   val dstHBFromAlu = Wire(Flipped(Valid(UWord)))
@@ -296,27 +299,27 @@ class ROB extends MycpuModule {
     is(normal) {
       when(hasExer && firExEr <= firWaitNext && firExEr <= firSingle) {
         asg(state, exerFlush)
-        asg(retireRdy, VecInit(exerMask.asBools)) //mask itself and the inst behind
+        asg(allowRobPop, VecInit(exerMask.asBools)) //mask itself and the inst behind
       }.elsewhen(hasWaitNext && firWaitNext < firSingle) {
         asg(state, waitNext)
-        asg(retireRdy, VecInit(waitNextMask.asBools)) //mask the inst behind
+        asg(allowRobPop, VecInit(waitNextMask.asBools)) //mask the inst behind
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
       }
     }
     is(waitNext) { //CACHEINST 或 MISPRE(JRHB)转移而来
-      (0 until retireNum).map(i => asg(retireRdy(i), false.B)) //default
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B)) //default
       when(readyRetire(0)) {
         when(exerVec(0) || !retireInst(0).exception.basic.isBd) { //不是分支延迟槽(前一条是CI)或分支延迟槽异常
           asg(state, exerFlush)
         }.otherwise {
           asg(state, misFlush)
-          retireRdy(0) := true.B
+          allowRobPop(0) := true.B
         }
       }
     }
     is(misFlush) {
       asg(state, normal)
-      (0 until retireNum).map(i => asg(retireRdy(i), false.B))
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
       io.out.mispreFlushBackend := true.B
       when(findHBinRob) {
         io.out.flushAll          := true.B
@@ -326,7 +329,7 @@ class ROB extends MycpuModule {
     }
     is(exerFlush) {
       asg(state, normal)
-      (0 until retireNum).map(i => retireRdy(i) := false.B)
+      (0 until retireNum).map(i => allowRobPop(i) := false.B)
       io.out.flushAll := true.B
 
       when(retireInst(0).exception.detect.happen) { //exception

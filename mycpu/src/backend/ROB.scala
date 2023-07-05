@@ -121,7 +121,7 @@ class ROB extends MycpuModule {
           val idx        = Input(UInt())
           val exDetect   = Input(new DetectExInfoBundle)
           val misPredict = Input(Bool())
-          val debugPC    = if (debug) Some(Output(Bool())) else None
+          val debugPC    = if (debug) Some(Output(UWord)) else None
         }
       )
     )

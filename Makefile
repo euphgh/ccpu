@@ -24,7 +24,7 @@ $(VSRC): $(SSRC)
 mycpu: $(VSRC)
 
 sim: $(VSRC)
-	cd hitd; nix develop --command make sim;
+	cd hitd; nix develop --command make sim -j 32;
 
 help:
 	mill -i $(MainModule).test.runMain Elaborate --help

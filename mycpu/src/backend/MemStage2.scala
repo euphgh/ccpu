@@ -39,7 +39,7 @@ class MemStage2 extends MycpuModule {
   outBits.wbRob.exDetect     := inBits.exDetect
   outBits.wPrf.pDest         := inBits.wbInfo.destPregAddr
   outBits.destAregAddr       := inBits.wbInfo.destAregAddr
-  if (debug) asg(outBits.debugPC.get, inBits.debugPC.get)
+  if (debug) asg(outBits.wbRob.debugPC.get, inBits.debugPC.get)
   // ======================  Cache ============================
   val cache2  = Module(new CacheStage2(DcachRoads, DcachLineBytes, true)())
   val cinBit  = cache2.io.in.bits
@@ -57,7 +57,9 @@ class MemStage2 extends MycpuModule {
   io.out.valid        := cacheFinish && !inBits.isSQ
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := io.out.ready
-  assert(inBits.isSQ ^ inBits.toCache2.cacheInst.get.valid)
+  when(io.in.valid) {
+    assert(inBits.isSQ ^ inBits.toCache2.cacheInst.get.valid)
+  }
   // ===================== select ===============================
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))

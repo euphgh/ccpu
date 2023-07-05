@@ -203,7 +203,6 @@ class FunctionUnitOutIO extends MycpuBundle {
   val wbRob        = new WbRobBundle
   val wPrf         = new WPrfBundle
   val destAregAddr = Output(ARegIdx)
-  val debugPC      = if (debug) Some(Output(UWord)) else None
 }
 
 /**

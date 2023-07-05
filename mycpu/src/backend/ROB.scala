@@ -121,7 +121,7 @@ class ROB extends MycpuModule {
           val idx        = Input(UInt())
           val exDetect   = Input(new DetectExInfoBundle)
           val misPredict = Input(Bool())
-          val debugPC    = if (debug) Some(Input(Bool())) else None
+          val debugPC    = if (debug) Some(Output(Bool())) else None
         }
       )
     )
@@ -136,12 +136,11 @@ class ROB extends MycpuModule {
     tailIdx := tailPtr
     (0 until wBNum).foreach { i =>
       {
+        if (debug) wb(i).debugPC.get := ringBuffer(wb(i).idx).debugPC.get
         when(wb(i).wen) {
           ringBuffer(wb(i).idx).done             := true.B
           ringBuffer(wb(i).idx).exception.detect := wb(i).exDetect
           ringBuffer(wb(i).idx).isMispredict     := wb(i).misPredict
-
-          if (debug) ringBuffer(wb(i).idx).debugPC.get := wb(i).debugPC.get
         }
       }
     }
@@ -166,6 +165,7 @@ class ROB extends MycpuModule {
     asg(enqData.exception.basic, fromDper.basicExInfo)
     asg(enqData.done, false.B)
     asg(enqData.isMispredict, false.B)
+    asg(enqData.debugPC.get, io.in.fromDispatcher(i).bits.basicExInfo.pc)
     asg(enqData.exception.detect, 0.U.asTypeOf(new DetectExInfoBundle))
     asg(robEnq(i).valid, io.in.fromDispatcher(i).valid)
     asg(io.in.fromDispatcher(i).ready, robEnq(i).ready)
@@ -178,8 +178,9 @@ class ROB extends MycpuModule {
     robEntries.wb(i).idx        := wdata(i).robIndex
     robEntries.wb(i).exDetect   := wdata(i).exDetect
     robEntries.wb(i).misPredict := wdata(i).isMispredict
-
-    if (debug) robEntries.wb(i).debugPC.get := wdata(i).debugPC.get
+    when(io.in.wbRob(i).valid) {
+      assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
+    }
   })
 
   //io.out.robEmpty := robEntries.isEmpty

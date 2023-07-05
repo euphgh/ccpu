@@ -27,7 +27,6 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   mem1inLeft.valid := deqSQ.valid || roStage.io.out.valid
   asg(roStage.io.out.ready, Mux(selSQ, false.B, mem1inLeft.ready))
   asg(deqSQ.ready, Mux(!selSQ, false.B, mem1inLeft.ready))
-  val mem1Data = RegInit(new MemStage1InIO)
   // bundle connect
   asg(mem1inLeft.bits.isRoStage, !selSQ)
   asg(mem1inLeft.bits.wbInfo.robIndex, roOutBits.robIndex)

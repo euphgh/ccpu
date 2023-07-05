@@ -32,7 +32,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   asg(exeOut.wbRob.isMispredict, false.B) //must set to false,and will not change it
   asg(exeOut.wbRob.robIndex, exeIn.robIndex)
   asg(exeOut.wbRob.exDetect, exeIn.exDetect) //no exception happen here
-  if (debug) asg(exeOut.debugPC.get, exeIn.debugPC.get)
+  if (debug) asg(exeOut.wbRob.debugPC.get, exeIn.debugPC.get)
 
   import MduType._
   // alias  ==========================================================

@@ -419,10 +419,14 @@ class ROB extends MycpuModule {
     flrState := recover
   }
   when(flrState === recover) {
+
     val flrPopMask = VecInit((0 until retireNum).map(i => {
-      (0 to i).map(i => flrQueue(flrTailPtr + i.U) =/= 0.U).foldLeft(1.U)(_ & _)
+      (0 to i).map(j => flrQueue(flrTailPtr + j.U) =/= 0.U).foldLeft(1.U)(_ & _)
     })).asUInt
-    flrTailPtr := flrTailPtr + PriorityCount(flrPopMask)
+    when(flrPopMask.orR) { flrTailPtr := flrTailPtr + PriorityCount(flrPopMask) }.otherwise {
+      flrTailPtr := flrTailPtr + 1.U
+    }
+
     // FreeList Push Valid ==========================================================
     (0 until retireNum).foreach { i =>
       io.out.flRecover(i).valid := flrPopMask(i)
@@ -436,10 +440,16 @@ class ROB extends MycpuModule {
     when(flrHeadPtr === flrTailPtr) { flrState := idle }
   }.otherwise {
     // FreeList Push Valid ==========================================================
+    val validPDestVec =
+      WireInit(VecInit((0 until retireNum).map(i => io.out.multiRetire(i).valid && retireInst(i).uOp.prevPDest.orR)))
+    val pushFlNum = PopCount(validPDestVec)
     (0 until retireNum).foreach { i =>
-      val backPDest = retireInst(i).uOp.prevPDest
-      io.out.flRecover(i).valid := io.out.multiRetire(i).valid && backPDest.orR // only not zero should retire
-      io.out.flRecover(i).bits  := retireInst(i).uOp.prevPDest
+      io.out.flRecover(i).valid := i.U < pushFlNum
+      val sel = PriorityEncoder(
+        WireInit(VecInit((i until retireNum).map(j => validPDestVec(j))))
+      ) + i.U
+      io.out.flRecover(i).bits := retireInst(sel).uOp.prevPDest
+
     }
     // ROB push ready ===============================================================
     (0 until dispatchNum).foreach(i => {

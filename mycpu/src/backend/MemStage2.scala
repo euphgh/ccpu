@@ -57,7 +57,7 @@ class MemStage2 extends MycpuModule {
   // store req from rostage should not wait cache
   io.out.valid        := !inBits.isSQ && io.in.valid && (Mux(inBits.isWrite, true.B, cacheFinish))
   io.doneSQ           := cacheFinish && inBits.isSQ
-  cache2.io.out.ready := io.out.ready
+  cache2.io.out.ready := Mux(inBits.isSQ, true.B, io.out.ready)
   // ===================== select ===============================
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))

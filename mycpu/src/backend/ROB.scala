@@ -436,7 +436,7 @@ class ROB extends MycpuModule {
     }
     // ROB push ready ===============================================================
     (0 until dispatchNum).foreach(i => {
-      io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr <= 8.U
+      io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr <= 4.U
     })
     // back to normal state
     when(flrHeadPtr === flrTailPtr) { flrState := idle }

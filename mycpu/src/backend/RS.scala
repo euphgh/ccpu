@@ -193,17 +193,21 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   if (rsKind == FuType.MainAlu) {
     val isBranch =
       WireInit(
-        VecInit(List.tabulate(rsSize)(i => rsEntries(i).uOp.brType.get =/= BranchType.NON))
+        VecInit(List.tabulate(rsSize)(i => rsEntries(i).uOp.brType.get =/= BranchType.NON && slotsValid(i)))
       )
     (0 until rsSize).map(i =>
       asg(
         deqSel(i),
-        ((!((ageMask(i).asUInt & isBranch.asUInt).orR) & isBranch(i))
-          | (!((ageMask(i).asUInt & slotsRdy.asUInt).orR) & !isBranch(i))) && slotsRdy(i)
+        !((ageMask(i).asUInt & slotsRdy.asUInt).orR) && slotsRdy(i) && !(isBranch(i) & ((ageMask(
+          i
+        ).asUInt & isBranch.asUInt).orR))
       )
     )
   }
 
+  when(io.out.fire) {
+    assert(PopCount(deqSel) === 1.U)
+  }
   io.out.bits := Mux1H(deqSel, rsEntries)
   when(io.out.fire) {
     (0 until rsSize).foreach(i => {

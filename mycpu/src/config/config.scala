@@ -26,6 +26,7 @@ object LoadSel extends ChiselEnum {
 }
 
 object CCAttr extends ChiselEnum {
+  val zero     = Value("b000".U)
   val Uncached = Value("b010".U)
   val Cached   = Value("b011".U)
   val other    = Value("b100".U)

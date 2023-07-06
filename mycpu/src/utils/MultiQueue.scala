@@ -65,6 +65,14 @@ class MultiQueue[T <: Data](
   val nextBasicNum = RegNext(Mux(io.flush, 0.U(ptrWidth.W), (headPtr + enqFireNum - tailPtr - deqFireNum)))
   def overflowR(add:  UInt) = (nextBasicNum + add - deqFireNum)(counterWidth) //must look ahead a cycle
   def underflowR(sub: UInt) = (nextBasicNum - sub)(counterWidth) //only considerate current
+  val pushIndex = RegNext(VecInit((0 until enqNum).map(i => {
+    val startLine = Mux(io.flush, 0.U(counterWidth.W), headPtr + enqFireNum)
+    (startLine + i.U)(counterWidth - 1, 0)
+  })))
+  val popIndex = RegNext(VecInit((0 until deqNum).map(i => {
+    val startLine = Mux(io.flush, 0.U(counterWidth.W), tailPtr + deqFireNum)
+    (startLine + i.U)(counterWidth - 1, 0)
+  })))
   val counterMatch = headPtr(counterWidth - 1, 0) === tailPtr(counterWidth - 1, 0)
   val signMatch    = headPtr(ptrWidth - 1) === tailPtr(ptrWidth - 1)
   val empty        = counterMatch && signMatch
@@ -80,8 +88,9 @@ class MultiQueue[T <: Data](
     (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(i.U)))
   }
   List.tabulate(enqNum)(i => {
+    asg(pushIndex(i), (headPtr + enqFireNum + i.U)(counterWidth - 1, 0))
     when(io.push(i).fire) {
-      ringBuffer(headPtr + i.U) := io.push(i).bits
+      ringBuffer(pushIndex(i)) := io.push(i).bits
     }
   })
   headPtr := headPtr + enqFireNum
@@ -90,7 +99,8 @@ class MultiQueue[T <: Data](
   (0 until deqNum).foreach(i => (io.pop(i).valid := !underflowR((i + 1).U)))
   tailPtr := tailPtr + deqFireNum
   (0 until deqNum).foreach(i => {
-    io.pop(i).bits := ringBuffer((tailPtr + i.U)(counterWidth, 0))
+    asg(popIndex(i), (tailPtr + deqFireNum + i.U)(counterWidth - 1, 0))
+    io.pop(i).bits := ringBuffer(popIndex(i))
   })
 
   when(io.flush) {

@@ -405,8 +405,8 @@ class ROB extends MycpuModule {
   }
   // pDest collect Queue
   val flrQueue   = RegInit(VecInit(Seq.fill(robNum)(0.U(pRegAddrWidth.W)))) //Reg(Vec(robNum, PRegIdx))
-  val flrHeadPtr = RegInit(0.U(log2Ceil(robNum).W))
-  val flrTailPtr = RegInit(0.U(log2Ceil(robNum).W))
+  val flrHeadPtr = RegInit(0.U((robIndexWidth + 1).W))
+  val flrTailPtr = RegInit(0.U((robIndexWidth + 1).W))
   object FreeListRecover extends ChiselEnum {
     val idle, recover = Value
   }
@@ -421,9 +421,9 @@ class ROB extends MycpuModule {
     flrState := recover
   }
   when(flrState === recover) {
-
+    val remainNum = flrHeadPtr - flrTailPtr
     val flrPopMask = VecInit((0 until retireNum).map(i => {
-      (0 to i).map(j => flrQueue(flrTailPtr + j.U) =/= 0.U).foldLeft(1.U)(_ & _)
+      ((0 to i).map(j => flrQueue(flrTailPtr + j.U) =/= 0.U).foldLeft(1.U)(_ & _)) & (i.U < remainNum)
     })).asUInt
     when(flrPopMask.orR) { flrTailPtr := flrTailPtr + PriorityCount(flrPopMask) }.otherwise {
       flrTailPtr := flrTailPtr + 1.U

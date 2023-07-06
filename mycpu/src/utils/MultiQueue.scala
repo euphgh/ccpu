@@ -88,7 +88,6 @@ class MultiQueue[T <: Data](
     (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(i.U)))
   }
   List.tabulate(enqNum)(i => {
-    asg(pushIndex(i), (headPtr + enqFireNum + i.U)(counterWidth - 1, 0))
     when(io.push(i).fire) {
       ringBuffer(pushIndex(i)) := io.push(i).bits
     }
@@ -99,7 +98,6 @@ class MultiQueue[T <: Data](
   (0 until deqNum).foreach(i => (io.pop(i).valid := !underflowR((i + 1).U)))
   tailPtr := tailPtr + deqFireNum
   (0 until deqNum).foreach(i => {
-    asg(popIndex(i), (tailPtr + deqFireNum + i.U)(counterWidth - 1, 0))
     io.pop(i).bits := ringBuffer(popIndex(i))
   })
 

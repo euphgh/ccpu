@@ -90,7 +90,7 @@ class MultiQueue[T <: Data](
   (0 until deqNum).foreach(i => (io.pop(i).valid := !underflowR((i + 1).U)))
   tailPtr := tailPtr + deqFireNum
   (0 until deqNum).foreach(i => {
-    io.pop(i).bits := ringBuffer(tailPtr + i.U)
+    io.pop(i).bits := ringBuffer((tailPtr + i.U)(counterWidth, 0))
   })
 
   when(io.flush) {

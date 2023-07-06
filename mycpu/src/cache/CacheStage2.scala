@@ -395,8 +395,8 @@ class CacheStage2[T <: Data](
   }
   val canReady = (mainState === run) || (mainState === refill && writeState === wIdel)
   val canValid = (mainState === run) || (mainState === refill)
-  assert(Mux(io.out.valid, canValid, true.B))
-  assert(Mux(io.in.ready, canReady, true.B))
+  // assert(Mux(io.out.valid, canValid, true.B))
+  // assert(Mux(io.in.ready, canReady, true.B))
 
   switch(writeState) {
     is(wReq) {

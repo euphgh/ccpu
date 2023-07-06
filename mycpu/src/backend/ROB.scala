@@ -402,7 +402,7 @@ class ROB extends MycpuModule {
     val valid    = Bool()
   }
   // pDest collect Queue
-  val flrQueue   = Reg(Vec(robNum, PRegIdx))
+  val flrQueue   = RegInit(VecInit(Seq.fill(robNum)(0.U(pRegAddrWidth.W)))) //Reg(Vec(robNum, PRegIdx))
   val flrHeadPtr = RegInit(0.U(log2Ceil(robNum).W))
   val flrTailPtr = RegInit(0.U(log2Ceil(robNum).W))
   object FreeListRecover extends ChiselEnum {

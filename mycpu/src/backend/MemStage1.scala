@@ -194,9 +194,9 @@ class MemStage1 extends MycpuModule {
   // read from rostage write with exception from rostage, write from SQ should to mem2
   val blkUcLoad = !isWriteReq && CCAttr.isUnCache(
     tlbRes.ccAttr.asUInt
-  ) && !(io.in.bits.wbInfo.robIndex === io.robOldestIdx && io.stqEmpty)
+  ) && !(io.in.bits.wbInfo.robIndex === io.robOldestIdx)
   toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
-  io.in.ready        := Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.ready)
+  io.in.ready        := !io.in.valid || Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.fire)
   toM2Bits.isSQ      := !inBits.isRoStage
   toM2Bits.isWrite   := isWriteReq
   toM2Bits.wbInfo    := inBits.wbInfo

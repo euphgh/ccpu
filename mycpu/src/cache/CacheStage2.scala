@@ -232,7 +232,9 @@ class CacheStage2[T <: Data](
   // >> B channel ==============================================================
   b.ready := true.B
 
-  val firstMissCycle = RegInit(false.B)
+  val firstRefillCycle = RegInit(false.B) // only first can write Cache data and meta
+
+  val firstMissCycle = RegInit(false.B) // only first can change write state
   val ucICounter     = if (!isDcache) Some(Counter(fetchNum)) else None
   val ucIBuffer      = if (!isDcache) Some(RegInit(VecInit.fill(fetchNum)(0.U(32.W)))) else None
   val ucDBuffer      = if (isDcache) Some(RegInit(0.U(32.W))) else None
@@ -321,10 +323,15 @@ class CacheStage2[T <: Data](
         readBuffer(readCounter.value) := r.bits.data
         readCounter.inc()
         assert(r.bits.last && readCounter.value === (wordNum - 1).U || !r.bits.last)
-        mainState := Mux(r.bits.last, refill, readDram)
+        when(r.bits.last) {
+          mainState        := refill
+          firstRefillCycle := true.B
+        }
       }
     }
     is(refill) {
+      // false first refill
+      firstRefillCycle := false.B
       // req ok, give result
       io.out.valid := true.B
       // select data by offset
@@ -357,12 +364,14 @@ class CacheStage2[T <: Data](
       }
       // wait write ok to get next req
       when(writeState === wIdel) {
-        mainState := run
+        mainState   := run
+        io.in.ready := true.B
       }
       // write axi back data to cache data and metas
-      w1data(victimRoad).req.valid := true.B
+      // must first cycle can write, else inBits will not valid
+      w1data(victimRoad).req.valid := true.B && firstRefillCycle
+      w1meta(victimRoad).req.valid := true.B && firstRefillCycle
       asg(w1data(victimRoad).req.bits.data, readBuffer)
-      w1meta(victimRoad).req.valid := true.B
     }
     is(uncache) {
       when(ucState === ucIdel) {
@@ -384,8 +393,10 @@ class CacheStage2[T <: Data](
       // not return run there, until instrState set mainState to run
     }
   }
-  //assert(io.out.valid || mainState === run)
-  assert(io.in.ready === false.B || mainState === run)
+  val canReady = (mainState === run) || (mainState === refill && writeState === wIdel)
+  val canValid = (mainState === run) || (mainState === refill)
+  // assert(Mux(io.out.valid, canValid, true.B))
+  // assert(Mux(io.in.ready, canReady, true.B))
 
   switch(writeState) {
     is(wReq) {

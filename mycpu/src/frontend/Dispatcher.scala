@@ -7,6 +7,7 @@ import utils._
 import chisel3.util.Cat
 import chisel3.util.experimental.decode.QMCMinimizer
 import chisel3.experimental.conversions._
+import difftest.DifftestPhyRegInFreeList
 
 class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
@@ -260,16 +261,18 @@ class Dispatcher extends MycpuModule {
     Mux(hasMain, PriorityEncoderOH(subMask), SecondPriEncoder(subMask))
   }
 
-  val freeList = Module(
-    new MultiQueue(
-      enqNum = retireNum,
-      deqNum = dispatchNum,
-      gen    = PRegIdx,
-      size   = freeListSize,
-      allIn  = false,
-      isFL   = true
-    )
-  )
+  class FreeList extends MultiQueue(retireNum, dispatchNum, PRegIdx, freeListSize, false, true) {
+    if (verilator) {
+      val difftestFreeList = Module(new DifftestPhyRegInFreeList)
+      difftestFreeList.io.clock  := clock
+      difftestFreeList.io.en     := true.B
+      difftestFreeList.io.flHead := headPtr
+      difftestFreeList.io.flTail := tailPtr
+      difftestFreeList.io.fl     := ringBuffer
+    }
+  }
+
+  val freeList = Module(new FreeList)
   asg(freeList.io.flush, false.B)
   (0 until retireNum).map(i => {
     asg(freeList.io.push(i).valid, io.pushFl(i).valid)

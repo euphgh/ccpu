@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.reflect._
 import chisel3.experimental.ExtModule
+import config.MycpuParam
 
 trait DifftestWithClock {
   val clock = Input(Clock())
@@ -20,6 +21,22 @@ class DiffInstrCommitIO extends DifftestBundle {
 
 class DiffArchIntRegStateIO extends DifftestBundle {
   val gpr = Input(Vec(32, UInt(32.W)))
+}
+
+class DiffPhyRegInROBIO extends DifftestBundle with MycpuParam {
+  val robHead   = Input(UInt((log2Ceil(freeListSize) + 1).W))
+  val robTail   = Input(UInt((log2Ceil(freeListSize) + 1).W))
+  val rob       = Input(Vec(robNum, PRegIdx))
+  val flrHead   = Input(UInt((log2Ceil(freeListSize) + 1).W))
+  val flrTail   = Input(UInt((log2Ceil(freeListSize) + 1).W))
+  val flr       = Input(Vec(robNum, PRegIdx))
+  val isRecover = Input(Bool())
+}
+
+class DiffPhyRegInFreeListIO extends DifftestBundle with MycpuParam {
+  val flHead = Input(UInt((log2Ceil(freeListSize) + 1).W))
+  val flTail = Input(UInt((log2Ceil(freeListSize) + 1).W))
+  val fl     = Input(Vec(freeListSize, PRegIdx))
 }
 
 class DiffArchHiloIO extends DifftestBundle {
@@ -55,16 +72,17 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
     if (DataMirror.directionOf(data) == ActualDirection.Input) "input " else "output"
   }
 
-  def getDPICArgString(argName: String, data: Data): String = {
+  def getDPICArgString(argName: String, data: Data, size: Int): String = {
     val directionString = getDirectionString(data)
-    val typeString = data.getWidth match {
+    val typeString = (data.getWidth / size) match {
       case 1                                  => "bit"
       case width if width > 1 && width <= 8   => "byte"
       case width if width > 8 && width <= 32  => "int"
       case width if width > 32 && width <= 64 => "longint"
       case _                                  => s"unsupported io type of width ${data.getWidth}!!\n"
     }
-    val argString = Seq(directionString, f"${typeString}%7s", argName)
+    val array     = if (size > 1) s"[$size]" else ""
+    val argString = Seq(directionString, f"${typeString}%7s", argName, array)
     argString.mkString(" ")
   }
 
@@ -74,6 +92,21 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
     argString.mkString(" ")
   }
 
+  def getVecCode(argName: String, data: Data, size: Int) = {
+    val dataWidth = data.getWidth / size
+    val typeString = dataWidth match {
+      case 1                                  => "bit"
+      case width if width > 1 && width <= 8   => "byte"
+      case width if width > 8 && width <= 32  => "int"
+      case width if width > 32 && width <= 64 => "longint"
+      case _                                  => s"unsupported io type of width ${data.getWidth}!!\n"
+    }
+    val code = new StringBuilder(s"wire $typeString $argName [$size];\n")
+    (0 until size).foreach(i => {
+      code.append(s"assign ${argName}[$i] = ${argName}_$i;\n")
+    })
+    code.toString()
+  }
   def moduleName = this.getClass.getSimpleName
   def moduleBody: String = {
     // ExtModule implicitly adds io_* prefix to the IOs (because the IO val is named as io).
@@ -84,17 +117,32 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
           case _ => Seq((s"io_$name", data))
         }
     }
+    val dpiInterfaces = io.elements.toSeq.reverse.flatMap {
+      case (name, data) =>
+        data match {
+          case vec: Vec[_] => Seq((s"io_$name", data, vec.size))
+          case _ => Seq((s"io_$name", data, 1))
+        }
+    }
     // (1) DPI-C function prototype
-    val dpicInterfaces = interfaces.filterNot(in => in._1 == "io_clock" || in._1 == "io_en")
-    val dpicName       = s"v_difftest_${moduleName.replace("Difftest", "")}"
+    val dpicName = s"v_difftest_${moduleName.replace("Difftest", "")}"
     val dpicDecl =
       s"""
          |import "DPI-C" function void $dpicName (
-         |${dpicInterfaces.map(ifc => getDPICArgString(ifc._1, ifc._2)).mkString(",\n")}
+         |${dpiInterfaces
+        .filterNot(in => in._1 == "io_clock" || in._1 == "io_en")
+        .map(ifc => getDPICArgString(ifc._1, ifc._2, ifc._3))
+        .mkString(",\n")}
          |);
          |""".stripMargin
     // (2) module definition
     val modPorts = interfaces.map(i => getModArgString(i._1, i._2)).mkString(",\n")
+    // (3) vec init
+    val argToVec = dpiInterfaces.filter(_._3 > 1).map(i => getVecCode(i._1, i._2, i._3))
+    // (4) func call
+    val funcCallStr = dpiInterfaces
+      .map(_._1)
+      .filterNot(in => in == "io_clock" || in == "io_en")
     val modDef =
       s"""
          |module $moduleName(
@@ -103,9 +151,10 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
          |`ifndef SYNTHESIS
          |`ifdef VERILATOR
          |$dpicDecl
+         |${argToVec.mkString}
          |  always @(posedge io_clock) begin
          |    if (io_en) begin
-         |      $dpicName (${dpicInterfaces.map(_._1).mkString(",")});
+         |      $dpicName (${funcCallStr.mkString(",")});
          |    end 
          |  end
          |`endif
@@ -126,10 +175,5 @@ class DifftestInstrCommit extends DifftestBaseModule(new DiffInstrCommitIO)
 class DifftestArchHILO extends DifftestBaseModule(new DiffArchHiloIO)
 class DifftestArchCP0 extends DifftestBaseModule(new DiffArchCopIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
-
-class DifftestTop extends Module {
-  var difftest_instr_commit     = Module(new DifftestInstrCommit);
-  var difftest_arch_hilo        = Module(new DifftestArchHILO);
-  var difftest_arch_cp0         = Module(new DifftestArchCP0);
-  var difftest_arch_intregstate = Module(new DifftestArchIntRegState);
-}
+class DifftestPhyRegInROB extends DifftestBaseModule(new DiffPhyRegInROBIO)
+class DifftestPhyRegInFreeList extends DifftestBaseModule(new DiffPhyRegInFreeListIO)

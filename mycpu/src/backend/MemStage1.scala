@@ -212,6 +212,19 @@ class MemStage1 extends MycpuModule {
   toM2Bits.toCache2 <> cache1.io.out
   when(inBits.isRoStage) {
     toM2Bits.toCache2.dCacheReq.get.size := toSQbits.rwReq.size
+    import MemType._
+    toM2Bits.toCache2.dCacheReq.get.wStrb := LookupEnum(
+      inBits.memType,
+      Seq(
+        LB  -> byteStrob,
+        LBU -> byteStrob,
+        LH  -> halfStrob,
+        LHU -> halfStrob,
+        LW  -> "hf".U(4.W),
+        LWL -> leftStrob,
+        LWR -> rightStrob
+      )
+    )
   }
   // do not important for lsu will not see this signal
   io.cacheIn.ready := cache1.io.in.ready

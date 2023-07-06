@@ -22,23 +22,19 @@ class StoreQueue(entries: Int) extends MycpuModule {
   })
 
   class StoreQEntry extends MycpuBundle {
-    val data    = new StoreQIO
-    val valid   = Bool()
-    val retired = Bool()
+    val data  = new StoreQIO
+    val valid = Bool()
   }
-  val ram        = Mem(entries, new StoreQEntry)
-  val enq_ptr    = RegInit(0.U(log2Ceil(entries).W))
-  val ret_ptr    = RegInit(0.U(log2Ceil(entries).W))
-  val deq_ptr    = RegInit(0.U(log2Ceil(entries).W))
-  val maybe_full = RegInit(false.B)
-  val do_enq     = WireDefault(io.enq.fire)
-  val do_deq     = WireDefault(io.deq.back)
-  when(do_enq =/= do_deq) {
-    maybe_full := do_enq
-  }
-  val ptr_match = enq_ptr === deq_ptr
-  val empty     = ptr_match && !maybe_full
-  val full      = ptr_match && maybe_full
+  val ram          = RegInit(VecInit.fill(entries)(0.U.asTypeOf(new StoreQEntry)))
+  val enq_ptr      = RegInit(0.U((log2Ceil(entries) + 1).W))
+  val ret_ptr      = RegInit(0.U((log2Ceil(entries) + 1).W))
+  val deq_ptr      = RegInit(0.U((log2Ceil(entries) + 1).W))
+  val do_enq       = WireDefault(io.enq.fire)
+  val do_deq       = WireDefault(io.deq.back)
+  val counterMatch = enq_ptr(counterWidth - 1, 0) === (counterWidth - 1, 0)
+  val signMatch    = enq_ptr(ptrWidth - 1) === tailPtr(ptrWidth - 1)
+  val empty        = counterMatch && signMatch
+  val full         = counterMatch && !signMatch
   asg(io.full, full)
   asg(io.empty, empty)
   //=================== query ====================
@@ -70,10 +66,9 @@ class StoreQueue(entries: Int) extends MycpuModule {
   io.enq.ready    := !full || io.deq.back
   io.deq.req.bits := ram(deq_ptr).data
   when(do_enq) {
-    ram(enq_ptr).data    := io.enq.bits
-    ram(enq_ptr).valid   := true.B
-    ram(enq_ptr).retired := false.B
-    enq_ptr              := enq_ptr + 1.U
+    ram(enq_ptr).data  := io.enq.bits
+    ram(enq_ptr).valid := true.B
+    enq_ptr            := enq_ptr + 1.U
   }
 
   //=================== deq =======================
@@ -94,7 +89,8 @@ class StoreQueue(entries: Int) extends MycpuModule {
   }
   //deq back
   when(do_deq) {
-    deq_ptr := deq_ptr + 1.U
+    deq_ptr            := deq_ptr + 1.U
+    ram(deq_ptr).valid := false.B
   }
 
   //=================== flush =====================
@@ -108,8 +104,5 @@ class StoreQueue(entries: Int) extends MycpuModule {
   when(io.retire.asUInt.orR) {
     val scommitNum = PopCount(io.retire.asUInt)
     ret_ptr := ret_ptr + scommitNum
-    (0 until retireNum).foreach(i => {
-      ram(ret_ptr + i.U).retired := i.U < scommitNum
-    })
   }
 }

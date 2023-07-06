@@ -120,8 +120,10 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
       val src0 = rsEntries(j).basic.srcPregs(0)
       val src1 = rsEntries(j).basic.srcPregs(1)
       val wprf = io.in.wPrfPIdx(i)
-      when(wprf.bits === src0.pIdx && wprf.valid) { src0.inPrf := true.B }
-      when(wprf.bits === src1.pIdx && wprf.valid) { src1.inPrf := true.B }
+      when(wprf.valid && slotsValid(j)) {
+        when(wprf.bits === src0.pIdx) { src0.inPrf := true.B }
+        when(wprf.bits === src1.pIdx) { src1.inPrf := true.B }
+      }
     })
   )
 
@@ -152,8 +154,10 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   wakeUpBroad.foreach(e =>
     List.tabulate(rsSize)(j => {
       val pSrcs = rsEntries(j).basic.srcPregs
-      when(e.bits === pSrcs(0).pIdx && e.valid) { srcsWaken(j)(0) := true.B }
-      when(e.bits === pSrcs(1).pIdx && e.valid) { srcsWaken(j)(1) := true.B }
+      when(slotsValid(j) && e.valid) {
+        when(e.bits === pSrcs(0).pIdx) { srcsWaken(j)(0) := true.B }
+        when(e.bits === pSrcs(1).pIdx) { srcsWaken(j)(1) := true.B }
+      }
     })
   )
 

@@ -313,8 +313,8 @@ class CacheStage2[T <: Data](
       when(firstMissCycle) {
         writeState     := Mux(validDirty(victimRoad), wReq, wIdel)
         firstMissCycle := false.B
+        assert(writeState === wIdel)
       }
-      assert(writeState === wIdel)
     }
     is(readDram) {
       dram.whenRfire {
@@ -397,6 +397,7 @@ class CacheStage2[T <: Data](
     is(wData) {
       w.bits.last := writeCounter.value === (wordNum - 1).U
       dram.whenWfire {
+        writeCounter.inc()
         asg(w.bits.data, wbBuffer(writeCounter.value))
         writeState := Mux(w.bits.last, waitwBack, wData)
       }

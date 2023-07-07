@@ -110,7 +110,12 @@ class IfStage2 extends Module with MycpuParam {
     asg(io.out.bits.realBrType(i), realBrType)
   })
 
-  when(nonBrMisPreVec.asUInt.orR && io.in.valid) {
+  /**
+    * flushReg:flush下一拍，来到IF2的指令是无效的
+    * out.valid:考虑到icache.out.valid
+    */
+  val flushReg = RegNext(io.flushIn, false.B)
+  when(nonBrMisPreVec.asUInt.orR && io.out.valid && !flushReg) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val misPc     = io.out.bits.basicInstInfo(firNonBrMispre).pcVal
     val misPreRes = io.out.bits.predictResult(firNonBrMispre)
@@ -139,26 +144,29 @@ class IfStage2 extends Module with MycpuParam {
   }
   io.bpuUpdate <> bpuUpdateQueue.io.deq
 
+  //0707
+  (0 until fetchNum).map(i => outBits.isBd(i) := false.B)
+
   /**
     * is延迟槽
     *   目前放在IF2段处理
     *   PRE-IF那还不太一样，如果分支没被预测跳转，是不会进入单走延迟槽的状态的
     */
-  val validBr = WireInit(
-    VecInit((0 until fetchNum).map(i => BranchType.isBr(outBits.realBrType(i)) && outBits.validMask(i))) //outValid
-  )
-  val dsReg       = RegInit(false.B)
-  val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
-  val outValidNum = PriorityCount(outBits.validMask.asUInt)
-  when(outBits.validMask(0) && io.out.valid) { dsReg := false.B }
-  when(validBr.asUInt.orR) {
-    asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
-    when(lastDs >= outValidNum) {
-      dsReg := true.B
-    }
-  }
-  val isBd = outBits.isBd
-  (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
-  asg(isBd(0), dsReg)
-  when(io.flushIn) { dsReg := false.B }
+  // val validBr = WireInit(
+  //   VecInit((0 until fetchNum).map(i => BranchType.isBr(outBits.realBrType(i)) && outBits.validMask(i))) //outValid
+  // )
+  // val dsReg       = RegInit(false.B)
+  // val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
+  // val outValidNum = PriorityCount(outBits.validMask.asUInt)
+  // when(outBits.validMask(0) && io.out.valid) { dsReg := false.B }
+  // when(validBr.asUInt.orR) {
+  //   asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
+  //   when(lastDs >= outValidNum) {
+  //     dsReg := true.B
+  //   }
+  // }
+  // val isBd = outBits.isBd
+  // (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
+  // asg(isBd(0), dsReg)
+  // when(io.flushIn) { dsReg := false.B }
 }

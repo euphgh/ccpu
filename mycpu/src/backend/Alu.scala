@@ -253,7 +253,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     asg(bpUp.moreData, 1.U(1.W)) //not sure
     //btb update
     asg(btb.bits.instType, inBrInfo.realBtbType)
-    asg(btb.bits.target, Mux(genTaken, inBrInfo.realTarget, inBrInfo.pcVal + 8.U(32.W)))
+    asg(btb.bits.target, inBrInfo.realTarget) //Mux(genTaken, inBrInfo.realTarget, inBrInfo.pcVal + 8.U(32.W)))
     asg(
       btb.valid,
       brValid && (inBrInfo.realBtbType =/= predict.btbType || inBrInfo.realTarget =/= predict.target)

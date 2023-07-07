@@ -49,6 +49,7 @@ object AllInsts {
       ADDIU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.ADDIU),
       SLTI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.SLTI),
       SLTIU   -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.SLTIU),
+      ANDI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.ANDI),
       ORI     -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.ORI),
       XORI    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.XORI),
       LUI     -> List(SRCType.RS, DSTType.toRT, ChiselFuType.SubALU, AluType.LUI),

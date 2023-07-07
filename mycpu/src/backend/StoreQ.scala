@@ -30,6 +30,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val ram          = RegInit(VecInit.fill(entries)(0.U.asTypeOf(new StoreQIO)))
   val enq_ptr      = RegInit(0.U(ptrWidth.W))
   val ret_ptr      = RegInit(0.U(ptrWidth.W))
+  val req_ptr      = RegInit(0.U(ptrWidth.W)) // deqReq
   val deq_ptr      = RegInit(0.U(ptrWidth.W))
   val do_enq       = WireDefault(io.enq.fire)
   val do_deq       = WireDefault(io.deq.back)
@@ -75,21 +76,10 @@ class StoreQueue(entries: Int) extends MycpuModule {
   io.query.res.memMask := getMemMask.asUInt
 
   //=================== deq =======================
-  val idle :: waitDeq :: Nil = Enum(2)
-  val state                  = RegInit(idle)
-  io.deq.req.valid := !empty && (state === idle) && (ret_ptr =/= deq_ptr)
-  io.deq.req.bits  := ram(deq_ptr)
-  switch(state) {
-    is(idle) {
-      when(io.deq.req.fire) {
-        state := waitDeq
-      }
-    }
-    is(waitDeq) {
-      when(io.deq.back) {
-        state := idle
-      }
-    }
+  io.deq.req.valid := !empty && (ret_ptr =/= req_ptr)
+  io.deq.req.bits  := ram(req_ptr)
+  when(io.deq.req.fire) {
+    req_ptr := req_ptr + 1.U
   }
   //deq back
   when(do_deq) {

@@ -41,6 +41,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val full         = counterMatch && !signMatch
   asg(io.full, full)
   asg(io.empty, empty)
+  asg(io.enq.ready, !full || io.deq.back)
   //=================== query ====================
 
   val addrMatch = WireInit(VecInit.fill(entries)(false.B))
@@ -74,6 +75,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val idle :: waitDeq :: Nil = Enum(2)
   val state                  = RegInit(idle)
   io.deq.req.valid := !empty && (state === idle) && (ret_ptr =/= deq_ptr)
+  io.deq.req.bits  := ram(deq_ptr).data
   switch(state) {
     is(idle) {
       when(io.deq.req.fire) {
@@ -103,15 +105,4 @@ class StoreQueue(entries: Int) extends MycpuModule {
     ret_ptr := ret_ptr + scommitNum
   }
 
-  // val extInt = Wire(UInt(6.W))
-  // BoringUtils.addSink(extInt, "extInt")
-  // val allAddr = WireInit(
-  //   VecInit(
-  //     (0 until entries).map(i =>
-  //       Cat(ram(i).data.pTag, ram(i).data.rwReq.lowAddr.index, ram(i).data.rwReq.lowAddr.offset)
-  //     )
-  //   )
-  // )
-  // val a = allAddr.asUInt
-  // assert((a & ZeroExt(extInt, entries * 32)) === 0.U)
 }

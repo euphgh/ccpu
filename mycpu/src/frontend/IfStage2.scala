@@ -111,36 +111,42 @@ class IfStage2 extends Module with MycpuParam {
   })
 
   /**
-    * flushReg:flush下一拍，来到IF2的指令是无效的
-    * out.valid:考虑到icache.out.valid
+    * flushReg:flush下一拍，来到IF2的指令是无效的TODO:
+    * out.valid:考虑到icache.out.validTODO:
     */
   val flushReg = RegNext(io.flushIn, false.B)
   when(nonBrMisPreVec.asUInt.orR && io.out.valid && !flushReg) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
-    val misPc     = io.out.bits.basicInstInfo(firNonBrMispre).pcVal
-    val misPreRes = io.out.bits.predictResult(firNonBrMispre)
-    //mask the inst behind it
-    (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
-    //change its preResult      ATTENTION:这里preRes无所谓改不改，因为ALU里会根据realBrType来操作
-    //misPreRes.counter := 0.U  ATTENTION:这里改了会造成组合环路
-    misPreRes.btbType := BtbType.non
-    //redirect frontend
-    asg(io.noBrMispreRedirect.flush, true.B)
-    asg(io.noBrMispreRedirect.target, misPc + 4.U)
-    //enq bpuUpdateQ
-    val bpuUpdateEnq = bpuUpdateQueue.io.enq.bits
-    asg(bpuUpdateQueue.io.enq.valid, true.B)
-    asg(bpuUpdateEnq.pc, misPc)
-    asg(bpuUpdateEnq.moreData, 0.U) //TODO:not sure
-    //btb
-    val updateBtb = bpuUpdateEnq.btb
-    asg(updateBtb.valid, true.B)
-    asg(updateBtb.bits.target, misPreRes.target) //Dontcare
-    asg(updateBtb.bits.instType, BtbType.non)
-    //pht
-    val updatePht = bpuUpdateEnq.pht
-    asg(updatePht.valid, true.B)
-    asg(updatePht.bits, 0.U(2.W))
+    val preTakeVec = WireInit(
+      VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).counter > 1.U && inValidMask(i) && io.in.valid))
+    )
+    val firPreTake = PriorityEncoder(preTakeVec)
+    when(firNonBrMispre === firPreTake) { //FIXME:这里确实不需要flush，但是可能还是得更新BPU
+      val misPc     = io.out.bits.basicInstInfo(firNonBrMispre).pcVal
+      val misPreRes = io.out.bits.predictResult(firNonBrMispre)
+      //mask the inst behind it
+      (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
+      //change its preResult      ATTENTION:这里preRes无所谓改不改，因为ALU里会根据realBrType来操作
+      //misPreRes.counter := 0.U  ATTENTION:这里改了会造成组合环路
+      misPreRes.btbType := BtbType.non
+      //redirect frontend
+      asg(io.noBrMispreRedirect.flush, true.B)
+      asg(io.noBrMispreRedirect.target, misPc + 4.U)
+      //enq bpuUpdateQ
+      val bpuUpdateEnq = bpuUpdateQueue.io.enq.bits
+      asg(bpuUpdateQueue.io.enq.valid, true.B)
+      asg(bpuUpdateEnq.pc, misPc)
+      asg(bpuUpdateEnq.moreData, 0.U) //TODO:not sure
+      //btb
+      val updateBtb = bpuUpdateEnq.btb
+      asg(updateBtb.valid, true.B)
+      asg(updateBtb.bits.target, misPreRes.target) //Dontcare
+      asg(updateBtb.bits.instType, BtbType.non)
+      //pht
+      val updatePht = bpuUpdateEnq.pht
+      asg(updatePht.valid, true.B)
+      asg(updatePht.bits, 0.U(2.W))
+    }
   }
   io.bpuUpdate <> bpuUpdateQueue.io.deq
 

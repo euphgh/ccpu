@@ -12,17 +12,17 @@ object StoreQUtils {
     require(deqPtr.getWidth == ptrWidth)
     require(matchWen.getWidth == entries)
 
-    val res = WireInit(0.U(counterWidth.W)) //init
+    val res      = WireInit(0.U(counterWidth.W)) //init
+    val getValid = WireInit(false.B)
     (0 until entries).map(i => {
       val idx     = (deqPtr + i.U)(ptrWidth - 1, 0)
       val realIdx = idx(counterWidth - 1, 0)
-      //val realIdx = Cat(0.U, idx(counterWidth - 1, 0))
-      val valid = Mux(deqPtr < enqPtr, idx < enqPtr, idx(ptrWidth - 1) | realIdx < enqPtr)
+      val valid   = Mux(deqPtr < enqPtr, (idx < enqPtr) && (idx >= deqPtr), idx(ptrWidth - 1) | realIdx < enqPtr)
       when(matchWen(realIdx) && valid) {
         asg(res, realIdx)
-        //asg(res, realIdx(counterWidth - 1, 0))
+        asg(getValid, true.B)
       }
     })
-    res
+    (res, getValid)
   }
 }

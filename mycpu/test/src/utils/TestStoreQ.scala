@@ -17,9 +17,10 @@ class TestStoreQ extends AnyFlatSpec with ChiselScalatestTester {
         val enqPtr   = Input(UInt(4.W))
         val deqPtr   = Input(UInt(4.W))
         val matchWen = Input(UInt(8.W)) //8项
-        val out      = Output(UInt(3.W))
+        val out      = UInt(3.W)
       })
-      io.out := StoreQUtils.getByteIndex(io.enqPtr, io.deqPtr, io.matchWen, 8)
+      io.out := StoreQUtils.getByteIndex(io.enqPtr, io.deqPtr, io.matchWen, 8)._1
+
     }) { c =>
       c.io.deqPtr.poke("b0001".U) //1
       c.io.enqPtr.poke("b0110".U) //6
@@ -35,9 +36,9 @@ class TestStoreQ extends AnyFlatSpec with ChiselScalatestTester {
 
       c.io.deqPtr.poke("b1010".U) //10->2
       c.io.enqPtr.poke("b1110".U) //14->6
-      c.io.matchWen.poke("b00000100".U) //2 3 4 5
-      c.io.out.expect("b010".U)
+      c.io.matchWen.poke("b00001001".U) //2 3 4 5
       println(c.io.out.peekInt())
+      c.io.out.expect("b011".U)
       c.clock.step()
 
       c.io.deqPtr.poke("b1110".U) //14->6

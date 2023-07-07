@@ -149,7 +149,10 @@ class ROB extends MycpuModule {
       allPDest(i) := ringBuffer(i).uOp.currPDest
     })
     val ds = ringBuffer(mispreIdx + 1.U)
-    dsAllow := (ds.done || ds.uOp.specialType =/= SpecialType.CACHEINST) && (headIdx =/= mispreIdx + 1.U)
+    dsAllow := (ds.done || ds.uOp.specialType =/= SpecialType.CACHEINST) && (headIdx(
+      counterWidth - 1,
+      0
+    ) =/= mispreIdx + 1.U)
 
   }
   val robEntries = Module(new ROBQueue)

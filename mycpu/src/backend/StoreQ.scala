@@ -18,18 +18,16 @@ class StoreQueue(entries: Int) extends MycpuModule {
       val req  = Decoupled(new StoreQIO)
       val back = Input(Bool())
     }
-    val flush = Input(Bool()) // only flush not retire
-    val empty = Output(Bool())
-    val full  = Output(Bool())
-    val query = Flipped(new QuerySQ)
+    val flush   = Input(Bool()) // only flush not retire
+    val empty   = Output(Bool())
+    val full    = Output(Bool())
+    val query   = Flipped(new QuerySQ)
+    val remain1 = Output(Bool())
   })
 
-  class StoreQEntry extends MycpuBundle {
-    val data = new StoreQIO
-  }
   val counterWidth = log2Ceil(entries)
   val ptrWidth     = counterWidth + 1
-  val ram          = RegInit(VecInit.fill(entries)(0.U.asTypeOf(new StoreQEntry)))
+  val ram          = RegInit(VecInit.fill(entries)(0.U.asTypeOf(new StoreQIO)))
   val enq_ptr      = RegInit(0.U(ptrWidth.W))
   val ret_ptr      = RegInit(0.U(ptrWidth.W))
   val deq_ptr      = RegInit(0.U(ptrWidth.W))
@@ -41,13 +39,20 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val full         = counterMatch && !signMatch
   asg(io.full, full)
   asg(io.empty, empty)
-  asg(io.enq.ready, !full || io.deq.back)
+  asg(io.remain1, (enq_ptr - deq_ptr) < ((entries - 1).U))
+  //=================== enq =======================
+  io.enq.ready := !full || io.deq.back
+  when(do_enq) {
+    ram(enq_ptr) := io.enq.bits
+    enq_ptr      := enq_ptr + 1.U
+  }
+
   //=================== query ====================
 
   val addrMatch = WireInit(VecInit.fill(entries)(false.B))
   val strbMatch = WireInit(VecInit.fill(4)(VecInit.fill(entries)(false.B))) //4行 entries列
   (0 until entries).map(i => {
-    val entryData    = ram(i).data
+    val entryData    = ram(i)
     val entryLowAddr = entryData.rwReq.lowAddr
     val entryAddr    = Cat(entryData.pTag, entryLowAddr.index, entryLowAddr.offset)
     addrMatch(i) := entryAddr === io.query.req.addr
@@ -58,13 +63,12 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val getSqMask  = WireInit(VecInit.fill(4)(false.B))
   val getMemMask = WireInit(VecInit.fill(4)(false.B))
   (0 until 4).map(i => {
-    val matchWen = addrMatch.asUInt & strbMatch(i).asUInt
-    when(matchWen.orR) { //没有匹配上的Byte保证全0
-      val idx = getByteIndex(enqPtr = enq_ptr, deqPtr = deq_ptr, matchWen = matchWen, entries = entries)
-      getStqData(i) := ram(idx).data.rwReq.wWord((i + 1) * 8 - 1, i * 8)
+    val matchWen        = addrMatch.asUInt & strbMatch(i).asUInt
+    val (idx, getValid) = getByteIndex(enqPtr = enq_ptr, deqPtr = deq_ptr, matchWen = matchWen, entries = entries)
+    when(getValid) {
+      getStqData(i) := ram(idx).rwReq.wWord((i + 1) * 8 - 1, i * 8)
     }
-    val queryRes = io.query.res
-    asg(getSqMask(i), matchWen.orR)
+    asg(getSqMask(i), getValid)
     asg(getMemMask(i), !getSqMask(i) & io.query.req.needMask(i))
   })
   io.query.res.data    := getStqData.asUInt
@@ -75,7 +79,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val idle :: waitDeq :: Nil = Enum(2)
   val state                  = RegInit(idle)
   io.deq.req.valid := !empty && (state === idle) && (ret_ptr =/= deq_ptr)
-  io.deq.req.bits  := ram(deq_ptr).data
+  io.deq.req.bits  := ram(deq_ptr)
   switch(state) {
     is(idle) {
       when(io.deq.req.fire) {
@@ -94,7 +98,6 @@ class StoreQueue(entries: Int) extends MycpuModule {
   }
 
   //=================== flush =====================
-  //not move deq_ptr, only enq_ptr
   when(io.flush) {
     enq_ptr := ret_ptr
   }

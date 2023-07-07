@@ -21,7 +21,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   val mem1inRight = memStage1.io.in
   val mem1inLeft  = Wire(Flipped(Decoupled(new MemStage1InIO)))
   val deqSQ       = storeQ.io.deq.req
-  val selSQ       = !roStage.io.out.valid || storeQ.io.full
+  val selSQ       = !roStage.io.out.valid || !storeQ.io.remain1
   val roOutBits   = roStage.io.out.bits
   // valid and ready
   mem1inLeft.valid := deqSQ.valid || roStage.io.out.valid

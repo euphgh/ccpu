@@ -17,7 +17,11 @@ object StoreQUtils {
     (0 until entries).map(i => {
       val idx     = (deqPtr + i.U)(ptrWidth - 1, 0)
       val realIdx = idx(counterWidth - 1, 0)
-      val valid   = Mux(deqPtr < enqPtr, (idx < enqPtr) && (idx >= deqPtr), idx(ptrWidth - 1) | realIdx < enqPtr)
+      val valid = Mux(
+        deqPtr === enqPtr,
+        false.B,
+        Mux(deqPtr < enqPtr, (idx < enqPtr) && (idx >= deqPtr), idx(ptrWidth - 1) | realIdx < enqPtr)
+      )
       when(matchWen(realIdx) && valid) {
         asg(res, realIdx)
         asg(getValid, true.B)

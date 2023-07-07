@@ -151,7 +151,7 @@ class CacheStage2[T <: Data](
   val newLine = WireInit(0.U((dataWidth * wordNum).W)) //init
   if (isDcache) {
     val oldWord = Mux1H(hitMask, stage1.ddata.get)
-    val oldLine = Mux(mainState === refill, wbBuffer, Mux1H(hitMask, stage1.dataline.get))
+    val oldLine = Mux(mainState === refill, readBuffer, Mux1H(hitMask, stage1.dataline.get))
     val newWord = maskWord(dreq.wWord, dreq.wStrb).asUInt | maskWord(oldWord, ~dreq.wStrb).asUInt
     val wordSel = lowAddr.offset >> 2
     asg(
@@ -160,7 +160,7 @@ class CacheStage2[T <: Data](
         Cat(newWord, VecInit((0 until wordNum - 1).map(oldLine(_))).asUInt), //111->(newword,6..0)
         Seq(
           (wordSel === 0.U) -> Cat(VecInit((1 until wordNum).map(oldLine(_))).asUInt, newWord), ///000->(7..1,newword)
-          (wordSel =/= renameNum.U) -> LookupUInt(
+          (wordSel =/= (wordNum - 1).U) -> LookupUInt(
             wordSel,
             (1 until wordNum - 1).map(i => {
               i.U -> Cat(
@@ -197,7 +197,10 @@ class CacheStage2[T <: Data](
     asg(w1data(i).req.bits.setIdx, lowAddr.index)
     asg(w1meta(i).req.bits.data.tag, inBits.ptag)
     asg(w1meta(i).req.bits.data.valid, true.B)
-    asg(w1data(i).req.bits.data, newLineVec) // not default refill should change
+    // icache: refill read, dcache: refill read refill write, hit write
+    // when refill read will readbuffer, refill write is newline, write hit is newline
+    if (isDcache) asg(w1data(i).req.bits.data, newLineVec)
+    else asg(w1data(i).req.bits.data, readBuffer)
     if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, false.B)
   })
   // Default Bus Assign ========================================================
@@ -371,7 +374,13 @@ class CacheStage2[T <: Data](
       // must first cycle can write, else inBits will not valid
       w1data(victimRoad).req.valid := true.B && firstRefillCycle
       w1meta(victimRoad).req.valid := true.B && firstRefillCycle
-      asg(w1data(victimRoad).req.bits.data, readBuffer)
+      if (isDcache) {
+        when(!dreq.isWrite) {
+          asg(w1data(victimRoad).req.bits.data, readBuffer)
+        }
+      } else {
+        asg(w1data(victimRoad).req.bits.data, readBuffer)
+      }
     }
     is(uncache) {
       when(ucState === ucIdel) {

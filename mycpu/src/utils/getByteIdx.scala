@@ -4,6 +4,7 @@ import chisel3.util.log2Ceil
 import chisel3.util.Cat
 import chisel3.util.isPow2
 import chisel3.util.BitPat
+import chisel3.util.UIntToOH
 
 object StoreQUtils {
   def getByteIndex(enqPtr: UInt, deqPtr: UInt, matchWen: UInt, entries: Int) = {
@@ -26,6 +27,14 @@ object StoreQUtils {
       }
     })
     (res, getValid)
+  }
+  def getOHIndex(enqPtr: UInt, deqPtr: UInt, matchWen: UInt, entries: Int) = {
+    val res = getByteIndex(enqPtr, deqPtr, matchWen, entries)
+    Mux(res._2, UIntToOH(res._1), 0.U)
+  }
+  def getOHIndexDecode(enqPtr: UInt, deqPtr: UInt, matchWen: UInt, entries: Int) = {
+    val ptrs = new PtrPriority(entries)
+    ptrs.codeOH(deqPtr, enqPtr, matchWen)
   }
 }
 
@@ -108,11 +117,11 @@ class StoreQPriority1(val entries: Int) extends Module {
   val enq        = IO(Input(UInt(ptrWidth.W)))
   val valids     = IO(Input(UInt(entries.W)))
   val oneHots    = IO(Output(UInt(entries.W)))
-  oneHots := StoreQUtils.getByteIndex(enq, deq, valids, entries)
+  oneHots := StoreQUtils.getByteIndex(enq, deq, valids, entries)._1
 }
 
 object SQMain extends App {
   val foo = new PtrPriority(4)
   println(foo.bitPats.size)
-  println(foo.bitPats.mkString("\n"))
+  println(foo.allGroups.mkString("\n"))
 }

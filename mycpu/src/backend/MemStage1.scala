@@ -195,14 +195,16 @@ class MemStage1 extends MycpuModule {
   val blkUcLoad = !isWriteReq && CCAttr.isUnCache(
     tlbRes.ccAttr.asUInt
   ) && !(io.in.bits.wbInfo.robIndex === io.robOldestIdx)
-  toMem2.valid       := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
-  io.in.ready        := !io.in.valid || Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.fire)
-  toM2Bits.isSQ      := !inBits.isRoStage
-  toM2Bits.isWrite   := isWriteReq
-  toM2Bits.wbInfo    := inBits.wbInfo
-  toM2Bits.memType   := inBits.memType
-  toM2Bits.pTag      := tlbRes.pTag
-  toM2Bits.isUncache := CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
+  toMem2.valid     := io.in.valid && (Mux(isWriteReq, lateMemRdy, !blkUcLoad) || !inBits.isRoStage)
+  io.in.ready      := !io.in.valid || Mux(io.in.bits.isRoStage && isWriteReq, lateMemRdy, toMem2.fire)
+  toM2Bits.isSQ    := !inBits.isRoStage
+  toM2Bits.isWrite := isWriteReq
+  toM2Bits.wbInfo  := inBits.wbInfo
+  toM2Bits.memType := inBits.memType
+  toM2Bits.pTag    := Mux(inBits.isRoStage, tlbRes.pTag, inBits.mem1Req.SQplus.pTag)
+  toM2Bits.isUncache := CCAttr.isUnCache(
+    Mux(inBits.isRoStage, tlbRes.ccAttr.asUInt, inBits.mem1Req.SQplus.cAttr.asUInt)
+  )
 
   if (debug) toM2Bits.debugPC.get := inBits.debugPC.get
   //======================== Cache Stage 1 ============================

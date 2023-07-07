@@ -62,7 +62,10 @@ class MemStage2 extends MycpuModule {
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))
   asg(io.querySQ.req.needMask, inBits.toCache2.dCacheReq.get.wStrb)
-  val validWord  = maskWord(coutBit.ddata.get, io.querySQ.res.memMask).asUInt | io.querySQ.res.data
+  val validWord = maskWord(coutBit.ddata.get, io.querySQ.res.memMask).asUInt | maskWord(
+    io.querySQ.res.data,
+    ~io.querySQ.res.memMask
+  ).asUInt
   val validBytes = word2Bytes(validWord)
   val l2sb       = inBits.toCache2.dCacheReq.get.lowAddr.offset(1, 0)
   // >> align ====================================================

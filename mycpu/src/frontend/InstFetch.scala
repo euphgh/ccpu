@@ -64,7 +64,7 @@ class InstFetch extends MycpuModule {
   io.out <> ifStage2.io.out
   io.out.valid := ifStage2.io.out.valid && !stage2Cancel
   asg(ifStage2.io.bpuUpdate.ready, !io.bpuUpdateIn.valid)
-  asg(ifStage2.io.flushIn, io.redirect.flush | ifStage2.io.noBrMispreRedirect.flush)
+  asg(ifStage2.io.flushIn, io.redirect.flush)
 
   /**
     * is延迟槽

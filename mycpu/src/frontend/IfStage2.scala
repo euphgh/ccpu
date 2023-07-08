@@ -114,7 +114,7 @@ class IfStage2 extends Module with MycpuParam {
     * flushReg:flush下一拍，来到IF2的指令是无效的TODO:
     * out.valid:考虑到icache.out.validTODO:
     */
-  val flushReg = RegNext(io.flushIn, false.B)
+  val flushReg = RegNext((io.flushIn | io.noBrMispreRedirect.flush), false.B)
   when(nonBrMisPreVec.asUInt.orR && io.out.valid && !flushReg) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val preTakeVec = WireInit(

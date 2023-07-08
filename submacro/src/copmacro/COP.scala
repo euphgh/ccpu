@@ -90,7 +90,7 @@ object MacroCOP {
               s"val ${regName.toTermName}Wen = ($sel.U === writeSel) && ($rd.U === writeRd) && isMtc0\n"
             )
             // mfc0
-            readStr.append(s", ((sel===$sel.U && rd===$rd.U) -> ${regName.toTermName}Reg.read) \n")
+            readStr.append(s", (Cat($sel.U(3.W), $rd.U(5.W)) -> ${regName.toTermName}Reg.read) \n")
             // mtc0
             val writefunc = body.collectFirst({ case q"def write(data: UInt) = {..$body}" => body })
             writeStr.append(s"""
@@ -151,7 +151,7 @@ object MacroCOP {
     annottees.map(_.tree) match {
       case (param: ModuleDef) :: Nil => {
         val res = extractClassNameAndBody(param)
-        // println(res)
+        println(res)
         c.Expr(res)
       }
       case _ => {

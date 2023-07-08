@@ -286,6 +286,8 @@ class ROB extends MycpuModule {
   val normalSel    = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
   val exerMask     = ~PriorityMask(exerVec.asUInt)
   val waitNextMask = ~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
+
+  val singleRetireMask = ~Cat(PriorityMask(singleRetireVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
   // JMP HB =======================================================
   val findHBinRob  = RegInit(false.B)
   val dstHBFromAlu = Wire(Flipped(Valid(UWord)))
@@ -311,6 +313,7 @@ class ROB extends MycpuModule {
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
       }.elsewhen(hasSingle) {
         io.out.singleRetire.valid := true.B
+        asg(allowRobPop, VecInit(singleRetireMask.asBools))
       }
     }
     is(waitNext) { //CACHEINST 或 MISPRE(JRHB)转移而来
@@ -320,7 +323,8 @@ class ROB extends MycpuModule {
           asg(state, exerFlush)
         }.otherwise {
           asg(state, misFlush)
-          allowRobPop(0) := true.B
+          allowRobPop(0)            := true.B
+          io.out.singleRetire.valid := singleRetireVec(0)
         }
       }
     }
@@ -343,6 +347,7 @@ class ROB extends MycpuModule {
         io.out.exCommit.valid := true.B
       }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
         io.out.eretFlush := true.B
+        allowRobPop(0)   := true.B
       }.otherwise {
         io.out.robRedirect.flush := true.B //cacheinst
       }

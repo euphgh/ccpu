@@ -345,6 +345,10 @@ class ROB extends MycpuModule {
 
       when(retireInst(0).exception.detect.happen) { //exception
         io.out.exCommit.valid := true.B
+        val exceptType = retireInst(0).exception.detect.excCode
+        when(exceptType === ExcCode.Sys || exceptType === ExcCode.Bp) {
+          allowRobPop(0) := true.B
+        }
       }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
         io.out.eretFlush := true.B
         allowRobPop(0)   := true.B

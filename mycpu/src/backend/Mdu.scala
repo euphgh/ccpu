@@ -68,7 +68,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   clz.io.in.bits.zero := true.B
 
   //mfc0 =============================================================
-  val c0Addr = srcs(0)(7, 0)
+  val c0Addr = srcs(1)(7, 0)
   asg(c0Inst.mfc0.addr, c0Addr)
   val c0Rdata = c0Inst.mfc0.rdata
 
@@ -158,7 +158,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   tlbrReq  := instValid && mduType === TLBR && exeStageIO.out.fire
 
   asg(data64Q.io.enq.bits, blockRes)
-  asg(data32Q.io.enq.bits, Mux(isMtc0, srcs(1), srcs(0))) //mtc0:rt mthilo:rs
+  asg(data32Q.io.enq.bits, srcs(0)) //mtc0:rt mthilo:rs
   asg(mtc0AddrQ.io.enq.bits, c0Addr)
 
   val wdata64 = data64Q.io.enq.bits

@@ -120,7 +120,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   if (fuKind == FuType.Mdu) {
     val op = inUop.mduType.get
     when(MduType.isC0Inst(op)) {
-      asg(outSrcs(0), ZeroExt(inBits.c0Addr.get, 32))
+      asg(outSrcs(1), ZeroExt(inBits.c0Addr.get, 32))
     }
   }
 

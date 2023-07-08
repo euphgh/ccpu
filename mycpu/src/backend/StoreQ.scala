@@ -56,7 +56,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
     val entryData    = ram(i)
     val entryLowAddr = entryData.rwReq.lowAddr
     val entryAddr    = Cat(entryData.pTag, entryLowAddr.index, entryLowAddr.offset)
-    addrMatch(i) := entryAddr === io.query.req.addr
+    addrMatch(i) := entryAddr(31, 2) === io.query.req.addr(31, 2)
     (0 until 4).map(j => strbMatch(j)(i) := entryData.rwReq.wStrb(j) & io.query.req.needMask(j)) //j:第几个Byte
   })
 

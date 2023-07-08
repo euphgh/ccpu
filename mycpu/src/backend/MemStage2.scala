@@ -79,7 +79,7 @@ class MemStage2 extends MycpuModule {
   val lb  = SignExt(byteRes, 32)
   val lbu = ZeroExt(byteRes, 32)
   // >> >> half ====================================================
-  val halfRes = Mux(l2sb(0), Cat(validBytes(3), validBytes(2)), Cat(validBytes(1), validBytes(0)))
+  val halfRes = Mux(l2sb(1), Cat(validBytes(3), validBytes(2)), Cat(validBytes(1), validBytes(0)))
   val lh      = SignExt(halfRes, 32)
   val lhu     = ZeroExt(halfRes, 32)
   // >> >> word ====================================================

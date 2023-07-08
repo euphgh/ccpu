@@ -58,7 +58,7 @@ class Multiplier extends MycpuModule {
       val isAdd  = Input(Bool())
       val isSub  = Input(Bool())
     }))
-    val out = Valid(Output(UInt(63.W)))
+    val out = Valid(Output(UInt(64.W)))
   })
 
   val inBits = io.in.bits
@@ -70,9 +70,9 @@ class Multiplier extends MycpuModule {
   val sub = inBits.isSub
   val ip  = Module(new MultiplierIP)
   ip.io.clk := this.clock
-  ip.io.rst := this.reset
-  ip.io.A   := op(0)
-  ip.io.B   := op(1)
+  ip.io.rst := !this.reset.asBool
+  asg(ip.io.A, op(0))
+  asg(ip.io.B, op(1))
   val wirehi = Wire(UWord)
   val wirelo = Wire(UWord)
   val mres   = WireInit(0.U(64.W)) //init
@@ -82,7 +82,6 @@ class Multiplier extends MycpuModule {
   val run :: mul :: addsub :: finish :: Nil = Enum(4)
   // state
   val state = RegInit(run)
-  assert(!io.in.valid || state === run)
   switch(state) {
     is(run) {
       state := Mux(io.in.valid, mul, run)
@@ -106,5 +105,5 @@ class Multiplier extends MycpuModule {
     }
   }
   io.out.valid := state === finish
-  io.out.bits  := Mux(inBits.isAdd || inBits.isSub, mres, ip.io.P)
+  asg(io.out.bits, Mux(inBits.isAdd || inBits.isSub, mres, ip.io.P(63, 0)))
 }

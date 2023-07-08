@@ -168,8 +168,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
       asg(specHi, wdata64(63, 32))
       asg(specLo, wdata64(31, 0))
     }
-    when(isHi) { asg(specHi, wdata32) }
-    when(isLo) { asg(specLo, wdata32) }
+    when(mduType === MTHI) { asg(specHi, wdata32) }
+    when(mduType === MTLO) { asg(specLo, wdata32) }
   }
 
   /**

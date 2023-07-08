@@ -309,6 +309,8 @@ class ROB extends MycpuModule {
         asg(state, waitNext)
         asg(allowRobPop, VecInit(waitNextMask.asBools)) //mask the inst behind
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
+      }.elsewhen(hasSingle) {
+        io.out.singleRetire.valid := true.B
       }
     }
     is(waitNext) { //CACHEINST 或 MISPRE(JRHB)转移而来

@@ -12,10 +12,7 @@ class Divider extends MycpuModule {
       val srcs   = Vec(srcDataNum, Output(UInt(dataWidth.W)))
       val isSign = Input(Bool())
     }))
-    val out = Valid(new Bundle {
-      val quotient = UInt(32.W)
-      val reminder = UInt(32.W)
-    })
+    val out = Valid(UInt(64.W))
   })
   val srcs          = io.in.bits.srcs
   val isSign        = io.in.bits.isSign
@@ -27,6 +24,8 @@ class Divider extends MycpuModule {
   val sub1          = x -& y1
   val sub2          = x -& y2
   val sub3          = x -& y3
+  val quotient      = Wire(UWord)
+  val reminder      = Wire(UWord)
 
   val idle :: work :: finish :: Nil = Enum(3)
   // state
@@ -42,10 +41,11 @@ class Divider extends MycpuModule {
       asg(signR, srcs(0)(31) && isSign)
       cnt.reset()
       state := Mux(io.in.valid, work, idle)
-      printf(s"req Signal: %b\n", isSign)
-      printf(s"signQ: %b\n", signQ)
-      printf(s"signR: %b\n", signR)
-      printf(s"signR: %b\n", signR)
+      when(io.in.valid) {
+        // printf(s"req Signal: %b\n", isSign)
+        // printf(s"signQ: %b\n", signQ)
+        // printf(s"signR: %b\n", signR)
+      }
     }
     is(work) {
       asg(
@@ -65,21 +65,22 @@ class Divider extends MycpuModule {
       asg(quot, (quot << 2)(31, 0) | Cat(0.U(30.W), Cat(!sub3(64) || !sub2(64), !sub3(64) || (sub2(64) && !sub1(64)))))
       val wrap = cnt.inc()
       state := Mux(wrap, finish, work)
-      printf(s"work count :%d\n", cnt.value)
-      printf(s"quotient :%x\n", quot)
-      printf(s"reminder :%x\n", x)
+      // printf(s"work count :%d\n", cnt.value)
+      // printf(s"quotient :%x\n", quot)
+      // printf(s"reminder :%x\n", x)
     }
     is(finish) {
       io.out.valid := true.B
       state        := idle
-      printf(s"finish count :%d\n", cnt.value)
-      printf(s"quotient :%x\n", io.out.bits.quotient)
-      printf(s"reminder :%x\n", io.out.bits.reminder)
+      // printf(s"finish count :%d\n", cnt.value)
+      // printf(s"quotient :%x\n", quotient)
+      // printf(s"reminder :%x\n", reminder)
     }
   }
-  asg(io.out.bits.quotient, Mux(signQ, ~quot + 1.U, quot))
+  asg(quotient, Mux(signQ, ~quot + 1.U, quot))
   val xLow32 = x(31, 0)
-  asg(io.out.bits.reminder, Mux(signR, ~xLow32 + 1.U, xLow32))
+  asg(reminder, Mux(signR, ~xLow32 + 1.U, xLow32))
+  asg(io.out.bits, Cat(reminder, quotient))
 }
 
 class DividerIP32 extends ExtModule with HasExtModuleInline with MycpuParam {

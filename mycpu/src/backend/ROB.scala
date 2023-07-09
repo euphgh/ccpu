@@ -173,7 +173,7 @@ class ROB extends MycpuModule {
     asg(enqData.debugPC.get, io.in.fromDispatcher(i).bits.basicExInfo.pc)
     asg(enqData.exception.detect, 0.U.asTypeOf(new DetectExInfoBundle))
     asg(robEnq(i).valid, io.in.fromDispatcher(i).valid)
-    asg(io.in.fromDispatcher(i).ready, robEnq(i).ready)
+    asg(io.in.fromDispatcher(i).ready, robEnq(i).ready && !robEntries.io.flush)
   })
 
   //WB
@@ -465,12 +465,11 @@ class ROB extends MycpuModule {
         WireInit(VecInit((i until retireNum).map(j => validPDestVec(j))))
       ) + i.U
       io.out.flRecover(i).bits := retireInst(sel).uOp.prevPDest
-
     }
     // ROB push ready ===============================================================
-    (0 until dispatchNum).foreach(i => {
-      io.in.fromDispatcher(i).ready := robEntries.io.push(i).ready
-    })
+    // (0 until dispatchNum).foreach(i => {
+    //   io.in.fromDispatcher(i).ready := robEntries.io.push(i).ready && !robEntries.io.flush
+    // })
   }
   //DiffTest ===================================================
   import difftest.DifftestInstrCommit

@@ -476,8 +476,11 @@ class ROB extends MycpuModule {
   if (verilator) {
     import chisel3.util.experimental.BoringUtils._
     val difftestRetire = Module(new DifftestInstrCommit)
-    difftestRetire.io.clock     := clock
-    difftestRetire.io.retireNum := RegNext(PopCount((0 until retireNum).map(io.out.multiRetire(_).valid)))
+    difftestRetire.io.clock := clock
+    val retireInt = io.out.exCommit.valid && (io.out.exCommit.bits.detect.excCode === ExcCode.Int)
+    difftestRetire.io.retireNum := RegNext(
+      Mux(retireInt, 1.U, PopCount((0 until retireNum).map(io.out.multiRetire(_).valid)))
+    )
     difftestRetire.io.lastPC := RegNext(
       PriorityMux(
         (0 until retireNum)
@@ -488,7 +491,7 @@ class ROB extends MycpuModule {
       )
     )
     difftestRetire.io.interrSeq := RegNext(
-      Mux(io.out.exCommit.valid && (io.out.exCommit.bits.detect.excCode === ExcCode.Int), 0.U, retireNum.U)
+      Mux(retireInt, 0.U, retireNum.U)
     )
     difftestRetire.io.en := true.B
     val validRetire = Wire(Bool())

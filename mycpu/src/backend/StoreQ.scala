@@ -19,7 +19,7 @@ class Mem1ToStqIO extends MycpuBundle {
 class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val fromMem1  = Flipped(Decoupled(new Mem1ToStqIO)) //mem1 ro store
-    val writeBack = Decoupled(new FunctionUnitOutIO) //writeback rob
+    val writeBack = Decoupled(new FunctionUnitOutIO) //writeback
 
     val retire = Vec(retireNum, Input(Bool())) //from rob commit
     val deq = new Bundle {
@@ -48,7 +48,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val ret_ptr      = RegInit(0.U(ptrWidth.W))
   val req_ptr      = RegInit(0.U(ptrWidth.W)) // deqReq
   val deq_ptr      = RegInit(0.U(ptrWidth.W))
-  val do_enq       = WireDefault(fromMem1.fire)
+  val do_enq       = WireDefault(io.writeBack.fire)
   val do_deq       = WireDefault(io.deq.back)
   val counterMatch = enq_ptr(counterWidth - 1, 0) === deq_ptr(counterWidth - 1, 0)
   val signMatch    = enq_ptr(ptrWidth - 1) === deq_ptr(ptrWidth - 1)

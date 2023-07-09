@@ -47,15 +47,15 @@ class MemStage2 extends MycpuModule {
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
   asg(cinBit.isUncached, inBits.isUncache)
-  val ldHitSQ = !inBits.isWrite && !io.querySQ.res.memMask.orR // not write and mem mask==0.U
-  asg(cinBit.cancel, inBits.exDetect.happen || ldHitSQ)
+  val ldHitSQ = !inBits.isSQ && !io.querySQ.res.memMask.orR // not write and mem mask==0.U
+  asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ && !inBits.isUncache))
   // store req from rostage should not enter cache
-  cache2.io.in.valid := io.in.valid && (inBits.isSQ || !inBits.isWrite)
+  cache2.io.in.valid := io.in.valid
   io.dmem <> cache2.io.dram
   io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = cache2.io.out.valid
   // store req from rostage should not wait cache
-  io.out.valid        := !inBits.isSQ && (Mux(inBits.isWrite, io.in.valid, cacheFinish))
+  io.out.valid        := cacheFinish && !inBits.isSQ
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := Mux(inBits.isSQ, true.B, io.out.ready)
   // ===================== select ===============================

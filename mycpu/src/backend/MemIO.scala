@@ -40,6 +40,7 @@ class MemStage1InIO extends MycpuBundle {
   val memType   = MemType()
   val srcData   = Vec(2, Output(UInt(dataWidth.W)))
   val rwReq     = new CacheRWReq
+  val cacheInst = if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None
   val immOffset = Output(UInt(16.W))
   val carryout  = Output(Bool())
   val debugPC   = if (debug) Some(UWord) else None
@@ -47,7 +48,6 @@ class MemStage1InIO extends MycpuBundle {
 
 class MemStage1OutIO extends MycpuBundle {
   val isSQ      = Bool()
-  val isWrite   = Bool()
   val wbInfo    = new WriteBackIO
   val exDetect  = new DetectExInfoBundle
   val toCache2  = new CacheStage1OutIO(DcachRoads, 8, true)
@@ -73,4 +73,10 @@ class QuerySQIn extends MycpuBundle {
 class QuerySQ extends MycpuBundle {
   val req = Output(new QuerySQIn)
   val res = Input(new QuerySQOut)
+}
+
+class Mem1ToStqIO extends MycpuBundle {
+  val stqEnq   = new StoreQIO //mem1 has ro store
+  val wbInfo   = new WriteBackIO
+  val exDetect = new DetectExInfoBundle
 }

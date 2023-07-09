@@ -10,12 +10,6 @@ import chisel3.util.experimental.BoringUtils
 import utils.ZeroExt
 import utils.StoreQUtils._
 
-class Mem1ToStqIO extends MycpuBundle {
-  val stqEnq   = new StoreQIO //mem1 has ro store
-  val wbInfo   = new WriteBackIO
-  val exDetect = new DetectExInfoBundle
-}
-
 class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val fromMem1  = Flipped(Decoupled(new Mem1ToStqIO)) //mem1 ro store

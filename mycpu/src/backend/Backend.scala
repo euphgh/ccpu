@@ -166,7 +166,6 @@ class Backend extends MycpuModule {
 
   //lsu extra
   (0 until retireNum).map(i => asg(lsuFU.scommit(i), mulRe(i).valid && mulRe(i).bits.scommit))
-  asg(lsuFU.robOldestIdx, robOut.oldestIdx)
   lsuFU.dram <> io.dram
 
   //mdu extra

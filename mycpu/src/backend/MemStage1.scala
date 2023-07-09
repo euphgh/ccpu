@@ -43,41 +43,60 @@ class MemStage1 extends MycpuModule {
     val fromSQ = Flipped(Decoupled(new StoreQIO))
     val fromRO = Flipped(Decoupled(new MemStage1InIO))
     val out = new Bundle {
-      val toStoreQ = Decoupled(new StoreQInIO)
+      val toStoreQ = Decoupled(new Mem1ToStqIO)
       val toMem2   = Decoupled(new MemStage1OutIO)
     }
-    val cacheIn = Flipped(Decoupled(new CacheStage1In(true)))
-    val tlb     = new TLBSearchIO
-
-    val robOldestIdx = Input(ROBIdx) //for uncached load
-    val stqEmpty     = Input(Bool()) //for uncached load
+    val tlb      = new TLBSearchIO
+    val stqEmpty = Input(Bool()) //for uncached load
+    val flush    = Input(Bool())
   })
 
+  val toStoreQ = io.out.toStoreQ
+  val toSQbits = toStoreQ.bits
+  val toMem2   = io.out.toMem2
+  val toM2Bits = toMem2.bits
   // ==================== origin lsu select ==========================
 
-  val storeMode :: cloadMode :: ucloadMode :: Nil = Enum(2)
+  val storeMode :: cloadMode :: ucloadMode :: Nil = Enum(3)
 
   val wireRo = io.fromRO
   val wireSq = io.fromSQ
   import MemType._
   val wireRoIsLoad = wireRo.bits.memType.isOneOf(SW, SB, SH, SWL, SWR)
   val nextIsLoad   = wireRo.valid && wireRoIsLoad
-  val sqDecp       = Decoupled(new StoreQIO)
-  val roDecp       = Decoupled(new MemStage1InIO)
+  val sqDecp       = Wire(Decoupled(new StoreQIO))
+  val roDecp       = Wire(Decoupled(new MemStage1InIO))
   val sqBits       = sqDecp.bits
   val roBits       = roDecp.bits
-  val state        = RegInit(storeMode)
-  val toCache2     = io.out.toMem2.bits.toCache2
-  val cache1Update = new Bundle {
+
+  // TLB =============================================================
+  val imm    = SignExt(roBits.immOffset, 32)
+  val vTag   = roBits.srcData(0)(31, 12) + imm(31, 12) + roBits.carryout
+  val tlbRes = io.tlb.res
+  asg(io.tlb.req.bits, Cat(vTag, 0.U(12.W)))
+  io.tlb.req.valid      := roDecp.valid
+  toSQbits.stqEnq.pTag  := tlbRes.pTag
+  toSQbits.stqEnq.cAttr := tlbRes.ccAttr
+  // state ===========================================================
+  val state    = RegInit(storeMode)
+  val toCache2 = io.out.toMem2.bits.toCache2
+  val cache1Update = Wire(new Bundle {
     val req  = Bool()
     val isSQ = Bool()
-  }
+  })
+  sqDecp.ready                     := false.B
+  roDecp.ready                     := false.B
+  cache1Update.isSQ                := false.B
+  cache1Update.req                 := false.B
+  toStoreQ.valid                   := false.B
+  toStoreQ.bits.stqEnq.debugPC.get := roBits.debugPC.get
+  toMem2.valid                     := false.B
   switch(state) {
     is(storeMode) {
       when(nextIsLoad) {
         // prev
-        wireRo.ready := (!sqDecp.valid || toMem2.fire) && (!roDecp.valid || toStoreQ.fire)
-        wireSq.ready := false.B
+        roDecp.ready := (!sqDecp.valid || toMem2.fire) && (!roDecp.valid || toStoreQ.fire)
+        sqDecp.ready := false.B
         when(wireRo.fire) {
           cache1Update.isSQ := false.B
           cache1Update.req  := true.B
@@ -85,20 +104,18 @@ class MemStage1 extends MycpuModule {
         }
       }.otherwise {
         // prev
-        wireRo.ready      := toStoreQ.ready
-        wireSq.ready      := toMem2.ready
+        roDecp.ready      := toStoreQ.ready
+        sqDecp.ready      := toMem2.ready
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
       }
       // next
       toMem2.valid := sqDecp.valid
       val toC2Bits = io.out.toMem2.bits.toCache2
-      toC2Bits.dCacheReq.get                            := sqBits.rwReq
+      asg(toC2Bits.dCacheReq.get, sqBits.rwReq)
       if (enableCacheInst) toC2Bits.cacheInst.get.valid := false.B
 
       toStoreQ.valid := roDecp.valid
-      toSQbits.rwReq
-      // TODO:assign toMem2 from storeQ
       // use roBits to StoreQ
       // const assign, not change
     }
@@ -107,17 +124,16 @@ class MemStage1 extends MycpuModule {
       val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
       when(isUncache) {
         state             := ucloadMode
-        wireSq.ready      := true.B
+        sqDecp.ready      := true.B
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
         toMem2.valid      := true.B
       }.otherwise {
         // next
         toMem2.valid := true.B
-        //TODO: toMem2 data is from roBits
         // prev
-        wireRo.ready := toMem2.ready
-        wireSq.ready := toMem2.ready
+        roDecp.ready := toMem2.ready
+        sqDecp.ready := toMem2.ready
         when(nextIsLoad) {
           // state not change
           cache1Update.req  := wireRo.fire
@@ -135,12 +151,10 @@ class MemStage1 extends MycpuModule {
       assert(roDecp.valid)
       when(io.stqEmpty) {
         // prev
-        wireRo.ready := toMem2.ready
-        wireSq.ready := toMem2.ready
+        roDecp.ready := toMem2.ready
+        sqDecp.ready := toMem2.ready
         // next
         toMem2.valid := true.B
-        // TODO:assign toMem2 from roBits
-
         when(toMem2.fire) {
           state             := Mux(nextIsLoad, cloadMode, storeMode)
           cache1Update.isSQ := Mux(nextIsLoad, false.B, true.B)
@@ -150,20 +164,14 @@ class MemStage1 extends MycpuModule {
         // prev
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
-        wireRo.ready      := false.B
-        wireSq.ready      := true.B
+        roDecp.ready      := false.B
+        sqDecp.ready      := true.B
         // next
         toMem2.valid := true.B
-        // TODO:assign toMem2 from storeQ
       }
     }
   }
-  // =================================================================
   //===================== roStage to StoreQ ===========================
-  val toStoreQ = io.out.toStoreQ
-  val toSQbits = toStoreQ.bits
-  val toMem2   = io.out.toMem2
-  val toM2Bits = toMem2.bits
 
   val lowAddr    = roBits.rwReq.lowAddr
   val l2sb       = lowAddr.offset(1, 0)
@@ -213,11 +221,11 @@ class MemStage1 extends MycpuModule {
     )
   }
   // default
-  toSQbits.wbInfo   := roBits.wbInfo
-  toSQbits.exDetect := roBits.exDetect
-  toSQbits.rwReq    := roBits.rwReq
+  toSQbits.wbInfo       := roBits.wbInfo
+  toSQbits.exDetect     := roBits.exDetect
+  toSQbits.stqEnq.rwReq := roBits.rwReq
   // update
-  toSQbits.rwReq.size := selectByMemType(
+  toSQbits.stqEnq.rwReq.size := selectByMemType(
     Seq(
       0.U(2.W),
       1.U(2.W),
@@ -227,7 +235,7 @@ class MemStage1 extends MycpuModule {
     ),
     0.U
   )
-  toSQbits.rwReq.wStrb := selectByMemType(
+  toSQbits.stqEnq.rwReq.wStrb := selectByMemType(
     Seq(
       byteStrob,
       halfStrob,
@@ -237,7 +245,7 @@ class MemStage1 extends MycpuModule {
     ),
     0.U
   )
-  toSQbits.rwReq.wWord := BytesWordUtils
+  toSQbits.stqEnq.rwReq.wWord := BytesWordUtils
     .maskWord(
       selectByMemType(
         Seq(
@@ -249,19 +257,10 @@ class MemStage1 extends MycpuModule {
         ),
         0.U
       ),
-      toSQbits.rwReq.wStrb
+      toSQbits.stqEnq.rwReq.wStrb
     )
     .asUInt
 
-  // >> select ========================================================
-  // >> tlb
-  val imm    = SignExt(roBits.immOffset, 32)
-  val vTag   = roBits.srcData(0)(31, 12) + imm(31, 12) + roBits.carryout
-  val tlbRes = io.tlb.res
-  asg(io.tlb.req.bits, Cat(vTag, 0.U(12.W)))
-  io.tlb.req.valid := roDecp.valid
-  toSQbits.pTag    := tlbRes.pTag
-  toSQbits.cAttr   := tlbRes.ccAttr
   //===================== Exception ===================================
   // only from RoStage has Exception, fromSQ no exception
   val isWriteReq = roBits.rwReq.isWrite
@@ -280,10 +279,10 @@ class MemStage1 extends MycpuModule {
   badAddr.valid := (tlbExp || addrErrExp) && roDecp.valid && !roBits.exDetect.happen
   badAddr.bits  := Cat(vTag, lowAddr.index, lowAddr.offset)
   addSource(badAddr, "mem1BadAddr")
-  val inEx   = roBits.exDetect
-  val outEx  = Wire(new DetectExInfoBundle)
-  val toM2Ex = outEx
-  val toSQEx = outEx
+  val inEx  = roBits.exDetect
+  val outEx = Wire(new DetectExInfoBundle)
+  asg(io.out.toMem2.bits.exDetect, outEx)
+  asg(io.out.toStoreQ.bits.exDetect, outEx)
   asg(outEx.happen, inEx.happen || tlbExp || addrErrExp)
   asg(outEx.refill, inEx.refill || (tlbExp && tlbRes.refill))
   asg(
@@ -307,17 +306,18 @@ class MemStage1 extends MycpuModule {
   // )
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
-  toM2Bits.isSQ      := Mux(state === storeMode, true.B, false.B)
+  val isSQtoMem2 = (state === storeMode) || (state === ucloadMode && io.stqEmpty)
+  toM2Bits.isSQ      := Mux(isSQtoMem2, true.B, false.B)
   toM2Bits.wbInfo    := roBits.wbInfo
   toM2Bits.memType   := roBits.memType
-  toM2Bits.pTag      := Mux(state === storeMode, io.fromSQ.bits.pTag, tlbRes.pTag)
-  toM2Bits.isUncache := CCAttr.isUnCache(Mux(state === storeMode, io.fromSQ.bits.cAttr, tlbRes.ccAttr).asUInt)
+  toM2Bits.pTag      := Mux(isSQtoMem2, io.fromSQ.bits.pTag, tlbRes.pTag)
+  toM2Bits.isUncache := CCAttr.isUnCache(Mux(isSQtoMem2, io.fromSQ.bits.cAttr, tlbRes.ccAttr).asUInt)
 
-  if (debug) toM2Bits.debugPC.get := roBits.debugPC.get // TODO: add storeQ
+  if (debug) toM2Bits.debugPC.get := Mux(isSQtoMem2, sqBits.debugPC.get, roBits.debugPC.get)
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
-  cache1.io.in.valid := cache1Update.req
-  cache1.io.in.bits  := Mux(cache1Update.isSQ, wireSq.bits.rwReq, wireRo.bits.rwReq)
+  cache1.io.in.valid          := cache1Update.req
+  cache1.io.in.bits.rwReq.get := Mux(cache1Update.isSQ, wireSq.bits.rwReq, wireRo.bits.rwReq)
 
   // to mem2
   toM2Bits.toCache2 <> cache1.io.out
@@ -335,13 +335,16 @@ class MemStage1 extends MycpuModule {
       LWR -> rightStrob
     )
   )
-  when(state === storeMode) {
+  when(isSQtoMem2) {
     toM2Bits.toCache2.dCacheReq.get.size  := sqBits.rwReq.size
     toM2Bits.toCache2.dCacheReq.get.wStrb := sqBits.rwReq.wStrb
   }
+  PipelineConnect(io.fromRO, roDecp, Mux(roBits.rwReq.isWrite, io.out.toStoreQ.fire, io.out.toMem2.fire), io.flush)
+  PipelineConnect(io.fromSQ, sqDecp, sqDecp.valid && io.out.toStoreQ.fire, io.flush)
 
   if (enableCacheInst) {
-    val ci = cache1.io.out.cacheInst.get
+    val ci = cache1.io.in.bits.cacheInst.get
+    ci <> roBits.cacheInst.get
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
     io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
@@ -351,6 +354,6 @@ class MemStage1 extends MycpuModule {
     toICache1.bits.index := cache1.io.in.bits.rwReq.get.lowAddr.index
     toICache1.bits.taglo := cache1.io.in.bits.cacheInst.get.bits.taglo
     toICache1.bits.op    := cache1.io.in.bits.cacheInst.get.bits.op
-    toICache1.valid      := cache1.io.in.valid && io.cacheIn.bits.cacheInst.get.valid
+    toICache1.valid      := cache1.io.in.valid && roBits.cacheInst.get.valid
   }
 }

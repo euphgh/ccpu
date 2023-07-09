@@ -76,7 +76,7 @@ object AllInsts {
       MOVN  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU), //TODO:
       MOVZ  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU), //TODO:
       CACHE -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.CACHEINST, SpecialType.CACHEINST),
-      SYNC  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
+      SYNC  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.LSU),
       JRHB  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.JRHB, SpecialType.HB),
       // for linux
       MADD  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADD),

@@ -110,10 +110,7 @@ class IfStage2 extends Module with MycpuParam {
     asg(io.out.bits.realBrType(i), realBrType)
   })
 
-  /**
-    * flushReg:flush下一拍，来到IF2的指令是无效的TODO:
-    * out.valid:考虑到icache.out.validTODO:
-    */
+  //attention:out valid
   when(nonBrMisPreVec.asUInt.orR && io.out.valid) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val preTakeVec = WireInit(
@@ -121,12 +118,11 @@ class IfStage2 extends Module with MycpuParam {
     )
     val firPreTake = PriorityEncoder(preTakeVec)
     when(firNonBrMispre === firPreTake) { //FIXME:这里确实不需要flush，但是可能还是得更新BPU
-      val misPc     = io.out.bits.basicInstInfo(firNonBrMispre).pcVal
-      val misPreRes = io.out.bits.predictResult(firNonBrMispre)
+      val misPreRes = outBits.predictResult(firNonBrMispre)
+      val misPc     = outBits.basicInstInfo(firNonBrMispre).pcVal
       //mask the inst behind it
-      (0 until fetchNum).map(i => { io.out.bits.validMask(i) := (i.U <= firNonBrMispre) })
+      (0 until fetchNum).map(i => { outBits.validMask(i) := (i.U <= firNonBrMispre) })
       //change its preResult      ATTENTION:这里preRes无所谓改不改，因为ALU里会根据realBrType来操作
-      //misPreRes.counter := 0.U  ATTENTION:这里改了会造成组合环路
       misPreRes.btbType := BtbType.non
       //redirect frontend
       asg(io.noBrMispreRedirect.flush, true.B)

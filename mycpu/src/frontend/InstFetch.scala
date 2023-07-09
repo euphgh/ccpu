@@ -66,9 +66,9 @@ class InstFetch extends MycpuModule {
   asg(ifStage2.io.ciRetire, io.redirect.flush)
 
   /**
-    * is延迟槽
-    *   拿到Instfetch阶段处理
-    *   在IF2里面不好判断out.valid
+    * isBd:
+    *   handle in Instfetch
+    *   need flush signal
     */
   val outBits = io.out.bits
   val validBr = WireInit(

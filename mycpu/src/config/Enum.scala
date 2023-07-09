@@ -31,8 +31,10 @@ object MduType extends ChiselEnum {
 object SpecialType extends ChiselEnum {
   val LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, CACHEINST, HB, NON = Value
 }
+
+//not need now
 object BlockType extends ChiselEnum {
-  val CACHEINST, MFC0, NON = Value
+  val CACHEINST, SYNC, MFC0, NON = Value
 }
 
 object MemType extends ChiselEnum {
@@ -56,6 +58,8 @@ object MemType extends ChiselEnum {
   val LH  = Value("b1100".U)
   val LHU = Value("b1101".U)
   val SH  = Value("b1110".U)
+
+  val SYNC = Value("b10000".U)
 
   def wordPat  = BitPat("b000?")
   def leftPat  = BitPat("b001?")

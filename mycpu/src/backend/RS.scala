@@ -83,7 +83,12 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val isOldestVec = (0 until rsSize).map(i => rsEntries(i).basic.robIndex === io.in.oldestRobIdx)
   val blockVec    = WireInit(VecInit(Seq.fill(rsSize)(false.B)))
   if (rsKind == FuType.Lsu) {
-    (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.memType.get === MemType.CACHEINST))
+    (0 until rsSize).map(i =>
+      asg(
+        blockVec(i),
+        rsEntries(i).uOp.memType.get === MemType.CACHEINST || rsEntries(i).uOp.memType.get === MemType.SYNC
+      )
+    )
   }
   if (rsKind == FuType.Mdu) {
     //(0 until rsSize).map(i => asg(blockVec(i), false.B))

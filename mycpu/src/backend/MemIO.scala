@@ -30,18 +30,17 @@ class SQplusReq extends MycpuBundle {
 }
 
 class Mem1ReqBus extends MycpuBundle {
-  val rwReq  = new CacheRWReq
-  val ROplus = new ROplusReq
   val SQplus = new SQplusReq
 }
 
 class MemStage1InIO extends MycpuBundle {
-  val isRoStage = Bool()
   val wbInfo    = new WriteBackIO
   val exDetect  = new DetectExInfoBundle
   val memType   = MemType()
   val srcData   = Vec(2, Output(UInt(dataWidth.W)))
-  val mem1Req   = new Mem1ReqBus
+  val rwReq     = new CacheRWReq
+  val immOffset = Output(UInt(16.W))
+  val carryout  = Output(Bool())
   val debugPC   = if (debug) Some(UWord) else None
 }
 

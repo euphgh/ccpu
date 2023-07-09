@@ -149,7 +149,7 @@ class MemStage1 extends MycpuModule {
         }.otherwise {
           cache1Update.req  := wireSq.fire
           cache1Update.isSQ := true.B
-          when(wireRo.fire) {
+          when(toMem2.fire) {
             state := storeMode
           }
         }
@@ -174,12 +174,12 @@ class MemStage1 extends MycpuModule {
         // prev
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
-        roDecp.ready      := false.B
-        sqDecp.ready      := true.B
-        roFireOut         := false.B
         // next
-        toMem2.valid := true.B
         sqFireOut    := toMem2.fire
+        sqDecp.ready := toMem2.ready
+        toMem2.valid := sqDecp.valid
+        roDecp.ready := false.B
+        roFireOut    := false.B
       }
     }
   }
@@ -318,12 +318,12 @@ class MemStage1 extends MycpuModule {
   // )
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
-  val isSQtoMem2 = (state === storeMode) || (state === ucloadMode && io.stqEmpty)
+  val isSQtoMem2 = (state === storeMode) || (state === ucloadMode && !io.stqEmpty)
   toM2Bits.isSQ      := Mux(isSQtoMem2, true.B, false.B)
   toM2Bits.wbInfo    := roBits.wbInfo
   toM2Bits.memType   := roBits.memType
-  toM2Bits.pTag      := Mux(isSQtoMem2, io.fromSQ.bits.pTag, tlbRes.pTag)
-  toM2Bits.isUncache := CCAttr.isUnCache(Mux(isSQtoMem2, io.fromSQ.bits.cAttr, tlbRes.ccAttr).asUInt)
+  toM2Bits.pTag      := Mux(isSQtoMem2, sqBits.pTag, tlbRes.pTag)
+  toM2Bits.isUncache := CCAttr.isUnCache(Mux(isSQtoMem2, sqBits.cAttr, tlbRes.ccAttr).asUInt)
 
   if (debug) toM2Bits.debugPC.get := Mux(isSQtoMem2, sqBits.debugPC.get, roBits.debugPC.get)
   //======================== Cache Stage 1 ============================

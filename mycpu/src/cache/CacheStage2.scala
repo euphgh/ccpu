@@ -267,7 +267,7 @@ class CacheStage2[T <: Data](
         }.elsewhen(hit) {
           // state not change, not block when not uncache and hit
           io.in.ready  := io.out.ready
-          io.out.valid := true.B
+          io.out.valid := io.in.valid
           if (isDcache) {
             (0 until roads).foreach(i => {
               w1data(i).req.valid     := hitMask(i) && dreq.isWrite
@@ -336,7 +336,7 @@ class CacheStage2[T <: Data](
       // false first refill
       firstRefillCycle := false.B
       // req ok, give result
-      io.out.valid := true.B
+      io.out.valid := io.in.valid
       // select data by offset
       if (isDcache) {
         asg(
@@ -368,7 +368,7 @@ class CacheStage2[T <: Data](
       // wait write ok to get next req
       when(writeState === wIdel) {
         mainState   := run
-        io.in.ready := true.B
+        io.in.ready := io.out.ready
       }
       // write axi back data to cache data and metas
       // must first cycle can write, else inBits will not valid
@@ -384,7 +384,7 @@ class CacheStage2[T <: Data](
     }
     is(uncache) {
       when(ucState === ucIdel) {
-        io.out.valid := true.B
+        io.out.valid := io.in.valid
         if (isDcache) {
           outBits.ddata.get := ucDBuffer.get
         } else {
@@ -406,6 +406,8 @@ class CacheStage2[T <: Data](
   val canValid = (mainState === run) || (mainState === refill)
   // assert(Mux(io.out.valid, canValid, true.B))
   // assert(Mux(io.in.ready, canReady, true.B))
+  assert(!(io.out.valid && !io.in.valid))
+  assert(!(io.in.ready && !io.out.ready))
 
   switch(writeState) {
     is(wReq) {

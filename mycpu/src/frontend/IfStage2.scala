@@ -29,15 +29,13 @@ import decodemacro.MacroDecode
   */
 class IfStage2 extends Module with MycpuParam {
   val io = IO(new Bundle {
-    val in      = Flipped(Decoupled(new IfStage1OutIO))
-    val out     = Decoupled(new IfStage2OutIO)
-    val imem    = new DramReadIO
-    val flushIn = Input(Bool())
+    val in       = Flipped(Decoupled(new IfStage1OutIO))
+    val out      = Decoupled(new IfStage2OutIO)
+    val imem     = new DramReadIO
+    val ciRetire = Input(Bool())
 
     val noBrMispreRedirect = new FrontRedirctIO
     val bpuUpdate          = Decoupled(new BpuUpdateIO)
-
-    val cancelIn = Input(Bool())
   })
   val icache2 = Module(new CacheStage2(IcachRoads, IcachLineBytes)())
   icache2.io.in.valid := io.in.valid
@@ -51,7 +49,7 @@ class IfStage2 extends Module with MycpuParam {
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
   asg(icache2.io.in.bits.imask.get, io.in.bits.validMask)
   if (enableCacheInst) {
-    icache2.io.cacheInst.redirect.get := io.flushIn
+    icache2.io.cacheInst.redirect.get := io.ciRetire
   }
   io.imem.ar <> icache2.dram.ar
   io.imem.r <> icache2.dram.r
@@ -116,7 +114,7 @@ class IfStage2 extends Module with MycpuParam {
     * flushReg:flush下一拍，来到IF2的指令是无效的TODO:
     * out.valid:考虑到icache.out.validTODO:
     */
-  when(nonBrMisPreVec.asUInt.orR && io.out.valid && !io.cancelIn) {
+  when(nonBrMisPreVec.asUInt.orR && io.out.valid) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val preTakeVec = WireInit(
       VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).counter > 1.U && inValidMask(i) && io.in.valid))

@@ -54,7 +54,7 @@ class InstFetch extends MycpuModule {
   }
 
   //IF2 in
-  val stage2Cancel = PipelineConnect.notFlush(
+  PipelineConnect(
     ifStage1.io.out,
     ifStage2.io.in,
     ifStage2.io.out.fire,
@@ -62,10 +62,8 @@ class InstFetch extends MycpuModule {
   )
   ifStage2.io.imem <> io.imem
   io.out <> ifStage2.io.out
-  io.out.valid := ifStage2.io.out.valid && !stage2Cancel
   asg(ifStage2.io.bpuUpdate.ready, !io.bpuUpdateIn.valid)
-  asg(ifStage2.io.flushIn, io.redirect.flush)
-  asg(ifStage2.io.cancelIn, stage2Cancel)
+  asg(ifStage2.io.ciRetire, io.redirect.flush)
 
   /**
     * is延迟槽

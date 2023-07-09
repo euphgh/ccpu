@@ -8,9 +8,10 @@ import bundle._
 //this bundle is used when store inst get into mem1
 //cache basic req contain index/offset
 class StoreQIO extends MycpuBundle {
-  val pTag  = UInt(tagWidth.W) //get in mem1
-  val cAttr = CCAttr()
-  val rwReq = new CacheRWReq
+  val pTag    = UInt(tagWidth.W) //get in mem1
+  val cAttr   = CCAttr()
+  val rwReq   = new CacheRWReq
+  val debugPC = if (debug) Some(Output(UWord)) else None
 }
 
 class WriteBackIO extends MycpuBundle {

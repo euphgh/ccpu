@@ -264,7 +264,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     asg(pht.bits, Mux(genTaken, preCnt + 1.U, preCnt - 1.U))
     /*==================== MisPre Signal to Dper/ROB ====================*/
     val misSignal  = mispre.get
-    val takenWrong = genTaken ^ preCnt(1)
+    val takenWrong = genTaken ^ predict.taken
     val destWrong  = genTaken && inBrInfo.realTarget =/= predict.target
     asg(misSignal.happen, brValid && (takenWrong || destWrong))
     asg(misSignal.realTarget, Mux(genTaken, inBrInfo.realTarget, inBrInfo.pcVal + 8.U(32.W)))

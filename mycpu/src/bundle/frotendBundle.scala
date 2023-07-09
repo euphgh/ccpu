@@ -28,6 +28,7 @@ class PredictResultBundle extends MycpuBundle {
   val counter = UInt(2.W)
   val btbType = BtbType()
   val target  = UInt(vaddrWidth.W)
+  val taken   = Bool()
 }
 
 class BasicInstInfoBundle extends MycpuBundle {

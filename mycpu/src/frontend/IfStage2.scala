@@ -104,7 +104,7 @@ class IfStage2 extends Module with MycpuParam {
   (0 until fetchNum).foreach(i => {
     val instr     = io.out.bits.basicInstInfo(i).instr
     val preRes    = io.out.bits.predictResult(i)
-    val preTake   = preRes.counter > 1.U
+    val preTake   = preRes.taken
     val instValid = inValidMask(i) && io.in.valid //inValid
     preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
     val realBrType = preDecoder(i).brType
@@ -119,7 +119,7 @@ class IfStage2 extends Module with MycpuParam {
   when(nonBrMisPreVec.asUInt.orR && io.out.valid && !io.cancelIn) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val preTakeVec = WireInit(
-      VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).counter > 1.U && inValidMask(i) && io.in.valid))
+      VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).taken && inValidMask(i) && io.in.valid))
     )
     val firPreTake = PriorityEncoder(preTakeVec)
     when(firNonBrMispre === firPreTake) { //FIXME:这里确实不需要flush，但是可能还是得更新BPU

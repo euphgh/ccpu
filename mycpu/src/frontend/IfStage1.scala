@@ -219,8 +219,9 @@ class IfStage1 extends MycpuModule {
   (0 until fetchNum).foreach(i => {
     val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).btbType === BtbType.b
     val isTakeJp = BtbType.isJump(bpuout(i).btbType)
-    takeMask(i)    := isTakeJp || isTakeBr
-    validBranch(i) := takeMask(i) && alignMask(i)
+    takeMask(i)     := isTakeJp || isTakeBr
+    validBranch(i)  := takeMask(i) && alignMask(i)
+    bpuout(i).taken := takeMask(i)
   })
 
   def getByVB[T <: Data](a: Seq[T]) = {

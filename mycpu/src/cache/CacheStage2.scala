@@ -385,6 +385,7 @@ class CacheStage2[T <: Data](
     is(uncache) {
       when(ucState === ucIdel) {
         io.out.valid := io.in.valid
+        io.in.ready  := io.out.ready
         if (isDcache) {
           outBits.ddata.get := ucDBuffer.get
         } else {

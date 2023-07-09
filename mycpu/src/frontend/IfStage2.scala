@@ -36,6 +36,8 @@ class IfStage2 extends Module with MycpuParam {
 
     val noBrMispreRedirect = new FrontRedirctIO
     val bpuUpdate          = Decoupled(new BpuUpdateIO)
+
+    val cancelIn = Input(Bool())
   })
   val icache2 = Module(new CacheStage2(IcachRoads, IcachLineBytes)())
   icache2.io.in.valid := io.in.valid
@@ -114,8 +116,7 @@ class IfStage2 extends Module with MycpuParam {
     * flushReg:flush下一拍，来到IF2的指令是无效的TODO:
     * out.valid:考虑到icache.out.validTODO:
     */
-  val flushReg = RegNext((io.flushIn | io.noBrMispreRedirect.flush), false.B)
-  when(nonBrMisPreVec.asUInt.orR && io.out.valid && !flushReg) {
+  when(nonBrMisPreVec.asUInt.orR && io.out.valid && !io.cancelIn) {
     firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
     val preTakeVec = WireInit(
       VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).counter > 1.U && inValidMask(i) && io.in.valid))

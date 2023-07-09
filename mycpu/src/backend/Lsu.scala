@@ -47,7 +47,13 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   PipelineConnect(memStage1.io.out.toStoreQ, storeQ.io.fromMem1, storeQ.io.writeBack.fire, io.flush)
 
   // pipeline connect storeQ/roStage => mem1Stage
-  PipelineConnect(memStage1.io.out.toMem2, memStage2.io.in, memStage2.io.out.fire || memStage2.io.doneSQ, io.flush)
+  val mem2Flush =
+    Mux(
+      (memStage2.io.in.bits.isSQ && memStage2.io.in.valid) || (memStage1.io.out.toMem2.bits.isSQ && memStage1.io.out.toMem2.valid),
+      false.B,
+      io.flush
+    )
+  PipelineConnect(memStage1.io.out.toMem2, memStage2.io.in, memStage2.io.out.fire || memStage2.io.doneSQ, mem2Flush)
 
   memStage1.io.tlb <> tlb
   memStage1.io.flush := io.flush

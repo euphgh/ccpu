@@ -352,7 +352,7 @@ class MemStage1 extends MycpuModule {
     toM2Bits.toCache2.dCacheReq.get.wStrb := sqBits.rwReq.wStrb
   }
   PipelineConnect(io.fromRO, roDecp, roFireOut, io.flush)
-  PipelineConnect(io.fromSQ, sqDecp, sqFireOut, io.flush)
+  PipelineConnect(io.fromSQ, sqDecp, sqFireOut, false.B)
 
   if (enableCacheInst) {
     val ci = cache1.io.in.bits.cacheInst.get

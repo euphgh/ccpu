@@ -70,6 +70,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
   storeQ.io.writeBack.ready := io.out.ready
 
+  io.out.valid := storeQ.io.writeBack.valid || memStage2.io.out.valid
   // select writeback
   when(storeQ.io.writeBack.valid) {
     assert(memStage2.io.out.valid === false.B)

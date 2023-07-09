@@ -59,7 +59,7 @@ class CP0 extends BasicCOP with MycpuParam {
   val trapBase =
     Mux(statusReg.bev === 1.U, "hbfc0_0200".U(32.W), (ebaseReg.eptbase << 12 | "h8000_0000".U(32.W)))
   val trapOffs = WireInit(0x180.U(32.W))
-  asg(io.redirectTarget, trapBase + trapOffs)
+  asg(io.redirectTarget, Mux(io.in.eretFlush, epcReg.all, trapBase + trapOffs))
 
   //exception
   when(io.in.exCommit.valid) {

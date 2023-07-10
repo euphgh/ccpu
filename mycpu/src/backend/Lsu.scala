@@ -44,7 +44,8 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1SQ.bits.debugPC.get, deqSQ.bits.debugPC.get)
 
   // pipeline connect storeQ/roStage => mem1Stage
-  PipelineConnect(memStage1.io.out.toStoreQ, storeQ.io.fromMem1, storeQ.io.writeBack.fire, io.flush)
+  memStage1.io.out.toStoreQ <> storeQ.io.fromMem1
+  //PipelineConnect(memStage1.io.out.toStoreQ, storeQ.io.fromMem1, storeQ.io.writeBack.fire, io.flush)
 
   // pipeline connect storeQ/roStage => mem1Stage
   val mem2Flush =

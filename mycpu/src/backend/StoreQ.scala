@@ -9,6 +9,7 @@ import utils.LookupUInt
 import chisel3.util.experimental.BoringUtils
 import utils.ZeroExt
 import utils.StoreQUtils._
+import utils.PipelineConnect
 
 class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {
@@ -33,6 +34,11 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val stqEnq     = mem1InBits.stqEnq
   val inExInfo   = mem1InBits.exDetect
   val inWbInfo   = mem1InBits.wbInfo
+
+  //=================== pipe reg =======================
+  val fromM1Decp = Wire(Decoupled(new Mem1ToStqIO))
+  PipelineConnect(fromMem1, fromM1Decp, io.writeBack.fire, io.flush)
+  fromM1Decp.ready := fromMem1.ready
 
   //=================== queue =======================
   val counterWidth = log2Ceil(entries)
@@ -59,19 +65,21 @@ class StoreQueue(entries: Int) extends MycpuModule {
   }
 
   //=================== WB =======================
-  val wb     = io.writeBack
-  val wbBits = wb.bits
-  val wPrf   = wbBits.wPrf
-  val wRob   = wbBits.wbRob
-  wb.valid            := fromMem1.valid //already pipeline connect,valid means pipex_valid
-  wbBits.destAregAddr := inWbInfo.destAregAddr
-  wPrf.pDest          := inWbInfo.destPregAddr //should be 0
+  val wb       = io.writeBack
+  val wbBits   = wb.bits
+  val wPrf     = wbBits.wPrf
+  val wRob     = wbBits.wbRob
+  val m1DecpWb = fromM1Decp.bits.wbInfo
+  val m1DecpEx = fromM1Decp.bits.exDetect
+  wb.valid            := fromM1Decp.valid //already pipeline connect,valid means pipex_valid
+  wbBits.destAregAddr := m1DecpWb.destAregAddr
+  wPrf.pDest          := m1DecpWb.destPregAddr //should be 0
   wPrf.result         := 0.U(32.W) //dontcare
   wPrf.wmask          := 0.U(4.W) //dontcare
-  wRob.debugPC.get    := stqEnq.debugPC.get
-  wRob.exDetect       := inExInfo
+  wRob.debugPC.get    := fromM1Decp.bits.stqEnq.debugPC.get
+  wRob.exDetect       := m1DecpEx
   wRob.isMispredict   := false.B
-  wRob.robIndex       := inWbInfo.robIndex
+  wRob.robIndex       := m1DecpWb.robIndex
 
   //=================== retire =====================
   when(io.retire.asUInt.orR) {

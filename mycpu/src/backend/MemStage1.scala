@@ -140,74 +140,77 @@ class MemStage1 extends MycpuModule {
     is(cloadMode) { // only one cycle for any load req
       assert(roDecp.valid)
       val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
-      when(isUncache) {
-        state             := ucloadMode
-        toMem2.valid      := false.B
-        toStoreQ.valid    := false.B
-        sqDecp.ready      := true.B
-        roDecp.ready      := false.B
-        roFireOut         := false.B // must can not
-        sqFireOut         := false.B
-        cache1Update.isSQ := true.B
-        cache1Update.req  := wireSq.fire
-      }.otherwise {
-        // next
-        toMem2.valid   := true.B
-        toStoreQ.valid := false.B
-        roFireOut      := toMem2.fire
-        sqFireOut      := false.B // for not sq valid
-        // prev
-        when(nextIsLoad) {
-          // state not change
-          cache1Update.req  := wireRo.fire
-          cache1Update.isSQ := false.B
-          roDecp.ready      := toMem2.ready
-          sqDecp.ready      := false.B
-        }.otherwise {
-          cache1Update.req  := wireSq.fire
-          cache1Update.isSQ := true.B
-          roDecp.ready      := toMem2.ready
-          sqDecp.ready      := toMem2.ready
-          when(toMem2.fire) {
-            state := storeMode
-          }
-        }
-      }
       when(io.flush) {
         state := storeMode
       }
+        .elsewhen(isUncache) {
+          state             := ucloadMode
+          toMem2.valid      := false.B
+          toStoreQ.valid    := false.B
+          sqDecp.ready      := true.B
+          roDecp.ready      := false.B
+          roFireOut         := false.B // must can not
+          sqFireOut         := false.B
+          cache1Update.isSQ := true.B
+          cache1Update.req  := wireSq.fire
+        }
+        .otherwise {
+          // next
+          toMem2.valid   := true.B
+          toStoreQ.valid := false.B
+          roFireOut      := toMem2.fire
+          sqFireOut      := false.B // for not sq valid
+          // prev
+          when(nextIsLoad) {
+            // state not change
+            cache1Update.req  := wireRo.fire
+            cache1Update.isSQ := false.B
+            roDecp.ready      := toMem2.ready
+            sqDecp.ready      := false.B
+          }.otherwise {
+            cache1Update.req  := wireSq.fire
+            cache1Update.isSQ := true.B
+            roDecp.ready      := toMem2.ready
+            sqDecp.ready      := toMem2.ready
+            when(toMem2.fire) {
+              state := storeMode
+            }
+          }
+        }
+
     }
     is(ucloadMode) {
       assert(roDecp.valid)
-      when(io.stqEmpty) {
-        // prev
-        roDecp.ready := toMem2.ready
-        sqDecp.ready := toMem2.ready
-        // next
-        toMem2.valid   := true.B
-        toStoreQ.valid := false.B
-        roFireOut      := toMem2.fire
-        sqFireOut      := false.B
-        when(toMem2.fire) {
-          state             := Mux(nextIsLoad, cloadMode, storeMode)
-          cache1Update.isSQ := Mux(nextIsLoad, false.B, true.B)
-          cache1Update.req  := true.B
-        }
-      }.otherwise {
-        // prev
-        cache1Update.isSQ := true.B
-        cache1Update.req  := wireSq.fire
-        // next
-        toMem2.valid   := sqDecp.valid
-        toStoreQ.valid := false.B
-        roDecp.ready   := false.B
-        sqDecp.ready   := toMem2.ready
-        roFireOut      := false.B //must can not
-        sqFireOut      := toMem2.fire
-      }
       when(io.flush) {
         state := storeMode
       }
+        .elsewhen(io.stqEmpty) {
+          // prev
+          roDecp.ready := toMem2.ready
+          sqDecp.ready := toMem2.ready
+          // next
+          toMem2.valid   := true.B
+          toStoreQ.valid := false.B
+          roFireOut      := toMem2.fire
+          sqFireOut      := false.B
+          when(toMem2.fire) {
+            state             := Mux(nextIsLoad, cloadMode, storeMode)
+            cache1Update.isSQ := Mux(nextIsLoad, false.B, true.B)
+            cache1Update.req  := true.B
+          }
+        }
+        .otherwise {
+          // prev
+          cache1Update.isSQ := true.B
+          cache1Update.req  := wireSq.fire
+          // next
+          toMem2.valid   := sqDecp.valid
+          toStoreQ.valid := false.B
+          roDecp.ready   := false.B
+          sqDecp.ready   := toMem2.ready
+          roFireOut      := false.B //must can not
+          sqFireOut      := toMem2.fire
+        }
     }
   }
   //===================== roStage to StoreQ ===========================

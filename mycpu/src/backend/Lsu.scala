@@ -66,6 +66,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // stage2 connect with storeQ
   storeQ.io.deq.back := memStage2.io.doneSQ // when store finish, release storeQ
   memStage2.io.querySQ <> storeQ.io.query // search storeQ while load
+  storeQ.io.deq.backPC.get := memStage2.io.donePC.get // when store finish, release storeQ
 
   // mem2 to outside
   dram <> memStage2.io.dmem

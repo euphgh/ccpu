@@ -29,6 +29,7 @@ class MemStage2 extends MycpuModule {
     val out     = Decoupled(new FunctionUnitOutIO)
     val querySQ = new QuerySQ
     val doneSQ  = Output(Bool()) //connect storeQ deq.back
+    val donePC  = if (debug) Some(Output(UWord)) else None //connect storeQ deq.back
     val dmem    = new DramIO
     val flush   = Input(Bool()) // for cache instr
   })
@@ -58,6 +59,8 @@ class MemStage2 extends MycpuModule {
   io.out.valid        := cacheFinish && !inBits.isSQ
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := Mux(inBits.isSQ, true.B, io.out.ready)
+
+  if (debug) io.donePC.get := inBits.debugPC.get
   // ===================== select ===============================
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))

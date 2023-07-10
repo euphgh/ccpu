@@ -18,8 +18,9 @@ class StoreQueue(entries: Int) extends MycpuModule {
 
     val retire = Vec(retireNum, Input(Bool())) //from rob commit
     val deq = new Bundle {
-      val req  = Decoupled(new StoreQIO) //to mem1
-      val back = Input(Bool()) //from mem2
+      val req    = Decoupled(new StoreQIO) //to mem1
+      val back   = Input(Bool()) //from mem2
+      val backPC = if (debug) Some(Input(UWord)) else None //from mem2
     }
 
     val query = Flipped(new QuerySQ) //mem2 load query
@@ -56,6 +57,9 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val full         = counterMatch && !signMatch
   asg(io.full, full)
   asg(io.empty, empty)
+  // assert((enq_ptr - deq_ptr)(counterWidth - 1) === false.B)
+  // assert((ret_ptr - deq_ptr)(counterWidth - 1) === false.B)
+  // assert((req_ptr - deq_ptr)(counterWidth - 1) === false.B)
 
   //=================== enq =======================
   fromMem1.ready := (!full || io.deq.back) //&& (!io.fromMem1.valid || io.writeBack.ready)
@@ -96,6 +100,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   //deq back
   when(do_deq) {
     deq_ptr := deq_ptr + 1.U
+    assert(io.deq.backPC.get === ram(deq_ptr).debugPC.get)
   }
 
   //=================== query ====================

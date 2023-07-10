@@ -362,23 +362,23 @@ class MemStage1 extends MycpuModule {
 
   // to mem2
   toM2Bits.toCache2 <> cache1.io.out
-  toM2Bits.toCache2.dCacheReq.get.size := roBits.rwReq.size
-  import MemType._
-  toM2Bits.toCache2.dCacheReq.get.wStrb := LookupEnum(
-    roBits.memType,
-    Seq(
-      LB  -> byteStrob,
-      LBU -> byteStrob,
-      LH  -> halfStrob,
-      LHU -> halfStrob,
-      LW  -> "hf".U(4.W),
-      LWL -> leftStrob,
-      LWR -> rightStrob
+  when(!isSQtoMem2) {
+    asg(toM2Bits.toCache2.dCacheReq.get, roBits.rwReq)
+    import MemType._
+    toM2Bits.toCache2.dCacheReq.get.wStrb := LookupEnum(
+      roBits.memType,
+      Seq(
+        LB  -> byteStrob,
+        LBU -> byteStrob,
+        LH  -> halfStrob,
+        LHU -> halfStrob,
+        LW  -> "hf".U(4.W),
+        LWL -> leftStrob,
+        LWR -> rightStrob
+      )
     )
-  )
-  when(isSQtoMem2) {
-    toM2Bits.toCache2.dCacheReq.get.size  := sqBits.rwReq.size
-    toM2Bits.toCache2.dCacheReq.get.wStrb := sqBits.rwReq.wStrb
+  }.otherwise {
+    asg(toM2Bits.toCache2.dCacheReq.get, sqBits.rwReq)
   }
   PipelineConnect(io.fromRO, roDecp, roFireOut, io.flush)
   PipelineConnect(io.fromSQ, sqDecp, sqFireOut, false.B)

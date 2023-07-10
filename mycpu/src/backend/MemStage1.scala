@@ -95,22 +95,33 @@ class MemStage1 extends MycpuModule {
   toMem2.valid                     := false.B
   roFireOut                        := false.B
   sqFireOut                        := false.B
+  val sqDecpRdy    = !sqDecp.valid || toMem2.fire
+  val roDecpRdy    = !roDecp.valid || toStoreQ.fire
+  val storeModeRdy = sqDecpRdy && roDecpRdy
   switch(state) {
     is(storeMode) {
       when(nextIsLoad) {
         // prev
-        roDecp.ready := (!sqDecp.valid || toMem2.fire) && (!roDecp.valid || toStoreQ.fire)
-        sqDecp.ready := false.B
-        when(wireRo.fire) {
+        when(storeModeRdy) {
+          roDecp.ready      := true.B
+          sqDecp.ready      := false.B
           cache1Update.isSQ := false.B
           cache1Update.req  := true.B
           state             := cloadMode
-          roFireOut         := true.B
+          roFireOut         := toStoreQ.fire
+          sqFireOut         := toMem2.fire
+        }.otherwise {
+          roDecp.ready      := false.B
+          sqDecp.ready      := toMem2.ready || !sqDecp.valid
+          cache1Update.isSQ := true.B
+          cache1Update.req  := wireSq.fire
+          roFireOut         := toStoreQ.fire
+          sqFireOut         := toMem2.fire
         }
       }.otherwise {
         // prev
-        roDecp.ready      := toStoreQ.ready
-        sqDecp.ready      := toMem2.ready
+        roDecp.ready      := toStoreQ.ready || !roDecp.valid
+        sqDecp.ready      := toMem2.ready || !sqDecp.valid
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
         roFireOut         := toStoreQ.fire
@@ -131,16 +142,21 @@ class MemStage1 extends MycpuModule {
       val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
       when(isUncache) {
         state             := ucloadMode
+        toMem2.valid      := false.B
+        toStoreQ.valid    := false.B
         sqDecp.ready      := true.B
+        roDecp.ready      := false.B
+        roFireOut         := false.B // must can not
+        sqFireOut         := false.B
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
-        toMem2.valid      := false.B
       }.otherwise {
         // next
-        toMem2.valid := true.B
-        roFireOut    := toMem2.fire
+        toMem2.valid   := true.B
+        toStoreQ.valid := false.B
+        roFireOut      := toMem2.fire
+        sqFireOut      := false.B // for not sq valid
         // prev
-        sqDecp.ready := toMem2.ready
         when(nextIsLoad) {
           // state not change
           cache1Update.req  := wireRo.fire
@@ -157,6 +173,9 @@ class MemStage1 extends MycpuModule {
           }
         }
       }
+      when(io.flush) {
+        state := storeMode
+      }
     }
     is(ucloadMode) {
       assert(roDecp.valid)
@@ -165,24 +184,26 @@ class MemStage1 extends MycpuModule {
         roDecp.ready := toMem2.ready
         sqDecp.ready := toMem2.ready
         // next
-        toMem2.valid := true.B
-        sqFireOut    := false.B
+        toMem2.valid   := true.B
+        toStoreQ.valid := false.B
+        roFireOut      := toMem2.fire
+        sqFireOut      := false.B
         when(toMem2.fire) {
           state             := Mux(nextIsLoad, cloadMode, storeMode)
           cache1Update.isSQ := Mux(nextIsLoad, false.B, true.B)
           cache1Update.req  := true.B
-          roFireOut         := true.B
         }
       }.otherwise {
         // prev
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire
         // next
-        sqFireOut    := toMem2.fire
-        sqDecp.ready := toMem2.ready
-        toMem2.valid := sqDecp.valid
-        roDecp.ready := false.B
-        roFireOut    := false.B
+        toMem2.valid   := sqDecp.valid
+        toStoreQ.valid := false.B
+        roDecp.ready   := false.B
+        sqDecp.ready   := toMem2.ready
+        roFireOut      := false.B //must can not
+        sqFireOut      := toMem2.fire
       }
     }
   }
@@ -327,6 +348,8 @@ class MemStage1 extends MycpuModule {
   toM2Bits.memType   := roBits.memType
   toM2Bits.pTag      := Mux(isSQtoMem2, sqBits.pTag, tlbRes.pTag)
   toM2Bits.isUncache := CCAttr.isUnCache(Mux(isSQtoMem2, sqBits.cAttr, tlbRes.ccAttr).asUInt)
+
+  toM2Bits.exDetect.happen := Mux(isSQtoMem2, false.B, outEx.happen)
 
   if (debug) toM2Bits.debugPC.get := Mux(isSQtoMem2, sqBits.debugPC.get, roBits.debugPC.get)
   //======================== Cache Stage 1 ============================

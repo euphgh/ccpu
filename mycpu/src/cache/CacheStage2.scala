@@ -300,25 +300,25 @@ class CacheStage2[T <: Data](
       readCounter.reset()
       // select road, save result reg
       victimRoad := roadSelector.way
-      // read 4(roads) cachelines for replace
-      asg(
-        wbBuffer,
-        LookupUInt(
-          victimRoad,
-          (0 until roads).map(i => {
-            i.U -> r1data(i).resp.data
-          })
-        )
-      )
-      (0 until roads).map(i => {
-        r1data(i).req.valid := false.B
-      })
+
+      (0 until roads).map(i => { r1data(i).req.valid := false.B })
       // when victim is dirty, tell writeBuffer start work
       // must on first cycle, can only write one times
+      // write to wbBuffer must on first data
       when(firstMissCycle) {
         writeState     := Mux(validDirty(victimRoad), wReq, wIdel)
         firstMissCycle := false.B
         assert(writeState === wIdel)
+        // read 4(roads) cachelines for replace
+        asg(
+          wbBuffer,
+          LookupUInt(
+            victimRoad,
+            (0 until roads).map(i => {
+              i.U -> r1data(i).resp.data
+            })
+          )
+        )
       }
     }
     is(readDram) {

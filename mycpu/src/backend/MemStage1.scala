@@ -138,7 +138,7 @@ class MemStage1 extends MycpuModule {
       // const assign, not change
     }
     is(cloadMode) { // only one cycle for any load req
-      // assert(roDecp.valid)
+      assert(roDecp.valid)
       val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
       when(isUncache) {
         state             := ucloadMode

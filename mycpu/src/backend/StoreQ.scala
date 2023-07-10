@@ -42,7 +42,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val ret_ptr      = RegInit(0.U(ptrWidth.W))
   val req_ptr      = RegInit(0.U(ptrWidth.W)) // deqReq
   val deq_ptr      = RegInit(0.U(ptrWidth.W))
-  val do_enq       = WireDefault(io.writeBack.fire)
+  val do_enq       = WireDefault(io.fromMem1.fire)
   val do_deq       = WireDefault(io.deq.back)
   val counterMatch = enq_ptr(counterWidth - 1, 0) === deq_ptr(counterWidth - 1, 0)
   val signMatch    = enq_ptr(ptrWidth - 1) === deq_ptr(ptrWidth - 1)
@@ -52,7 +52,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   asg(io.empty, empty)
 
   //=================== enq =======================
-  fromMem1.ready := (!full || io.deq.back) && (!io.fromMem1.valid || io.writeBack.ready)
+  fromMem1.ready := (!full || io.deq.back) //&& (!io.fromMem1.valid || io.writeBack.ready)
   when(do_enq) {
     ram(enq_ptr) := stqEnq
     enq_ptr      := enq_ptr + 1.U

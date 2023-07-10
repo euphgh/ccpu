@@ -48,8 +48,9 @@ class MemStage2 extends MycpuModule {
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
   asg(cinBit.isUncached, inBits.isUncache)
-  val ldHitSQ = !inBits.isSQ && !io.querySQ.res.memMask.orR // not write and mem mask==0.U
-  asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ && !inBits.isUncache))
+  val cacheMask = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
+  val ldHitSQ   = !inBits.isSQ && !cacheMask.orR // not write and mem mask==0.U
+  asg(cinBit.cancel, inBits.exDetect.happen || ldHitSQ)
   // store req from rostage should not enter cache
   cache2.io.in.valid := io.in.valid
   io.dmem <> cache2.io.dram
@@ -65,10 +66,7 @@ class MemStage2 extends MycpuModule {
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))
   asg(io.querySQ.req.needMask, inBits.toCache2.dCacheReq.get.wStrb)
-  val validWord = maskWord(coutBit.ddata.get, io.querySQ.res.memMask).asUInt | maskWord(
-    io.querySQ.res.data,
-    ~io.querySQ.res.memMask
-  ).asUInt
+  val validWord  = maskWord(coutBit.ddata.get, cacheMask).asUInt | maskWord(io.querySQ.res.data, ~cacheMask).asUInt
   val validBytes = word2Bytes(validWord)
   val l2sb       = inBits.toCache2.dCacheReq.get.lowAddr.offset(1, 0)
   // >> align ====================================================

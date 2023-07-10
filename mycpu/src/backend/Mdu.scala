@@ -52,6 +52,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD))
   mulIn.isAdd  := mduType.isOneOf(MADD, MADDU)
   mulIn.isSub  := mduType.isOneOf(MSUB, MSUBU)
+  mul.io.flush := io.flush
   (0 until srcDataNum).foreach(i => { mulIn.srcs(i) := srcs(i) })
   val multRes = mul.io.out.bits
 
@@ -59,6 +60,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val div   = Module(new Divider)
   val divIn = div.io.in.bits
   divIn.isSign := mduType === DIV
+  div.io.flush := io.flush
   (0 until srcDataNum).foreach(i => { divIn.srcs(i) := srcs(i) })
   val divRes = div.io.out.bits
 
@@ -66,6 +68,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val clz = Module(new CountLeadZero)
   clz.io.in.bits.src  := srcs(0)
   clz.io.in.bits.zero := true.B
+  clz.io.flush        := io.flush
 
   //mfc0 =============================================================
   val c0Addr = srcs(1)(7, 0)

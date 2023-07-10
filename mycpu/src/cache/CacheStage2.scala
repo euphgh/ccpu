@@ -367,7 +367,7 @@ class CacheStage2[T <: Data](
       }
       // wait write ok to get next req
       when(writeState === wIdel) {
-        mainState   := run
+        mainState   := Mux(io.out.fire || !io.in.valid, run, refill)
         io.in.ready := io.out.ready
       }
       // write axi back data to cache data and metas
@@ -395,7 +395,7 @@ class CacheStage2[T <: Data](
             outBits.toUser(i) := trans(ucIBuffer.get(i))
           })
         }
-        mainState := Mux(io.out.ready, run, uncache)
+        mainState := Mux(io.out.fire || !io.in.valid, run, uncache)
       }
     }
     is(instr) {

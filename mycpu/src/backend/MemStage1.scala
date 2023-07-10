@@ -193,6 +193,9 @@ class MemStage1 extends MycpuModule {
           cache1Update.isSQ := Mux(nextIsLoad, false.B, true.B)
           cache1Update.req  := true.B
         }
+        when(io.flush) {
+          state := storeMode
+        }
       }.otherwise {
         // prev
         cache1Update.isSQ := true.B

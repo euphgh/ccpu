@@ -140,15 +140,18 @@ class MemStage1 extends MycpuModule {
         toMem2.valid := true.B
         roFireOut    := toMem2.fire
         // prev
-        roDecp.ready := toMem2.ready
         sqDecp.ready := toMem2.ready
         when(nextIsLoad) {
           // state not change
           cache1Update.req  := wireRo.fire
           cache1Update.isSQ := false.B
+          roDecp.ready      := toMem2.ready
+          sqDecp.ready      := false.B
         }.otherwise {
           cache1Update.req  := wireSq.fire
           cache1Update.isSQ := true.B
+          roDecp.ready      := toMem2.ready
+          sqDecp.ready      := toMem2.ready
           when(toMem2.fire) {
             state := storeMode
           }

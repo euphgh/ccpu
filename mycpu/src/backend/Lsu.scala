@@ -50,7 +50,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // pipeline connect storeQ/roStage => mem1Stage
   val mem2Flush =
     Mux(
-      (memStage2.io.in.bits.isSQ && memStage2.io.in.valid) || (memStage1.io.out.toMem2.bits.isSQ && memStage1.io.out.toMem2.valid),
+      (memStage2.io.in.bits.isSQ && memStage2.io.in.valid && !memStage2.io.doneSQ) || (memStage1.io.out.toMem2.bits.isSQ && memStage1.io.out.toMem2.valid),
       false.B,
       io.flush
     )

@@ -153,6 +153,7 @@ class Backend extends MycpuModule {
   robIn.fromDispatcher <> dperOut.toRob
   asg(robIn.wbRob, wRob)
   asg(robIn.misPredictIdx, aluMisPre.robIdx)
+  asg(robIn.fromAluIsMisPre, aluMisPre.happen)
   val mulRe = robOut.multiRetire
 
   //arat

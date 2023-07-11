@@ -8,6 +8,9 @@ import chisel3.util._
 import utils.BytesWordUtils._
 import utils._
 import chisel3.util.experimental.BoringUtils._
+import difftest.DifftestCacheRun
+import difftest.DifftestCacheMiss
+import java.nio.IntBuffer
 
 /**
   * cache stage2 may block, need Decoupled input
@@ -243,6 +246,16 @@ class CacheStage2[T <: Data](
   val ucDBuffer      = if (isDcache) Some(RegInit(0.U(32.W))) else None
   io.in.ready  := false.B // default, only in run state assign
   io.out.valid := false.B // defualt, only in run state assign
+  // val difftestRun  = Module(new DifftestCacheRun(isDcache))
+  // val difftestMiss = Module(new DifftestCacheMiss)
+
+  // difftestRun.io.hasValid := io.in.valid && (mainState === run)
+  // difftestRun.io.hitWays  := hitMask.asUInt
+  // difftestRun.io.reqAddr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
+
+  // if (isDcache) difftestRun.io.retdData.get := io.out.bits.ddata.get
+  // else difftestRun.io.retiData.get          := io.out.bits.idata.get
+  // difftestMiss.io.isMiss := false.B
   switch(mainState) {
     is(run) {
       // set refill write sram valid = false.B
@@ -301,6 +314,7 @@ class CacheStage2[T <: Data](
       // burst count clear
       readCounter.reset()
       // select road, save result reg
+      val wireVictimWay = roadSelector.way
       victimRoad := roadSelector.way
 
       (0 until roads).map(i => { r1data(i).req.valid := false.B })
@@ -308,14 +322,14 @@ class CacheStage2[T <: Data](
       // must on first cycle, can only write one times
       // write to wbBuffer must on first data
       when(firstMissCycle) {
-        writeState     := Mux(validDirty(victimRoad), wReq, wIdel)
+        writeState     := Mux(validDirty(wireVictimWay), wReq, wIdel)
         firstMissCycle := false.B
         assert(writeState === wIdel)
         // read 4(roads) cachelines for replace
         asg(
           wbBuffer,
           LookupUInt(
-            victimRoad,
+            wireVictimWay,
             (0 until roads).map(i => {
               i.U -> r1data(i).resp.data
             })

@@ -127,6 +127,9 @@ class Mdu extends FuncUnit(FuType.Mdu) {
       exeStageIO.out.valid := validMask.orR
     }
   }
+  when(io.flush) {
+    state := run
+  }
 
 // all valid and ready ==================================================
   mul.io.in.valid := isMult && !blockDone

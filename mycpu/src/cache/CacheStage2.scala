@@ -276,7 +276,9 @@ class CacheStage2[T <: Data](
             })
           }
         }.otherwise { //cache not hit
-          mainState      := miss
+          mainState := miss
+          // calculate and write next victim way to way status
+          roadSelector.miss
           firstMissCycle := true.B
           // block when not hit
           io.out.valid := false.B

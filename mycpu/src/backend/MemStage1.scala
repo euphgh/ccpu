@@ -264,9 +264,9 @@ class MemStage1 extends MycpuModule {
   // update
   toSQbits.stqEnq.rwReq.size := selectByMemType(
     Seq(
-      0.U(2.W),
-      1.U(2.W),
-      2.U(2.W),
+      0.U(3.W),
+      1.U(3.W),
+      2.U(3.W),
       leftSize,
       rightSize
     ),
@@ -380,11 +380,11 @@ class MemStage1 extends MycpuModule {
       LookupEnum(
         roBits.memType,
         Seq(
-          LB  -> 0.U(2.W),
-          LBU -> 0.U(2.W),
-          LH  -> 1.U(2.W),
-          LHU -> 1.U(2.W),
-          LW  -> 2.U(2.W),
+          LB  -> 0.U(3.W),
+          LBU -> 0.U(3.W),
+          LH  -> 1.U(3.W),
+          LHU -> 1.U(3.W),
+          LW  -> 2.U(3.W),
           LWL -> leftSize,
           LWR -> rightSize
         )

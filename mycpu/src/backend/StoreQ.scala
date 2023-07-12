@@ -5,11 +5,9 @@ import chisel3._
 import chisel3.util._
 import utils.asg
 import cache._
-import utils.LookupUInt
-import chisel3.util.experimental.BoringUtils
-import utils.ZeroExt
+import chisel3.util.experimental.BoringUtils._
 import utils.StoreQUtils._
-import utils.PipelineConnect
+import utils._
 
 class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {
@@ -63,7 +61,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
 
   //=================== enq =======================
   fromMem1.ready := (!full || io.deq.back) //&& (!io.fromMem1.valid || io.writeBack.ready)
-  when(do_enq) {
+  when(do_enq && !io.fromMem1.bits.scFail) {
     ram(enq_ptr) := stqEnq
     enq_ptr      := enq_ptr + 1.U
   }
@@ -78,8 +76,8 @@ class StoreQueue(entries: Int) extends MycpuModule {
   wb.valid            := fromM1Decp.valid //already pipeline connect,valid means pipex_valid
   wbBits.destAregAddr := m1DecpWb.destAregAddr
   wPrf.pDest          := m1DecpWb.destPregAddr //should be 0
-  wPrf.result         := 0.U(32.W) //dontcare
-  wPrf.wmask          := 0.U(4.W) //dontcare
+  wPrf.result         := !fromM1Decp.bits.scFail
+  wPrf.wmask          := "hf".U(4.W)
   wRob.debugPC.get    := fromM1Decp.bits.stqEnq.debugPC.get
   wRob.exDetect       := m1DecpEx
   wRob.isMispredict   := false.B

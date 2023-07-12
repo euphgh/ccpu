@@ -62,7 +62,7 @@ class MemStage1 extends MycpuModule {
   val wireRo = io.fromRO
   val wireSq = io.fromSQ
   import MemType._
-  val wireRoIsLoad = !wireRo.bits.memType.isOneOf(SW, SB, SH, SWL, SWR)
+  val wireRoIsLoad = !wireRo.bits.memType.isOneOf(SW, SB, SH, SWL, SWR, SC)
   val nextIsLoad   = wireRo.valid && wireRoIsLoad
   val sqDecp       = Wire(Decoupled(new StoreQIO))
   val roDecp       = Wire(Decoupled(new MemStage1InIO))
@@ -139,7 +139,7 @@ class MemStage1 extends MycpuModule {
     }
     is(cloadMode) { // only one cycle for any load req
       assert(roDecp.valid)
-      val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
+      val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt) || roBits.memType.isOneOf(CACHEINST)
       when(isUncache) {
         state             := ucloadMode
         toMem2.valid      := false.B
@@ -173,7 +173,6 @@ class MemStage1 extends MycpuModule {
           }
         }
       }
-
     }
     is(ucloadMode) {
       assert(roDecp.valid)
@@ -410,4 +409,15 @@ class MemStage1 extends MycpuModule {
     toICache1.bits.op    := cache1.io.in.bits.cacheInst.get.bits.op
     toICache1.valid      := cache1.io.in.valid && roBits.cacheInst.get.valid
   }
+  // LL and SC =================================================
+  val llRdyGo = WireInit(toMem2.fire && roBits.memType === LL && !io.flush)
+  addSource(llRdyGo, "llWen")
+
+  val llbitInMem1 = Wire(Bool())
+  addSink(llbitInMem1, "llbit")
+  io.out.toStoreQ.bits.scFail := !llbitInMem1 && roBits.memType === SC
+  val scFailMark = Wire(Valid(UInt(0.W)))
+  scFailMark.bits  := DontCare
+  scFailMark.valid := toStoreQ.fire && toSQbits.scFail && !io.flush
+  addSource(scFailMark, "scFail")
 }

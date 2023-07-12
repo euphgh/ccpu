@@ -59,13 +59,14 @@ object MemType extends ChiselEnum {
   val LHU = Value("b1101".U)
   val SH  = Value("b1110".U)
 
-  val SYNC = Value("b10000".U)
+  val LL = Value("b10000".U)
+  val SC = Value("b10001".U)
 
-  def wordPat  = BitPat("b000?")
-  def leftPat  = BitPat("b001?")
-  def rightPat = BitPat("b010?")
-  def bytePat  = BitPat("b10??")
-  def halfPat  = BitPat("b11??")
+  def wordPat  = BitPat("b?000?")
+  def leftPat  = BitPat("b0001?")
+  def rightPat = BitPat("b0010?")
+  def bytePat  = BitPat("b010??")
+  def halfPat  = BitPat("b011??")
 }
 object BranchType extends ChiselEnum {
   val BEQ, BNE, BGEZ, BLEZ, BLTZ, BGTZ, BLTZAL, BGEZAL, J, JAL, JR, JALR, JRHB, NON = Value

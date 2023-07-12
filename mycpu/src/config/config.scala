@@ -92,7 +92,7 @@ trait MycpuParam {
   val debug     = true
   val funcTest  = false
   val vivado    = !verilator
-  val linux     = false
+  val linux     = true
   // General Parameter for mycpu
 
   val excCodeWidth     = 5

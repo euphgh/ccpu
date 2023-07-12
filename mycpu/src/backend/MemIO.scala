@@ -79,4 +79,5 @@ class Mem1ToStqIO extends MycpuBundle {
   val stqEnq   = new StoreQIO //mem1 has ro store
   val wbInfo   = new WriteBackIO
   val exDetect = new DetectExInfoBundle
+  val scFail   = Bool()
 }

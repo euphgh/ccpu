@@ -86,7 +86,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     (0 until rsSize).map(i =>
       asg(
         blockVec(i),
-        rsEntries(i).uOp.memType.get === MemType.CACHEINST || rsEntries(i).uOp.memType.get === MemType.SYNC
+        rsEntries(i).uOp.memType.get.isOneOf(MemType.CACHEINST, MemType.SC, MemType.LL)
       )
     )
   }

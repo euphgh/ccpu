@@ -47,8 +47,18 @@ class CP0 extends BasicCOP with MycpuParam {
   val exCommit = io.in.exCommit.bits
   val badVaddr = exCommit.badVaddr
   val excCode  = exCommit.detect.excCode
+  val llbit    = RegInit(false.B)
+  addSource(llbit, "llbit")
 
-  when(io.in.eretFlush) { statusReg.exl := 0.U }
+  // write llbits
+  val llWen = Wire(Bool())
+  addSink(llWen, "llWen")
+  when(llWen) { llbit := true.B }
+
+  when(io.in.eretFlush) {
+    statusReg.exl := 0.U
+    llbit         := false.B
+  }
   //mtc0 mfc0
   val c0Waddr = io.in.mtc0.waddr
   val c0Raddr = io.mfc0.addr

@@ -304,6 +304,13 @@ class ROB extends MycpuModule {
   val dstHB = Module(new Mark(UWord))
   dstHB.start <> dstHBFromAlu
   dstHB.end := io.out.flushAll || io.out.mispreFlushBackend
+  // SC ===========================================================
+  val scMark = Module(new Mark(UInt(0.W)))
+  val scFail = Wire(Flipped(Valid(UInt(0.W))))
+  addSink(scFail, "scFail")
+  scMark.start <> scFail
+  // must first because it issue when it is oldest
+  scMark.end := retireSpType(0) === SpecialType.STORE && io.out.multiRetire(0).fire
 
   // init
   io.out.eretFlush          := false.B
@@ -404,7 +411,8 @@ class ROB extends MycpuModule {
     // asg(io.out.flRecover(i), retireInst(i).fromDispatcher.prevPDest)
     asg(retireOut.toArat.aDest, retireInst(i).uOp.currADest)
     asg(retireOut.toArat.pDest, retireInst(i).uOp.currPDest)
-    asg(retireOut.scommit, retireSpType(i) === SpecialType.STORE)
+    if (i == 0) asg(retireOut.scommit, retireSpType(i) === SpecialType.STORE && !scFail.valid)
+    else asg(retireOut.scommit, retireSpType(i) === SpecialType.STORE)
   })
 
   //singleRetire connect

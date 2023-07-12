@@ -73,10 +73,10 @@ object AllInsts {
       JALR -> List(SRCType.RS, DSTType.toRD, ChiselFuType.MainALU, BranchType.JALR),
       // for uboot
       MUL   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU, MduType.MUL),
-      MOVN  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU), //TODO:
-      MOVZ  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU), //TODO:
+      MOVN  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU, AluType.MOVN),
+      MOVZ  -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MainALU, AluType.MOVZ),
       CACHE -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.LSU, MemType.CACHEINST, SpecialType.CACHEINST),
-      SYNC  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.LSU),
+      SYNC  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU), //NON
       JRHB  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.JRHB, SpecialType.HB),
       // for linux
       MADD  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADD),
@@ -91,8 +91,8 @@ object AllInsts {
       TNE   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
       TEQ   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
       CLZ   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU, MduType.CLZ),
-      PREF  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
-      WAIT  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU)
+      PREF  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU), //NON
+      WAIT  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU) //NON
     )
   }
   def default(): List[chisel3.ChiselEnum#Type] = {

@@ -91,8 +91,13 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     )
   }
   if (rsKind == FuType.Mdu) {
-    //(0 until rsSize).map(i => asg(blockVec(i), false.B))
     (0 until rsSize).map(i => asg(blockVec(i), rsEntries(i).uOp.mduType.get === MduType.MFC0))
+  }
+  if (rsKind == FuType.MainAlu) {
+    (0 until rsSize).map(i => {
+      val aluType = rsEntries(i).uOp.aluType.get
+      asg(blockVec(i), aluType === AluType.MOVN || aluType === AluType.MOVZ)
+    })
   }
 
   val slotsRdy = WireInit(

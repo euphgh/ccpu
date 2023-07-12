@@ -454,7 +454,7 @@ class CacheStage2[T <: Data](
       // axi bus
       ar.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       ar.bits.burst := BurstType.INCR
-      ar.bits.size  := SizeType.Word.asUInt
+      ar.bits.size  := (if (isDcache) stage1.dCacheReq.get.size else SizeType.Word.asUInt)
       ar.bits.len   := (if (!isDcache) ivalidNum - 1.U else 0.U)
       ar.bits.id    := id
       // wait until ar.fire
@@ -490,9 +490,9 @@ class CacheStage2[T <: Data](
     is(ucAWReq) {
       aw.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       aw.bits.burst := BurstType.INCR
-      aw.bits.size  := SizeType.Word.asUInt
+      aw.bits.size  := (if (isDcache) stage1.dCacheReq.get.size else SizeType.Word.asUInt)
       aw.bits.len   := 0.U
-      ar.bits.id    := id
+      aw.bits.id    := id
       dram.whenAWfire {
         ucState := ucWData
       }

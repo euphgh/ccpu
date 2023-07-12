@@ -377,6 +377,21 @@ class MemStage1 extends MycpuModule {
         LWR -> rightStrob
       )
     )
+    asg(
+      toM2Bits.toCache2.dCacheReq.get.size,
+      LookupEnum(
+        roBits.memType,
+        Seq(
+          LB  -> 0.U(2.W),
+          LBU -> 0.U(2.W),
+          LH  -> 1.U(2.W),
+          LHU -> 1.U(2.W),
+          LW  -> 2.U(2.W),
+          LWL -> leftSize,
+          LWR -> rightSize
+        )
+      )
+    )
   }.otherwise {
     asg(toM2Bits.toCache2.dCacheReq.get, sqBits.rwReq)
   }

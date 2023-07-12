@@ -137,6 +137,7 @@ class RsBasicEntry extends MycpuBundle {
   val srcPregs     = Vec(srcDataNum, new SRATEntry)
   val robIndex     = Output(ROBIdx)
   val debugPC      = if (debug) Some(UWord) else None
+  val prevPDest    = Output(PRegIdx)
 }
 
 /**
@@ -234,6 +235,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val exDetect     = new DetectExInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
+  val prevPDest    = Output(PRegIdx)
   val debugPC      = if (debug) Some(Output(UWord)) else None
 
   val uOp = new Bundle {

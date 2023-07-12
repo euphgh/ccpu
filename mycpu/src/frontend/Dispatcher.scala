@@ -295,6 +295,7 @@ class Dispatcher extends MycpuModule {
     slots(i).toRsBasic.destAregAddr := slots(i).inst.aRegsIdx.dest
     slots(i).toRsBasic.destPregAddr := 0.U(pRegAddrWidth.W) //default
     slots(i).toRsBasic.robIndex     := io.in.robIndex + i.U
+    slots(i).toRsBasic.prevPDest    := slots(i).prevPDest
 
     if (debug) slots(i).toRsBasic.debugPC.get := io.in.fromInstBuffer(i).bits.basicInstInfo.pcVal
 

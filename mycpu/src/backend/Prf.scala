@@ -6,6 +6,7 @@ import chisel3.util._
 import utils.asg
 import utils.BytesWordUtils._
 import difftest.DifftestArchIntRegState
+import chisel3.util.experimental.BoringUtils._
 
 /**
   * connect rs.out.renamed.srcPregs to prf.readPorts.addr in Backend
@@ -60,7 +61,6 @@ class Prf extends MycpuModule {
   }
   //DiffTest ===================================================
   if (verilator) {
-    import chisel3.util.experimental.BoringUtils._
     val pRegNumOfArchReg = Wire(Vec(aRegNum, PRegIdx))
     addSink(pRegNumOfArchReg, s"DiffArchRegNum")
     val checkArchRegs = Module(new DifftestArchIntRegState)
@@ -70,4 +70,8 @@ class Prf extends MycpuModule {
     })
     addSink(checkArchRegs.io.en, "hasValidRetire")
   }
+  val movznPrevIdx = Wire(PRegIdx)
+  val prevData     = WireInit(phyRegs(movznPrevIdx))
+  addSink(movznPrevIdx, "MOVZNPREVIDX")
+  addSource(prevData, "MOVZNPREVDATA")
 }

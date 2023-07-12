@@ -38,7 +38,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   // alias  ==========================================================
   val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.uOp.mduType.get)
   val isDiv                      = (mduType.isOneOf(DIV, DIVU)) && instValid
-  val isMult                     = (mduType.isOneOf(MULT, MULTU)) && instValid
+  val isMult                     = (mduType.isOneOf(MULT, MULTU, MUL)) && instValid
   val isClz                      = (mduType === CLZ) && instValid
   val isHi                       = (mduType.isOneOf(MFHI, MTHI)) && instValid
   val isLo                       = (mduType.isOneOf(MFLO, MTLO)) && instValid
@@ -49,7 +49,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   // multiplier ======================================================
   val mul   = Module(new Multiplier)
   val mulIn = mul.io.in.bits
-  mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD))
+  mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD, MUL))
   mulIn.isAdd  := mduType.isOneOf(MADD, MADDU)
   mulIn.isSub  := mduType.isOneOf(MSUB, MSUBU)
   mul.io.flush := io.flush
@@ -141,7 +141,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
 
   // Output ===========================================================================
   exeOut.wPrf.result := MuxCase(
-    blockRes, // include clz and mul, they are blocked and save result in it
+    blockRes, // include clz and mul, they are blocked and save result in it[低32位]
     Seq(
       isHi   -> specHi,
       isLo   -> specLo,

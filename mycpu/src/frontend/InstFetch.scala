@@ -79,7 +79,7 @@ class InstFetch extends MycpuModule {
   val dsReg       = RegInit(false.B)
   val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
   val outValidNum = PriorityCount(outBits.validMask.asUInt & SignExt(io.out.valid, fetchNum))
-  when(outBits.validMask(0) && io.out.valid) { dsReg := false.B }
+  when(outBits.validMask(0) && io.out.fire) { dsReg := false.B }
   when(validBr.asUInt.orR) {
     asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
     when(lastDs >= outValidNum) {

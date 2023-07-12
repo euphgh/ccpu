@@ -148,6 +148,7 @@ class BrHandler extends MycpuModule {
     val out = new Bundle {
       val taken = Output(Bool())
     }
+    val rtEqZero = Output(Bool())
   })
   /*====================  op  ====================*/
   val (src1, src2, op) = (io.in.src1, io.in.src2, io.in.op)
@@ -176,6 +177,7 @@ class BrHandler extends MycpuModule {
       )
     )
   )
+  asg(io.rtEqZero, src2 === 0.U(32.W))
   /*==================== Access Code ====================*/
   def access(src1: UInt, src2: UInt, op: BranchType.Type) = {
     asg(io.in.src1, src1)
@@ -284,6 +286,15 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     when(jrhbSignal.valid) { asg(exeOut.wbRob.isMispredict, true.B) }
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
+
+    val isMovzn = aluType === AluType.MOVN || aluType === AluType.MOVZ
+    val wprf    = exeOut.wPrf
+    val movWen =
+      (aluType === AluType.MOVN && !BrHandler.io.rtEqZero) || (aluType === AluType.MOVZ && BrHandler.io.rtEqZero)
+    when(isMovzn) {
+      asg(wprf.result, srcs(0))
+      asg(wprf.wmask, Mux(movWen, "hf".U(4.W), "h0".U(4.W)))
+    }
   }
 
   /**

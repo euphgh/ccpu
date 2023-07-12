@@ -8,6 +8,7 @@ import utils.MultiQueue
 import utils.asg
 import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestPhyRegInROB
+import utils.Mark
 
 class SingleRetireBundle extends MycpuBundle {
   val muldiv = Output(Bool())
@@ -86,8 +87,10 @@ class ROB extends MycpuModule {
         dispatchNum,
         Flipped(Decoupled(new DispatchToRobBundle))
       )
-      val wbRob         = Vec(wBNum, Flipped(Valid(new WbRobBundle)))
-      val misPredictIdx = Input(ROBIdx)
+      val wbRob = Vec(wBNum, Flipped(Valid(new WbRobBundle)))
+
+      val misPredictIdx   = Input(ROBIdx)
+      val fromAluIsMisPre = Input(Bool())
     }
     val out = new Bundle {
       val robIndex  = Output(ROBIdx) //to dper
@@ -155,9 +158,15 @@ class ROB extends MycpuModule {
     ) =/= mispreIdx + 1.U)
 
   }
+  //val mispreIdxReg=RegEnable
+  val mispreIdxReg = Module(new Mark(UInt(5.W)))
+  mispreIdxReg.start.valid <> io.in.fromAluIsMisPre
+  mispreIdxReg.start.bits <> io.in.misPredictIdx
+  mispreIdxReg.end := io.out.flushAll || io.out.mispreFlushBackend
+
   val robEntries = Module(new ROBQueue)
   io.out.oldestIdx     := robEntries.io.tailPtr
-  robEntries.mispreIdx := io.in.misPredictIdx
+  robEntries.mispreIdx := Mux(mispreIdxReg.isSet, mispreIdxReg.value.bits, io.in.misPredictIdx)
   io.out.dsAllow       := robEntries.dsAllow
 
   //RobEnqueue
@@ -294,7 +303,7 @@ class ROB extends MycpuModule {
   addSink(dstHBFromAlu, "hbdest")
   val dstHB = Module(new Mark(UWord))
   dstHB.start <> dstHBFromAlu
-  dstHB.end := io.out.flushAll
+  dstHB.end := io.out.flushAll || io.out.mispreFlushBackend
 
   // init
   io.out.eretFlush          := false.B
@@ -375,7 +384,7 @@ class ROB extends MycpuModule {
   addSink(badAddrFromMem1, "mem1BadAddr")
   val badAddr = Module(new Mark(UWord))
   badAddr.start <> badAddrFromMem1
-  badAddr.end  := io.out.flushAll
+  badAddr.end  := io.out.flushAll || io.out.mispreFlushBackend
   memReqVaddr  := badAddr.value.bits
   memException := badAddr.value.valid
   asg(

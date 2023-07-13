@@ -13,6 +13,8 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   val dram    = IO(new DramIO)
   val scommit = IO(Vec(retireNum, Input(Bool())))
 
+  val oldestRobIdx = IO(Input(ROBIdx))
+
   // module and alias
   val memStage1 = Module(new MemStage1)
   val memStage2 = Module(new MemStage2)
@@ -42,6 +44,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1SQ.bits.cAttr, deqSQ.bits.cAttr)
   asg(mem1SQ.bits.rwReq, deqSQ.bits.rwReq)
   asg(mem1SQ.bits.debugPC.get, deqSQ.bits.debugPC.get)
+  asg(memStage1.io.oldestRobIdx, oldestRobIdx)
 
   // pipeline connect storeQ/roStage => mem1Stage
   memStage1.io.out.toStoreQ <> storeQ.io.fromMem1

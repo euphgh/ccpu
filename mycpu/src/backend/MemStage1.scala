@@ -49,6 +49,8 @@ class MemStage1 extends MycpuModule {
     val tlb      = new TLBSearchIO
     val stqEmpty = Input(Bool()) //for uncached load
     val flush    = Input(Bool())
+
+    val oldestRobIdx = Input(ROBIdx)
   })
 
   val toStoreQ = io.out.toStoreQ
@@ -177,7 +179,9 @@ class MemStage1 extends MycpuModule {
     }
     is(ucloadMode) {
       assert(roDecp.valid)
-      when(io.stqEmpty) {
+      val wbRobIdx = toMem2.bits.wbInfo.robIndex
+      val isOldest = io.oldestRobIdx === wbRobIdx
+      when(io.stqEmpty && isOldest) {
         // prev
         roDecp.ready := toMem2.ready
         sqDecp.ready := toMem2.ready

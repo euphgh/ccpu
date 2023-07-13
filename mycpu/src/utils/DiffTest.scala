@@ -84,6 +84,10 @@ class DiffDCacheIO extends DifftestBundle {
   val vicValid   = Input(Bool())
   val vicLine    = Input(Input(Vec(8, UInt(32.W))))
   val writeState = Input(UInt(4.W))
+
+  val instrOp     = Input(UInt(5.W))
+  val instrOk     = Input(Bool())
+  val instrRetire = Input(Bool())
 }
 
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {

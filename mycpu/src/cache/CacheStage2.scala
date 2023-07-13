@@ -264,6 +264,11 @@ class CacheStage2[T <: Data](
     asg(diffDCache.io.vicValid, stage1.meta(victimWay).valid)
     asg(diffDCache.io.vicDirty, stage1.meta(victimWay).dirty.get)
     asg(diffDCache.io.vicLine, stage1.dataline.get(victimWay))
+    if (enableCacheInst) {
+      asg(diffDCache.io.instrOp, stage1.cacheInst.get.bits.op.asUInt)
+      asg(diffDCache.io.instrOk, io.cacheInst.finish.get)
+      asg(diffDCache.io.instrRetire, io.cacheInst.redirect.get)
+    }
   }
   switch(mainState) {
     is(run) {

@@ -138,6 +138,7 @@ class MemStage2 extends MycpuModule {
         MemType.LH  -> lh,
         MemType.LHU -> lhu,
         MemType.LW  -> lw,
+        MemType.LL  -> lw,
         MemType.LWL -> lwl,
         MemType.LWR -> lwr
       )

@@ -256,12 +256,7 @@ class MemStage1 extends MycpuModule {
       ).zip(datas)
     )
   }
-  // default
-  toSQbits.wbInfo       := roBits.wbInfo
-  toSQbits.exDetect     := roBits.exDetect
-  toSQbits.stqEnq.rwReq := roBits.rwReq
-  // update
-  toSQbits.stqEnq.rwReq.size := selectByMemType(
+  val sizeOfmemType = selectByMemType(
     Seq(
       0.U(3.W),
       1.U(3.W),
@@ -271,7 +266,7 @@ class MemStage1 extends MycpuModule {
     ),
     0.U
   )
-  toSQbits.stqEnq.rwReq.wStrb := selectByMemType(
+  val strbOfmemType = selectByMemType(
     Seq(
       byteStrob,
       halfStrob,
@@ -281,6 +276,14 @@ class MemStage1 extends MycpuModule {
     ),
     0.U
   )
+
+  // default
+  toSQbits.wbInfo       := roBits.wbInfo
+  toSQbits.exDetect     := roBits.exDetect
+  toSQbits.stqEnq.rwReq := roBits.rwReq
+  // update
+  toSQbits.stqEnq.rwReq.size  := sizeOfmemType
+  toSQbits.stqEnq.rwReq.wStrb := strbOfmemType
   toSQbits.stqEnq.rwReq.wWord := BytesWordUtils
     .maskWord(
       selectByMemType(
@@ -361,34 +364,8 @@ class MemStage1 extends MycpuModule {
   toM2Bits.toCache2 <> cache1.io.out
   when(!isSQtoMem2) {
     asg(toM2Bits.toCache2.dCacheReq.get, roBits.rwReq)
-    import MemType._
-    toM2Bits.toCache2.dCacheReq.get.wStrb := LookupEnum(
-      roBits.memType,
-      Seq(
-        LB  -> byteStrob,
-        LBU -> byteStrob,
-        LH  -> halfStrob,
-        LHU -> halfStrob,
-        LW  -> "hf".U(4.W),
-        LWL -> leftStrob,
-        LWR -> rightStrob
-      )
-    )
-    asg(
-      toM2Bits.toCache2.dCacheReq.get.size,
-      LookupEnum(
-        roBits.memType,
-        Seq(
-          LB  -> 0.U(3.W),
-          LBU -> 0.U(3.W),
-          LH  -> 1.U(3.W),
-          LHU -> 1.U(3.W),
-          LW  -> 2.U(3.W),
-          LWL -> leftSize,
-          LWR -> rightSize
-        )
-      )
-    )
+    asg(toM2Bits.toCache2.dCacheReq.get.wStrb, strbOfmemType)
+    asg(toM2Bits.toCache2.dCacheReq.get.size, sizeOfmemType)
   }.otherwise {
     asg(toM2Bits.toCache2.dCacheReq.get, sqBits.rwReq)
   }

@@ -48,9 +48,11 @@ class MemStage2 extends MycpuModule {
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
   asg(cinBit.isUncached, inBits.isUncache)
-  val cacheMask = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
-  val ldHitSQ   = !inBits.isSQ && !cacheMask.orR // not write and mem mask==0.U
-  asg(cinBit.cancel, inBits.exDetect.happen || ldHitSQ)
+  val cacheMask  = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
+  val ldHitSQ    = !inBits.isSQ && !cacheMask.orR // not write and mem mask==0.U
+  val inIndex    = inBits.toCache2.dCacheReq.get.lowAddr.index
+  val cancelUart = inBits.pTag === "h1fe40".U && inIndex === 0.U(cacheIndexWidth.W) && inBits.isUncache === false.B
+  asg(cinBit.cancel, inBits.exDetect.happen || ldHitSQ || cancelUart)
   // store req from rostage should not enter cache
   cache2.io.in.valid := io.in.valid
   io.dmem <> cache2.io.dram

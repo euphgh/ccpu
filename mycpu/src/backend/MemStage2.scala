@@ -48,11 +48,14 @@ class MemStage2 extends MycpuModule {
   asg(cinBit.fromStage1, inBits.toCache2)
   asg(cinBit.ptag, inBits.pTag)
   asg(cinBit.isUncached, inBits.isUncache)
+  import MemType._
+  val isCi       = if (enableCacheInst) io.in.bits.toCache2.cacheInst.get.valid else false.B
+  val isld       = !inBits.isSQ && !isCi
   val cacheMask  = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
-  val ldHitSQ    = !inBits.isSQ && !cacheMask.orR // not write and mem mask==0.U
+  val ldHitSQ    = !cacheMask.orR // not write and mem mask==0.U
   val inIndex    = inBits.toCache2.dCacheReq.get.lowAddr.index
   val cancelUart = inBits.pTag === "h1fe40".U && inIndex === 0.U(cacheIndexWidth.W) && inBits.isUncache === false.B
-  asg(cinBit.cancel, inBits.exDetect.happen || ldHitSQ || cancelUart)
+  asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ || cancelUart) && isld)
   // store req from rostage should not enter cache
   cache2.io.in.valid := io.in.valid
   io.dmem <> cache2.io.dram
@@ -112,24 +115,6 @@ class MemStage2 extends MycpuModule {
     //   3.U -> Cat(validBytes(2), validBytes(1), validBytes(0), validBytes(3))
     // )
   )
-  val lwrWen = LookupUInt(
-    l2sb,
-    Seq(
-      0.U -> "b1111".U,
-      1.U -> "b0111".U,
-      2.U -> "b0011".U,
-      3.U -> "b0001".U
-    )
-  )
-  val lwlWen = LookupUInt(
-    l2sb,
-    Seq(
-      0.U -> "b1000".U,
-      1.U -> "b1100".U,
-      2.U -> "b1110".U,
-      3.U -> "b1111".U
-    )
-  )
   asg(
     io.out.bits.wPrf.result,
     LookupEnum(
@@ -145,10 +130,7 @@ class MemStage2 extends MycpuModule {
       )
     )
   )
-  asg(
-    io.out.bits.wPrf.wmask,
-    Mux(inBits.memType === MemType.LWL, lwlWen, Mux(inBits.memType === MemType.LWR, lwrWen, "b1111".U))
-  )
+  asg(io.out.bits.wPrf.wmask, Mux(isld, "b1111".U(4.W), 0.U))
   // CacheInst =====================================================
   if (enableCacheInst) {
     val inci = io.in.bits.toCache2.cacheInst.get

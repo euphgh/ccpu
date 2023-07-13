@@ -79,9 +79,9 @@ object AllInsts {
       SYNC  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU), //NON
       JRHB  -> List(SRCType.RS, DSTType.noDST, ChiselFuType.MainALU, BranchType.JRHB, SpecialType.HB),
       // for linux
-      MADD  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADD),
-      MADDU -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADDU),
-      MSUB  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MSUB),
+      MADD  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADD, SpecialType.MULDIV),
+      MADDU -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MADDU, SpecialType.MULDIV),
+      MSUB  -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MDU, MduType.MSUB, SpecialType.MULDIV),
       TLBP  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
       TLBR  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),
       TLBWI -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU),

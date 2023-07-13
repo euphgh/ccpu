@@ -38,7 +38,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   // alias  ==========================================================
   val (instValid, srcs, mduType) = (exeStageIO.in.valid, exeIn.srcData, exeIn.uOp.mduType.get)
   val isDiv                      = (mduType.isOneOf(DIV, DIVU)) && instValid
-  val isMult                     = (mduType.isOneOf(MULT, MULTU, MUL)) && instValid
+  val isMult                     = (mduType.isOneOf(MULT, MULTU, MUL, MADD, MADDU, MSUB, MSUBU)) && instValid
+  val notMul                     = mduType =/= MduType.MUL
   val isClz                      = (mduType === CLZ) && instValid
   val isHi                       = (mduType.isOneOf(MFHI, MTHI)) && instValid
   val isLo                       = (mduType.isOneOf(MFLO, MTLO)) && instValid
@@ -156,7 +157,10 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     *   mthi mtlo:write spec,data32 enq
     *   mtc0:data32 enq,mtc0addr enq
     */
-  asg(data64Q.io.enq.valid, (isMult || isDiv) && exeStageIO.out.fire)
+  asg(
+    data64Q.io.enq.valid,
+    ((isMult && notMul) || isDiv) && exeStageIO.out.fire
+  ) //mul no need write hilo
   asg(data32Q.io.enq.valid, (mduType.isOneOf(MTHI, MTLO) || isMtc0) && exeStageIO.out.fire)
   asg(mtc0AddrQ.io.enq.valid, isMtc0 && exeStageIO.out.fire)
   tlbwiReq := instValid && mduType === TLBWI && exeStageIO.out.fire
@@ -170,7 +174,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val wdata64 = data64Q.io.enq.bits
   val wdata32 = data32Q.io.enq.bits
   when(exeStageIO.out.fire) {
-    when(isDiv || isMult) {
+    when(isDiv || (isMult && notMul)) { //mul no need write hilo
       asg(specHi, wdata64(63, 32))
       asg(specLo, wdata64(31, 0))
     }

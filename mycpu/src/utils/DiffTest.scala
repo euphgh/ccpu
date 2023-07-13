@@ -65,18 +65,25 @@ class DiffArchCopIO extends DifftestBundle {
   val config1  = Input(UInt(32.W))
 }
 
-class DiffCacheRunIO(isDcache: Boolean) extends DifftestBundle {
-  val hasValid = Input(Bool())
-  val reqAddr  = Input(UInt(32.W))
-  val hitWays  = Input(UInt(4.W))
-  val retiData = if (!isDcache) Some(Input(Vec(4, UInt(32.W)))) else None
-  val retdData = if (isDcache) Some(Input(UInt(32.W))) else None
-}
+class DiffDCacheIO extends DifftestBundle {
+  val mainState = Input(UInt(4.W))
+  val hasValid  = Input(Bool())
 
-class DiffCacheMissIO extends DifftestBundle {
-  val isMiss     = Input(Bool())
-  val victimData = Input(Vec(8, UInt(32.W)))
-  val vimctmAddr = Input(UInt(32.W))
+  val reqAddr   = Input(UInt(32.W))
+  val isUncache = Input(Bool())
+  val isWrite   = Input(Bool())
+  val writeData = Input(UInt(32.W))
+  val cancel    = Input(Bool())
+
+  val retData    = Input(UInt(32.W))
+  val hitWays    = Input(UInt(2.W))
+  val isHit      = Input(Bool())
+  val victimWay  = Input(UInt(2.W))
+  val vicTag     = Input(UInt(32.W))
+  val vicDirty   = Input(Bool())
+  val vicValid   = Input(Bool())
+  val vicLine    = Input(Input(Vec(8, UInt(32.W))))
+  val writeState = Input(UInt(4.W))
 }
 
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {
@@ -191,5 +198,4 @@ class DifftestArchCP0 extends DifftestBaseModule(new DiffArchCopIO)
 class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegStateIO)
 class DifftestPhyRegInROB extends DifftestBaseModule(new DiffPhyRegInROBIO)
 class DifftestPhyRegInFreeList extends DifftestBaseModule(new DiffPhyRegInFreeListIO)
-class DifftestCacheRun(isDcache: Boolean) extends DifftestBaseModule(new DiffCacheRunIO(isDcache))
-class DifftestCacheMiss extends DifftestBaseModule(new DiffCacheMissIO)
+class DifftestCacheRun extends DifftestBaseModule(new DiffDCacheIO)

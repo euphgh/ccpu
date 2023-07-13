@@ -8,6 +8,7 @@ import chisel3.util._
 import utils.BytesWordUtils._
 import utils._
 import chisel3.util.experimental.BoringUtils._
+import difftest.DifftestCacheRun
 
 /**
   * cache stage2 may block, need Decoupled input
@@ -144,7 +145,7 @@ class CacheStage2[T <: Data](
   val r1data       = Wire(Vec(roads, new DPReadBus(Vec(wordNum, UWord), lineNum)))
   val w1data       = Wire(Vec(roads, new DPWriteBus(Vec(wordNum, UWord), lineNum)))
   val w1meta       = Wire(Vec(roads, new DPWriteBus(new CacheMeta(isDcache), lineNum)))
-  val victimRoad   = RegInit(0.U)
+  val victimWay    = roadSelector.way
   val validDirty =
     if (isDcache) VecInit((0 until roads).map(i => stage1.meta(i).dirty.get && stage1.meta(i).valid)).asUInt
     else 0.U(roads.W)
@@ -216,7 +217,7 @@ class CacheStage2[T <: Data](
   asg(
     aw.bits.addr,
     Cat(
-      LookupUInt(victimRoad, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
+      LookupUInt(victimWay, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
       lowAddr.index,
       0.U(cacheOffsetWidth.W)
     )
@@ -243,11 +244,32 @@ class CacheStage2[T <: Data](
   val ucDBuffer      = if (isDcache) Some(RegInit(0.U(32.W))) else None
   io.in.ready  := false.B // default, only in run state assign
   io.out.valid := false.B // defualt, only in run state assign
+  if (isDcache) {
+    val diffDCache = Module(new DifftestCacheRun)
+    diffDCache.io.clock     := clock
+    diffDCache.io.en        := true.B
+    diffDCache.io.mainState := mainState
+    asg(diffDCache.io.cancel, io.in.bits.cancel)
+    asg(diffDCache.io.hasValid, io.in.valid)
+    asg(diffDCache.io.reqAddr, Cat(inBits.ptag, lowAddr.index, lowAddr.offset))
+    asg(diffDCache.io.isUncache, inBits.isUncached)
+    asg(diffDCache.io.isWrite, stage1.dCacheReq.get.isWrite)
+    asg(diffDCache.io.isHit, hitMask.asUInt.orR)
+    asg(diffDCache.io.hitWays, OHToUInt(hitMask.asUInt))
+    asg(diffDCache.io.retData, io.out.bits.ddata.get)
+    diffDCache.io.writeState := writeState
+    asg(diffDCache.io.writeData, stage1.dCacheReq.get.wWord)
+    asg(diffDCache.io.victimWay, victimWay)
+    asg(diffDCache.io.vicTag, Cat(stage1.meta(victimWay).tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W)))
+    asg(diffDCache.io.vicValid, stage1.meta(victimWay).valid)
+    asg(diffDCache.io.vicDirty, stage1.meta(victimWay).dirty.get)
+    asg(diffDCache.io.vicLine, stage1.dataline.get(victimWay))
+  }
   switch(mainState) {
     is(run) {
       // set refill write sram valid = false.B
-      w1data(victimRoad).req.valid := false.B
-      w1meta(victimRoad).req.valid := false.B
+      w1data(victimWay).req.valid := false.B
+      w1meta(victimWay).req.valid := false.B
       // default: cancel || unvalid
       io.in.ready  := io.out.ready
       io.out.valid := io.in.valid
@@ -276,7 +298,9 @@ class CacheStage2[T <: Data](
             })
           }
         }.otherwise { //cache not hit
-          mainState      := miss
+          mainState := miss
+          // calculate and write next victim way to way status
+          roadSelector.miss
           firstMissCycle := true.B
           // block when not hit
           io.out.valid := false.B
@@ -299,26 +323,25 @@ class CacheStage2[T <: Data](
       // burst count clear
       readCounter.reset()
       // select road, save result reg
-      victimRoad := roadSelector.way
-      // read 4(roads) cachelines for replace
-      asg(
-        wbBuffer,
-        LookupUInt(
-          victimRoad,
-          (0 until roads).map(i => {
-            i.U -> r1data(i).resp.data
-          })
-        )
-      )
-      (0 until roads).map(i => {
-        r1data(i).req.valid := false.B
-      })
+
+      (0 until roads).map(i => { r1data(i).req.valid := false.B })
       // when victim is dirty, tell writeBuffer start work
       // must on first cycle, can only write one times
+      // write to wbBuffer must on first data
       when(firstMissCycle) {
-        writeState     := Mux(validDirty(victimRoad), wReq, wIdel)
+        writeState     := Mux(validDirty(victimWay), wReq, wIdel)
         firstMissCycle := false.B
         assert(writeState === wIdel)
+        // read 4(roads) cachelines for replace
+        asg(
+          wbBuffer,
+          LookupUInt(
+            victimWay,
+            (0 until roads).map(i => {
+              i.U -> r1data(i).resp.data
+            })
+          )
+        )
       }
     }
     is(readDram) {
@@ -372,14 +395,14 @@ class CacheStage2[T <: Data](
       }
       // write axi back data to cache data and metas
       // must first cycle can write, else inBits will not valid
-      w1data(victimRoad).req.valid := true.B && firstRefillCycle
-      w1meta(victimRoad).req.valid := true.B && firstRefillCycle
+      w1data(victimWay).req.valid := true.B && firstRefillCycle
+      w1meta(victimWay).req.valid := true.B && firstRefillCycle
       if (isDcache) {
         when(!dreq.isWrite) {
-          asg(w1data(victimRoad).req.bits.data, readBuffer)
+          asg(w1data(victimWay).req.bits.data, readBuffer)
         }
       } else {
-        asg(w1data(victimRoad).req.bits.data, readBuffer)
+        asg(w1data(victimWay).req.bits.data, readBuffer)
       }
     }
     is(uncache) {
@@ -438,7 +461,7 @@ class CacheStage2[T <: Data](
       // axi bus
       ar.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       ar.bits.burst := BurstType.INCR
-      ar.bits.size  := SizeType.Word.asUInt
+      ar.bits.size  := (if (isDcache) stage1.dCacheReq.get.size else SizeType.Word.asUInt)
       ar.bits.len   := (if (!isDcache) ivalidNum - 1.U else 0.U)
       ar.bits.id    := id
       // wait until ar.fire
@@ -474,9 +497,9 @@ class CacheStage2[T <: Data](
     is(ucAWReq) {
       aw.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       aw.bits.burst := BurstType.INCR
-      aw.bits.size  := SizeType.Word.asUInt
+      aw.bits.size  := (if (isDcache) stage1.dCacheReq.get.size else SizeType.Word.asUInt)
       aw.bits.len   := 0.U
-      ar.bits.id    := id
+      aw.bits.id    := id
       dram.whenAWfire {
         ucState := ucWData
       }

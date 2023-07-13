@@ -173,9 +173,7 @@ class MemStage1 extends MycpuModule {
           }
         }
       }
-      when(io.flush) {
-        state := storeMode
-      }
+
     }
     is(ucloadMode) {
       assert(roDecp.valid)
@@ -205,10 +203,10 @@ class MemStage1 extends MycpuModule {
         roFireOut      := false.B //must can not
         sqFireOut      := toMem2.fire
       }
-      when(io.flush) {
-        state := storeMode
-      }
     }
+  }
+  when(io.flush) {
+    state := storeMode
   }
   //===================== roStage to StoreQ ===========================
 
@@ -266,9 +264,9 @@ class MemStage1 extends MycpuModule {
   // update
   toSQbits.stqEnq.rwReq.size := selectByMemType(
     Seq(
-      0.U(2.W),
-      1.U(2.W),
-      2.U(2.W),
+      0.U(3.W),
+      1.U(3.W),
+      2.U(3.W),
       leftSize,
       rightSize
     ),
@@ -375,6 +373,21 @@ class MemStage1 extends MycpuModule {
         LW  -> "hf".U(4.W),
         LWL -> leftStrob,
         LWR -> rightStrob
+      )
+    )
+    asg(
+      toM2Bits.toCache2.dCacheReq.get.size,
+      LookupEnum(
+        roBits.memType,
+        Seq(
+          LB  -> 0.U(3.W),
+          LBU -> 0.U(3.W),
+          LH  -> 1.U(3.W),
+          LHU -> 1.U(3.W),
+          LW  -> 2.U(3.W),
+          LWL -> leftSize,
+          LWR -> rightSize
+        )
       )
     )
   }.otherwise {

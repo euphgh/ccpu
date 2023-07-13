@@ -90,8 +90,9 @@ object FrontExcCode extends ChiselEnum {
 trait MycpuParam {
   val verilator = true
   val debug     = true
-  val funcTest  = true
+  val funcTest  = false
   val vivado    = !verilator
+  val linux     = false
   // General Parameter for mycpu
 
   val excCodeWidth     = 5

@@ -12,7 +12,8 @@ class Divider extends MycpuModule {
       val srcs   = Vec(srcDataNum, Output(UInt(dataWidth.W)))
       val isSign = Input(Bool())
     }))
-    val out = Valid(UInt(64.W))
+    val out   = Valid(UInt(64.W))
+    val flush = Input(Bool())
   })
   val srcs          = io.in.bits.srcs
   val isSign        = io.in.bits.isSign
@@ -30,6 +31,7 @@ class Divider extends MycpuModule {
   val idle :: work :: finish :: Nil = Enum(3)
   // state
   val state = RegInit(idle)
+  assert(~(io.out.valid & state =/= finish))
   io.out.valid := false.B
   switch(state) {
     is(idle) {
@@ -40,7 +42,7 @@ class Divider extends MycpuModule {
       asg(signQ, (srcs(0)(31) ^ srcs(1)(31)) && isSign)
       asg(signR, srcs(0)(31) && isSign)
       cnt.reset()
-      state := Mux(io.in.valid, work, idle)
+      state := Mux(io.flush, idle, Mux(io.in.valid, work, idle))
       when(io.in.valid) {
         // printf(s"req Signal: %b\n", isSign)
         // printf(s"signQ: %b\n", signQ)
@@ -64,13 +66,13 @@ class Divider extends MycpuModule {
       y3 := y3 >> 2
       asg(quot, (quot << 2)(31, 0) | Cat(0.U(30.W), Cat(!sub3(64) || !sub2(64), !sub3(64) || (sub2(64) && !sub1(64)))))
       val wrap = cnt.inc()
-      state := Mux(wrap, finish, work)
+      state := Mux(io.flush, idle, Mux(wrap, finish, work))
       // printf(s"work count :%d\n", cnt.value)
       // printf(s"quotient :%x\n", quot)
       // printf(s"reminder :%x\n", x)
     }
     is(finish) {
-      io.out.valid := true.B
+      io.out.valid := !io.flush
       state        := idle
       // printf(s"finish count :%d\n", cnt.value)
       // printf(s"quotient :%x\n", quotient)

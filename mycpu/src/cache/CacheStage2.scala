@@ -258,7 +258,7 @@ class CacheStage2[T <: Data](
     asg(diffDCache.io.hitWays, OHToUInt(hitMask.asUInt))
     asg(diffDCache.io.retData, io.out.bits.ddata.get)
     diffDCache.io.writeState := writeState
-    diffDCache.io.writeData  := stage1.dCacheReq.get.wWord
+    asg(diffDCache.io.writeData, stage1.dCacheReq.get.wWord)
     asg(diffDCache.io.victimWay, victimWay)
     asg(diffDCache.io.vicTag, Cat(stage1.meta(victimWay).tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W)))
     asg(diffDCache.io.vicValid, stage1.meta(victimWay).valid)

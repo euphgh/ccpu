@@ -50,7 +50,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   // multiplier ======================================================
   val mul   = Module(new Multiplier)
   val mulIn = mul.io.in.bits
-  mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD))
+  mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD, MUL))
   mulIn.isAdd  := mduType.isOneOf(MADD, MADDU)
   mulIn.isSub  := mduType.isOneOf(MSUB, MSUBU)
   mul.io.flush := io.flush
@@ -142,7 +142,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
 
   // Output ===========================================================================
   exeOut.wPrf.result := MuxCase(
-    blockRes, // include clz and mul, they are blocked and save result in it
+    blockRes, // include clz and mul, they are blocked and save result in it[低32位]
     Seq(
       isHi   -> specHi,
       isLo   -> specLo,

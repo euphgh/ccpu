@@ -44,6 +44,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   asg(outBits.destAregAddr, inBasic.destAregAddr)
   asg(outBits.exDetect, inBasic.exDetect)
   asg(outBits.robIndex, inBasic.robIndex)
+  asg(outBits.prevPDest, inBasic.prevPDest)
   if (debug) asg(outBits.debugPC.get, inBasic.debugPC.get)
 
   /**

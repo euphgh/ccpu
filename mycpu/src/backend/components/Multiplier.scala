@@ -74,9 +74,11 @@ class Multiplier extends MycpuModule {
   ip.io.rst := !this.reset.asBool
   asg(ip.io.A, op(0))
   asg(ip.io.B, op(1))
-  val wirehi = Wire(UWord)
-  val wirelo = Wire(UWord)
-  val mres   = WireInit(0.U(64.W)) //init
+  val wirehi  = Wire(UWord)
+  val wirelo  = Wire(UWord)
+  val mres    = WireInit(0.U(64.W)) //init
+  val mresReg = Reg(UInt(64.W))
+  mresReg := mres
   addSink(wirehi, "specHIdata")
   addSink(wirelo, "specLOdata")
   io.out.valid := false.B
@@ -106,5 +108,5 @@ class Multiplier extends MycpuModule {
       mres := Mux(inBits.isSign, sres.asUInt, ures)
     }
   }
-  asg(io.out.bits, Mux(inBits.isAdd || inBits.isSub, mres, ip.io.P(63, 0)))
+  asg(io.out.bits, Mux(inBits.isAdd || inBits.isSub, mresReg, ip.io.P(63, 0)))
 }

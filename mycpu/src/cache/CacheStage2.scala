@@ -202,7 +202,7 @@ class CacheStage2[T <: Data](
     // when refill read will readbuffer, refill write is newline, write hit is newline
     if (isDcache) asg(w1data(i).req.bits.data, newLineVec)
     else asg(w1data(i).req.bits.data, readBuffer)
-    if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, false.B)
+    if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, stage1.dCacheReq.get.isWrite)
   })
   // Default Bus Assign ========================================================
   // >> AR channel =============================================================

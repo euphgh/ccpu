@@ -280,7 +280,9 @@ class CacheStage2[T <: Data](
       io.out.valid := io.in.valid
       when(!inBits.cancel && io.in.valid) {
         when(isCacheInst) {
-          mainState := instr
+          mainState    := instr
+          io.out.valid := false.B
+          io.in.ready  := false.B
         }.elsewhen(inBits.isUncached) {
           mainState := uncache
           // Uncache automachine change

@@ -62,7 +62,7 @@ class MemStage2 extends MycpuModule {
   io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = cache2.io.out.valid
   // store req from rostage should not wait cache
-  io.out.valid        := cacheFinish && !inBits.isSQ
+  io.out.valid        := Mux(isld, cacheFinish, if (enableCacheInst) cache2.io.cacheInst.finish.get else false.B)
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := Mux(inBits.isSQ, true.B, io.out.ready)
 

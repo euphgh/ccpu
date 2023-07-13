@@ -338,13 +338,6 @@ class MemStage1 extends MycpuModule {
     )
   )
 
-  // val lateMemRdy = toStoreQ.ready && toMem2.ready
-  // if cache Inst isWriteReq will not set, cacheInst goto mem2
-  // toStoreQ.valid := io.in.valid && Mux(
-  //   inBits.isRoStage,
-  //   Mux(isWriteReq, lateMemRdy, false.B),
-  //   false.B
-  // )
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
   val isSQtoMem2 = (state === storeMode) || (state === ucloadMode && !io.stqEmpty)
@@ -403,6 +396,7 @@ class MemStage1 extends MycpuModule {
   if (enableCacheInst) {
     val ci = cache1.io.in.bits.cacheInst.get
     ci <> roBits.cacheInst.get
+    asg(toMem2.bits.toCache2.cacheInst.get, roBits.cacheInst.get)
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
     io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)

@@ -30,7 +30,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   })
 
   //注意，这里的io.in.valid已经代表着pipex_valid
-  val readyGo = true.B
+  val readyGo = WireInit(true.B)
   io.out.valid := io.in.valid && readyGo
   io.in.ready  := !io.in.valid || io.out.ready && readyGo
 
@@ -44,7 +44,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   asg(outBits.destAregAddr, inBasic.destAregAddr)
   asg(outBits.exDetect, inBasic.exDetect)
   asg(outBits.robIndex, inBasic.robIndex)
-  asg(outBits.prevPDest, inBasic.prevPDest)
+  //asg(outBits.prevPDest, inBasic.prevPDest)
   if (debug) asg(outBits.debugPC.get, inBasic.debugPC.get)
 
   /**
@@ -67,6 +67,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     */
   val outSrcs = outBits.srcData
   (0 until srcDataNum).map(i => asg(outSrcs(i), io.datasFromPrf(i))) //default
+  asg(outBits.prevData, io.datasFromPrf(0)) //read prevdata as src0
 
   //alu special
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
@@ -114,6 +115,18 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       }
       when(AluType.needSa(aluType)) { asg(outSrcs(0), ZeroExt(imm(10, 6), 32)) }
       when(isAl) { asg(outSrcs(1), dsPcVal + 4.U) }
+
+      //movzn
+      val blkMaluRo = Wire(Bool())
+      BoringUtils.addSink(blkMaluRo, "blockMaluRo")
+      asg(readyGo, !blkMaluRo)
+      val src0Reg  = RegNext(outSrcs(0))
+      val src1Reg  = RegNext(outSrcs(1))
+      val movznReg = RegNext(blkMaluRo)
+      when(movznReg) {
+        outSrcs(0) := src0Reg
+        outSrcs(1) := src1Reg
+      }
     }
   }
 
@@ -143,6 +156,18 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     }
     outMem.immOffset := inBits.immOffset.get
     outMem.carryout  := addrL12sb(12)
+
+    //lwl lwr
+    val blkLsuRo = Wire(Bool())
+    BoringUtils.addSink(blkLsuRo, "blockLsuRo")
+    asg(readyGo, !blkLsuRo)
+    val src0Reg = RegNext(outSrcs(0))
+    val src1Reg = RegNext(outSrcs(1))
+    val lwlrReg = RegNext(blkLsuRo)
+    when(lwlrReg) {
+      outSrcs(0) := src0Reg
+      outSrcs(1) := src1Reg
+    }
   }
 
   //wake up others

@@ -3,11 +3,13 @@ package backend
 import chisel3._
 import bundle._
 import config._
+import config.MemType._
 import chisel3.util._
 import utils.asg
 import utils.PipelineConnect
 import frontend._
 import cache.TLB
+import chisel3.util.experimental.BoringUtils
 
 class Backend extends MycpuModule {
   val io = IO(new Bundle {
@@ -130,6 +132,7 @@ class Backend extends MycpuModule {
   })
 
   //FU read prf
+  //0->malu  1->salu 2->lsu 3->mdu
   val fuSrcPIdx = (0 until issueNum).map(i => fuIn(i).bits.basic.srcPregs)
   val fuRdata   = (0 until issueNum).map(i => fuIO(i).datasFromPrf)
   val raddrs    = Wire(Vec(issueNum, Vec(srcDataNum, PRegIdx)))
@@ -140,6 +143,29 @@ class Backend extends MycpuModule {
   (0 until issueNum).map(i => {
     (0 until srcDataNum).map(j => fuRdata(i)(j) := rdata(i)(j))
   })
+
+  //special movzn  lwl|lwr
+  val mAluIn     = mAluFU.io.in
+  val mAluInType = mAluIn.bits.uOp.aluType.get
+  val validMovzn = (mAluInType === AluType.MOVN || mAluInType === AluType.MOVZ) && mAluIn.valid
+  val blkMaluRo  = Wire(Bool())
+  val movznReg   = RegNext(blkMaluRo)
+  blkMaluRo := Mux(movznReg || flushBackend, false.B, validMovzn)
+  when(movznReg) {
+    raddrs(0)(0) := mAluIn.bits.basic.prevPDest //malu use readport 0,read prev data as src0
+  }
+  BoringUtils.addSource(blkMaluRo, "blockMaluRo") //to rostage,block
+
+  val lsuIn     = lsuFU.io.in
+  val lsuInType = lsuIn.bits.uOp.memType.get
+  val validLwlr = lsuInType.isOneOf(LWL, LWR)
+  val blkLwlr   = Wire(Bool())
+  val lwlrReg   = RegNext(blkLwlr)
+  blkLwlr := Mux(lwlrReg || flushBackend, false.B, validLwlr)
+  when(lwlrReg) {
+    raddrs(2)(0) := lsuIn.bits.basic.prevPDest //lsu use readport 2,read prev data as src0
+  }
+  BoringUtils.addSource(blkLwlr, "blockLsuRo") //to rostage,block
 
   //FU bypass
   val maBpIn = mAluFU.io.bypassIn.get

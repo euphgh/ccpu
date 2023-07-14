@@ -51,7 +51,7 @@ class MemStage2 extends MycpuModule {
   asg(cinBit.isUncached, inBits.isUncache)
   import MemType._
   val isCi       = if (enableCacheInst) io.in.bits.toCache2.cacheInst.get.valid else false.B
-  val isld       = !inBits.isSQ && !isCi
+  val isld       = !inBits.isSQ && isLoad(inBits.memType)
   val cacheMask  = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
   val ldHitSQ    = !cacheMask.orR // not write and mem mask==0.U
   val inIndex    = inBits.toCache2.dCacheReq.get.lowAddr.index

@@ -235,8 +235,9 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
   val exDetect     = new DetectExInfoBundle
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
   val destAregAddr = Output(ARegIdx)
-  val prevPDest    = Output(PRegIdx)
-  val debugPC      = if (debug) Some(Output(UWord)) else None
+  //val prevPDest    = Output(PRegIdx)
+  val prevData = Output(UWord)
+  val debugPC  = if (debug) Some(Output(UWord)) else None
 
   val uOp = new Bundle {
     val brType  = if (kind == FuType.MainAlu) Some(Output(BranchType())) else None

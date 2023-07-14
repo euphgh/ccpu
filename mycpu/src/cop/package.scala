@@ -143,14 +143,26 @@ package object cop extends MycpuParam {
       val k0   = (2, 0, 0x3, WR)
     }
     class config1(sel: Int = 1, rd: Int = 16) {
-      val m  = (31, 31, 0)
-      val ms = (30, 25, 0xf)
-      val is = (24, 22, 0)
-      val il = (21, 19, 0x5)
-      val ia = (18, 16, 0x1)
-      val ds = (15, 13, 0)
-      val dl = (12, 10, 0x5)
-      val da = (9, 7, 0x1)
+      // val m  = (31, 31, 0)
+      // val ms = (30, 25, 0xf)
+      // val is = (24, 22, 0)
+      // val il = (21, 19, 0x5)
+      // val ia = (18, 16, 0x1)
+      // val ds = (15, 13, 0)
+      // val dl = (12, 10, 0x5)
+      // val da = (9, 7, 0x1)
+
+      val m  = (31, 31, 0) //值为0，表示不存在config2寄存器
+      val ms = (30, 25, 0x7) //TLB大小,7对应8
+
+      val is = (24, 22, 1) //组数目：128
+      val il = (21, 19, 0x4) //行大小：32B
+      val ia = (18, 16, (IcachRoads - 1)) //相联度
+
+      val ds = (15, 13, 1) //128
+      val dl = (12, 10, 0x4) //32B
+      val da = (9, 7, (DcachRoads - 1))
+
       val c2 = (6, 6, 0)
       val md = (5, 5, 0)
       val pc = (4, 4, 0)

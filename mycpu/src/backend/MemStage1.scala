@@ -341,12 +341,12 @@ class MemStage1 extends MycpuModule {
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
   val isSQtoMem2 = (state === storeMode) || (state === ucloadMode && !io.stqEmpty)
-  toM2Bits.isSQ      := Mux(isSQtoMem2, true.B, false.B)
-  toM2Bits.wbInfo    := roBits.wbInfo
-  toM2Bits.memType   := roBits.memType
-  toM2Bits.pTag      := Mux(isSQtoMem2, sqBits.pTag, tlbRes.pTag)
-  toM2Bits.isUncache := CCAttr.isUnCache(Mux(isSQtoMem2, sqBits.cAttr, tlbRes.ccAttr).asUInt)
-
+  toM2Bits.isSQ            := Mux(isSQtoMem2, true.B, false.B)
+  toM2Bits.wbInfo          := roBits.wbInfo
+  toM2Bits.prevDstSrc      := roBits.preDstSrc
+  toM2Bits.memType         := roBits.memType
+  toM2Bits.pTag            := Mux(isSQtoMem2, sqBits.pTag, tlbRes.pTag)
+  toM2Bits.isUncache       := CCAttr.isUnCache(Mux(isSQtoMem2, sqBits.cAttr, tlbRes.ccAttr).asUInt)
   toM2Bits.exDetect.happen := Mux(isSQtoMem2, false.B, outEx.happen)
 
   if (debug) toM2Bits.debugPC.get := Mux(isSQtoMem2, sqBits.debugPC.get, roBits.debugPC.get)

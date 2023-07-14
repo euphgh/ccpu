@@ -33,8 +33,9 @@ class MemStage2 extends MycpuModule {
     val dmem    = new DramIO
     val flush   = Input(Bool()) // for cache instr
   })
-  val outBits = io.out.bits
-  val inBits  = io.in.bits
+  val outBits    = io.out.bits
+  val inBits     = io.in.bits
+  val prevDstSrc = inBits.prevDstSrc
   outBits.wbRob.robIndex     := inBits.wbInfo.robIndex
   outBits.wbRob.isMispredict := false.B
   outBits.wbRob.exDetect     := inBits.exDetect
@@ -93,27 +94,21 @@ class MemStage2 extends MycpuModule {
   // >> not align ==================================================
   val lwl = LookupUInt(
     l2sb,
-    (0 to 3).map(i => {
-      i.U -> Cat(validBytes(i), validBytes((3 + i) % 4), validBytes((2 + i) % 4), validBytes((1 + i) % 4))
-    })
-    // Seq(
-    //   0.U -> Cat(validBytes(0), validBytes(3), validBytes(2), validBytes(1)),
-    //   1.U -> Cat(validBytes(1), validBytes(0), validBytes(3), validBytes(2)),
-    //   2.U -> Cat(validBytes(2), validBytes(1), validBytes(0), validBytes(3)),
-    //   3.U -> Cat(validBytes(3), validBytes(2), validBytes(1), validBytes(0))
-    // )
+    Seq(
+      0.U -> Cat(validBytes(0), prevDstSrc(2), prevDstSrc(1), prevDstSrc(0)),
+      1.U -> Cat(validBytes(1), validBytes(0), validBytes(1), prevDstSrc(0)),
+      2.U -> Cat(validBytes(2), validBytes(1), validBytes(0), prevDstSrc(0)),
+      3.U -> Cat(validBytes(3), validBytes(2), validBytes(1), validBytes(0))
+    )
   )
   val lwr = LookupUInt(
     l2sb,
-    (0 to 3).map(i => {
-      i.U -> Cat(validBytes((3 + i) % 4), validBytes((2 + i) % 4), validBytes((1 + i) % 4), validBytes(i))
-    })
-    // Seq(
-    //   0.U -> Cat(validBytes(3), validBytes(2), validBytes(1), validBytes(0)),
-    //   1.U -> Cat(validBytes(0), validBytes(3), validBytes(2), validBytes(1)),
-    //   2.U -> Cat(validBytes(1), validBytes(0), validBytes(3), validBytes(2)),
-    //   3.U -> Cat(validBytes(2), validBytes(1), validBytes(0), validBytes(3))
-    // )
+    Seq(
+      0.U -> Cat(validBytes(3), validBytes(2), validBytes(1), validBytes(0)),
+      1.U -> Cat(prevDstSrc(3), validBytes(3), validBytes(2), validBytes(1)),
+      2.U -> Cat(prevDstSrc(3), prevDstSrc(2), validBytes(3), validBytes(2)),
+      3.U -> Cat(prevDstSrc(3), prevDstSrc(2), prevDstSrc(1), validBytes(3))
+    )
   )
   asg(
     io.out.bits.wPrf.result,

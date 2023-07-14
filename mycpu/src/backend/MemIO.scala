@@ -39,6 +39,7 @@ class MemStage1InIO extends MycpuBundle {
   val exDetect  = new DetectExInfoBundle
   val memType   = MemType()
   val srcData   = Vec(2, Output(UInt(dataWidth.W)))
+  val preDstSrc = UWord
   val rwReq     = new CacheRWReq
   val cacheInst = if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None
   val immOffset = Output(UInt(16.W))
@@ -47,14 +48,15 @@ class MemStage1InIO extends MycpuBundle {
 }
 
 class MemStage1OutIO extends MycpuBundle {
-  val isSQ      = Bool()
-  val wbInfo    = new WriteBackIO
-  val exDetect  = new DetectExInfoBundle
-  val toCache2  = new CacheStage1OutIO(DcachRoads, 8, true)
-  val pTag      = UInt(tagWidth.W)
-  val isUncache = Bool()
-  val memType   = MemType()
-  val debugPC   = if (debug) Some(UWord) else None
+  val isSQ       = Bool()
+  val wbInfo     = new WriteBackIO
+  val prevDstSrc = UWord
+  val exDetect   = new DetectExInfoBundle
+  val toCache2   = new CacheStage1OutIO(DcachRoads, 8, true)
+  val pTag       = UInt(tagWidth.W)
+  val isUncache  = Bool()
+  val memType    = MemType()
+  val debugPC    = if (debug) Some(UWord) else None
 }
 
 // needMask = sqMask | memMask

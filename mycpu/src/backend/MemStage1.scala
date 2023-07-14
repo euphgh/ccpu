@@ -141,7 +141,7 @@ class MemStage1 extends MycpuModule {
     }
     is(cloadMode) { // only one cycle for any load req
       assert(roDecp.valid)
-      val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt)
+      val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt) && MemType.isLoad(roBits.memType)
       when(isUncache) {
         state             := ucloadMode
         toMem2.valid      := false.B
@@ -404,8 +404,8 @@ class MemStage1 extends MycpuModule {
     val toICache1 = Wire(Valid(new ICacheInstIO))
     addSource(toICache1, "ICacheInstrReq")
     toICache1.bits.index := cache1.io.in.bits.rwReq.get.lowAddr.index
-    toICache1.bits.taglo := cache1.io.in.bits.cacheInst.get.bits.taglo
-    toICache1.bits.op    := cache1.io.in.bits.cacheInst.get.bits.op
-    toICache1.valid      := cache1.io.in.valid && roBits.cacheInst.get.valid
+    toICache1.bits.taglo := ci.bits.taglo
+    toICache1.bits.op    := ci.bits.op
+    toICache1.valid      := cache1.io.in.valid && ci.valid && CacheOp.isIop(ci.bits.op)
   }
 }

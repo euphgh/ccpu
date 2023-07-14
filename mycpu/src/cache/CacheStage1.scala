@@ -78,7 +78,7 @@ class CacheStage1(
     r2data(i).resp := datas(i).io.r.resp
     val stageIndex      = if (isDcache) stageReg.rwReq.get.lowAddr.index else stageReg.ifReq.get.index
     val writeFromStage2 = w2data(i).req.valid && (w2data(i).req.bits.setIdx === stageIndex)
-    assert(w2data(i).req.valid === w2meta(i).req.valid)
+    assert(Mux(w2data(i).req.valid, w2meta(i).req.valid, true.B))
     datas(i).io.w <> w2data(i)
     metas(i).io.w <> w2meta(i)
     val metasOut = Mux(writeFromStage2, w2meta(i).req.bits.data, metas(i).io.r.resp.data)

@@ -141,6 +141,12 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val wakeUpSource = Wire(Valid(PRegIdx))
   wakeUpSource.bits  := io.out.bits.basic.destPregAddr
   wakeUpSource.valid := io.out.fire
+  if (rsKind == FuType.MainAlu) {
+    val outAluType = io.out.bits.uOp.aluType.get
+    when(outAluType === AluType.MOVN || outAluType === AluType.MOVZ) {
+      wakeUpSource.valid := false.B //这两条指令会在ro阶段停两拍，暂时不将他们作为唤醒源
+    }
+  }
 
   val wakeUpReceive = Wire(new WakeUpBroadCast)
   //BoringUtils.addSink(wakeUpReceive.fromLsu, "LsuMem1WakeUp")

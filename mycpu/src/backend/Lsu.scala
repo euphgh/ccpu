@@ -49,7 +49,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
 
   // pipeline connect storeQ/roStage => mem1Stage
   memStage1.io.out.toStoreQ <> storeQ.io.fromMem1
-  storeQ.io.ldFire := memStage2.io.in.fire && !memStage2.io.in.bits.isSQ
+  storeQ.io.ldFire := memStage1.io.out.toMem2.fire && !memStage1.io.out.toMem2.bits.isSQ
   //PipelineConnect(memStage1.io.out.toStoreQ, storeQ.io.fromMem1, storeQ.io.writeBack.fire, io.flush)
 
   // pipeline connect storeQ/roStage => mem1Stage
@@ -86,8 +86,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
 
   io.out.valid := storeQ.io.writeBack.valid || memStage2.io.out.valid
   // select writeback
-  when(storeQ.io.writeBack.valid) {
-    assert(memStage2.io.out.valid === false.B)
-    io.out.bits := storeQ.io.writeBack.bits
-  }
+  memStage2.io.out.ready    := io.out.ready
+  storeQ.io.writeBack.ready := !memStage2.io.out.valid && io.out.ready
+  asg(io.out.bits, Mux(memStage2.io.out.valid, memStage2.io.out.bits, storeQ.io.writeBack.bits))
 }

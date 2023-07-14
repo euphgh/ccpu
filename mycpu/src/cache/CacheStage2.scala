@@ -281,6 +281,7 @@ class CacheStage2[T <: Data](
       when(!inBits.cancel && io.in.valid) {
         when(isCacheInst) {
           mainState    := instr
+          instrState   := decode
           io.out.valid := false.B
           io.in.ready  := false.B
         }.elsewhen(inBits.isUncached) {
@@ -429,7 +430,6 @@ class CacheStage2[T <: Data](
       }
     }
     is(instr) {
-      instrState := decode
       // not return run there, until instrState set mainState to run
     }
   }
@@ -566,7 +566,7 @@ class CacheStage2[T <: Data](
       addSource(io.cacheInst.finish.get, "iCacheFinishInstr")
     }
     io.cacheInst.finish.get := false.B
-    assert(io.in.valid || instrState === instrIdle)
+    assert(io.in.valid || (instrState === instrIdle) || (instrState === waitRetire))
     switch(instrState) {
       is(decode) {
         if (isDcache) {
@@ -599,7 +599,8 @@ class CacheStage2[T <: Data](
       }
       is(hitInv) {
         //defualt not hit
-        instrState := instrIdle
+        // only one cycle in this state
+        instrState := waitRetire
         when(hit) {
           invalidWriteBack(OHToUInt(hitMask), ciOp === CacheOp.HitWriteBackInvalidD)
         }
@@ -613,7 +614,7 @@ class CacheStage2[T <: Data](
         assert(ciOp === CacheOp.IndexStoreTagI || ciOp === CacheOp.IndexStoreTagD)
       }
       is(waitWauto) {
-        instrState := Mux(writeState === waitRetire, instrIdle, waitWauto)
+        instrState := Mux(writeState === wIdel, waitRetire, waitWauto)
       }
       is(waitRetire) {
         io.cacheInst.finish.get := true.B

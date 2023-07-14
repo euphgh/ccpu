@@ -79,6 +79,7 @@ class CacheStage2[T <: Data](
   val isCacheInst = stage1.cacheInst.fold(false.B)(_.valid)
   val imask       = io.in.bits.imask.fold(0.U)(_.asUInt)
   val ivalidNum   = PriorityCount(imask) //count how much instr is valid
+  val tagWay      = inBits.ptag(cacheIndexWidth + log2Ceil(roads) - 1, cacheIndexWidth)
   def dirtyMeta(meta: CacheMeta) = {
     val newMeta = WireInit(meta)
     newMeta.dirty.get := true.B
@@ -137,8 +138,9 @@ class CacheStage2[T <: Data](
   val mainState    = RegInit(run)
   val writeState   = RegInit(wIdel)
   val ucState      = RegInit(ucIdel)
-  val instrState   = RegInit(ucIdel)
+  val instrState   = RegInit(instrIdle)
   val wbBuffer     = Reg(Vec(wordNum, UWord))
+  val wbAddr       = Reg(UWord)
   val readBuffer   = Reg(Vec(wordNum, UWord))
   val readCounter  = Counter(wordNum)
   val writeCounter = Counter(wordNum)
@@ -214,14 +216,7 @@ class CacheStage2[T <: Data](
   asg(ar.valid, false.B)
   asg(r.ready, true.B)
   // >> AW channel ==============================================================
-  asg(
-    aw.bits.addr,
-    Cat(
-      LookupUInt(victimWay, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
-      lowAddr.index,
-      0.U(cacheOffsetWidth.W)
-    )
-  )
+  asg(aw.bits.addr, wbAddr)
   asg(aw.bits.burst, BurstType.INCR)
   asg(aw.bits.size, SizeType.Word.asUInt)
   asg(aw.bits.len, (wordNum - 1).U(4.W))
@@ -294,7 +289,9 @@ class CacheStage2[T <: Data](
           // Uncache automachine change
           assert(ucState === ucIdel)
           if (isDcache) {
-            ucState := Mux(dreq.isWrite, ucAWReq, ucAReq)
+            ucState     := Mux(dreq.isWrite, ucAWReq, ucAReq)
+            wbAddr      := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
+            wbBuffer(0) := dreq.wWord
           } else ucState := ucAReq
           // block when uncache
           io.in.ready  := false.B
@@ -353,6 +350,14 @@ class CacheStage2[T <: Data](
             (0 until roads).map(i => {
               i.U -> r1data(i).resp.data
             })
+          )
+        )
+        asg(
+          wbAddr,
+          Cat(
+            LookupUInt(victimWay, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
+            lowAddr.index,
+            0.U(cacheOffsetWidth.W)
           )
         )
       }
@@ -507,7 +512,6 @@ class CacheStage2[T <: Data](
     }
     // UnCache Write Channel ==========================
     is(ucAWReq) {
-      aw.bits.addr  := Cat(inBits.ptag, lowAddr.index, lowAddr.offset)
       aw.bits.burst := BurstType.INCR
       aw.bits.size  := (if (isDcache) stage1.dCacheReq.get.size else SizeType.Word.asUInt)
       aw.bits.len   := 0.U
@@ -522,7 +526,7 @@ class CacheStage2[T <: Data](
       w.bits.strb := dreq.wStrb
       w.bits.last := true.B
       dram.whenWfire {
-        asg(w.bits.data, dreq.wWord)
+        asg(w.bits.data, wbBuffer(0))
         ucState := Mux(w.bits.last, ucWaitBack, ucWData)
       }
       if (!isDcache) assert(false.B)
@@ -553,6 +557,14 @@ class CacheStage2[T <: Data](
             })
           )
         )
+        asg(
+          wbAddr,
+          Cat(
+            LookupUInt(way, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
+            lowAddr.index,
+            0.U(cacheOffsetWidth.W)
+          )
+        )
         // start write back automation conditionally
         val needWriteBack = validDirty(way) && isWB
         writeState := Mux(needWriteBack, wReq, wIdel)
@@ -561,7 +573,6 @@ class CacheStage2[T <: Data](
       } else instrState := waitRetire // ICache instr not wait write back
     }
 
-    val tagWay            = inBits.ptag(cacheIndexWidth + log2Ceil(roads) - 1, cacheIndexWidth)
     val ciOp              = io.in.bits.fromStage1.cacheInst.get.bits.op
     val iCacheFinishInstr = WireInit(false.B) // for reflect icache finish to dcache
     if (isDcache) {
@@ -599,6 +610,7 @@ class CacheStage2[T <: Data](
         (0 until roads).foreach(r1data(_).req.valid := true.B)
       }
       is(idxInv) {
+        // only one cycle
         invalidWriteBack(tagWay, true.B)
         assert(ciOp === CacheOp.IndexInvalidI || ciOp === CacheOp.IndexWriteBackInvalidD)
       }

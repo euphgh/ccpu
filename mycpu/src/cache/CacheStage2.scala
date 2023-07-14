@@ -260,14 +260,19 @@ class CacheStage2[T <: Data](
     diffDCache.io.writeState := writeState
     asg(diffDCache.io.writeData, stage1.dCacheReq.get.wWord)
     asg(diffDCache.io.victimWay, victimWay)
-    asg(diffDCache.io.vicTag, Cat(stage1.meta(victimWay).tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W)))
-    asg(diffDCache.io.vicValid, stage1.meta(victimWay).valid)
-    asg(diffDCache.io.vicDirty, stage1.meta(victimWay).dirty.get)
-    asg(diffDCache.io.vicLine, stage1.dataline.get(victimWay))
+    asg(
+      diffDCache.io.tagFrom1,
+      VecInit(stage1.meta.map(m => Cat(m.tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W))))
+    )
+    asg(diffDCache.io.validFrom1, VecInit(stage1.meta.map(_.valid)))
+    asg(diffDCache.io.dirtyFrom1, VecInit(stage1.meta.map(_.dirty.get)))
+    asg(diffDCache.io.wbBuffer, wbBuffer)
+    asg(diffDCache.io.wbAddr, wbAddr)
     if (enableCacheInst) {
       asg(diffDCache.io.instrOp, stage1.cacheInst.get.bits.op.asUInt)
-      asg(diffDCache.io.instrOk, io.cacheInst.finish.get)
-      asg(diffDCache.io.instrRetire, io.cacheInst.redirect.get)
+      asg(diffDCache.io.tagWay, tagWay)
+      asg(diffDCache.io.instrState, instrState)
+      asg(diffDCache.io.instrValid, stage1.cacheInst.get.valid)
     }
   }
   switch(mainState) {

@@ -67,6 +67,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
       val wPrfPIdx       = Vec(wBNum, Flipped(Valid(PRegIdx)))
       val flush          = Input(Bool()) //mispredict retire,exception,eret
       val oldestRobIdx   = Input(ROBIdx)
+      val stqEmpty       = Input(Bool())
     }
     val out = Decoupled(new RsOutIO(kind = rsKind))
   })
@@ -100,11 +101,11 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     })
   }
 
-  val slotsRdy = WireInit(
-    VecInit(
-      List.tabulate(rsSize)(i => src1Rdy(i) & src2Rdy(i) & slotsValid(i) & !(blockVec(i) & !isOldestVec(i)))
-    )
-  )
+  val slotsRdy = Wire(Vec(rsSize, Bool()))
+  (0 until rsSize).foreach(i => {
+    val releaseCond = if (rsKind == FuType.Lsu) io.in.stqEmpty && isOldestVec(i) else isOldestVec(i)
+    slotsRdy(i) := src1Rdy(i) && src2Rdy(i) && slotsValid(i) && Mux(blockVec(i), releaseCond, true.B)
+  })
 
   /**
     * ageMask:

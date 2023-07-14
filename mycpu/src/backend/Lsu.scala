@@ -9,10 +9,10 @@ import chisel3.util._
 import chisel3.util.experimental.BoringUtils._
 
 class Lsu extends FuncUnit(FuType.Lsu) {
-  val tlb     = IO(new TLBSearchIO)
-  val dram    = IO(new DramIO)
-  val scommit = IO(Vec(retireNum, Input(Bool())))
-
+  val tlb          = IO(new TLBSearchIO)
+  val dram         = IO(new DramIO)
+  val scommit      = IO(Vec(retireNum, Input(Bool())))
+  val stqEmpty     = IO(Bool())
   val oldestRobIdx = IO(Input(ROBIdx))
 
   // module and alias
@@ -49,6 +49,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
 
   // pipeline connect storeQ/roStage => mem1Stage
   memStage1.io.out.toStoreQ <> storeQ.io.fromMem1
+  storeQ.io.ldFire := memStage2.io.in.fire && !memStage2.io.in.bits.isSQ
   //PipelineConnect(memStage1.io.out.toStoreQ, storeQ.io.fromMem1, storeQ.io.writeBack.fire, io.flush)
 
   // pipeline connect storeQ/roStage => mem1Stage
@@ -81,6 +82,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   storeQ.io.flush := io.flush
   (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
   storeQ.io.writeBack.ready := io.out.ready
+  stqEmpty                  := storeQ.io.empty
 
   io.out.valid := storeQ.io.writeBack.valid || memStage2.io.out.valid
   // select writeback

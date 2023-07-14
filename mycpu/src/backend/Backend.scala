@@ -122,6 +122,7 @@ class Backend extends MycpuModule {
     rsIn.fromDispatcher <> dperToRs(i)
     rsIn.flush        := flushBackend
     rsIn.oldestRobIdx := robOut.oldestIdx
+    rsIn.stqEmpty     := lsuFU.stqEmpty
     (0 until wBNum).map(j => {
       val wbPIdx = rsIn.wPrfPIdx(j)
       asg(wbPIdx.bits, wPrf(j).bits.pDest)

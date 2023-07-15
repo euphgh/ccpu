@@ -141,7 +141,7 @@ class MemStage1 extends MycpuModule {
     }
     is(cloadMode) { // only one cycle for any load req
       assert(roDecp.valid)
-      val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt) || roBits.memType.isOneOf(CACHEINST)
+      val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt) && MemType.isLoad(roBits.memType)
       when(isUncache) {
         state             := ucloadMode
         toMem2.valid      := false.B
@@ -340,22 +340,15 @@ class MemStage1 extends MycpuModule {
     )
   )
 
-  // val lateMemRdy = toStoreQ.ready && toMem2.ready
-  // if cache Inst isWriteReq will not set, cacheInst goto mem2
-  // toStoreQ.valid := io.in.valid && Mux(
-  //   inBits.isRoStage,
-  //   Mux(isWriteReq, lateMemRdy, false.B),
-  //   false.B
-  // )
   //===================== roStage to Mem2 =============================
   // read from rostage write with exception from rostage, write from SQ should to mem2
   val isSQtoMem2 = (state === storeMode) || (state === ucloadMode && !io.stqEmpty)
-  toM2Bits.isSQ      := Mux(isSQtoMem2, true.B, false.B)
-  toM2Bits.wbInfo    := roBits.wbInfo
-  toM2Bits.memType   := roBits.memType
-  toM2Bits.pTag      := Mux(isSQtoMem2, sqBits.pTag, tlbRes.pTag)
-  toM2Bits.isUncache := CCAttr.isUnCache(Mux(isSQtoMem2, sqBits.cAttr, tlbRes.ccAttr).asUInt)
-
+  toM2Bits.isSQ            := Mux(isSQtoMem2, true.B, false.B)
+  toM2Bits.wbInfo          := roBits.wbInfo
+  toM2Bits.prevDstSrc      := roBits.preDstSrc
+  toM2Bits.memType         := roBits.memType
+  toM2Bits.pTag            := Mux(isSQtoMem2, sqBits.pTag, tlbRes.pTag)
+  toM2Bits.isUncache       := CCAttr.isUnCache(Mux(isSQtoMem2, sqBits.cAttr, tlbRes.ccAttr).asUInt)
   toM2Bits.exDetect.happen := Mux(isSQtoMem2, false.B, outEx.happen)
 
   if (debug) toM2Bits.debugPC.get := Mux(isSQtoMem2, sqBits.debugPC.get, roBits.debugPC.get)
@@ -379,6 +372,7 @@ class MemStage1 extends MycpuModule {
   if (enableCacheInst) {
     val ci = cache1.io.in.bits.cacheInst.get
     ci <> roBits.cacheInst.get
+    asg(toMem2.bits.toCache2.cacheInst.get, roBits.cacheInst.get)
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
     io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
@@ -386,9 +380,9 @@ class MemStage1 extends MycpuModule {
     val toICache1 = Wire(Valid(new ICacheInstIO))
     addSource(toICache1, "ICacheInstrReq")
     toICache1.bits.index := cache1.io.in.bits.rwReq.get.lowAddr.index
-    toICache1.bits.taglo := cache1.io.in.bits.cacheInst.get.bits.taglo
-    toICache1.bits.op    := cache1.io.in.bits.cacheInst.get.bits.op
-    toICache1.valid      := cache1.io.in.valid && roBits.cacheInst.get.valid
+    toICache1.bits.taglo := ci.bits.taglo
+    toICache1.bits.op    := ci.bits.op
+    toICache1.valid      := cache1.io.in.valid && ci.valid && CacheOp.isIop(ci.bits.op)
   }
   // LL and SC =================================================
   val llRdyGo = WireInit(toMem2.fire && roBits.memType === LL && !io.flush)

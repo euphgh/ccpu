@@ -288,16 +288,16 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
 
     //movz movn
-    val prevPDest = exeIn.prevPDest
-    val prevData  = Wire(UWord)
-    BoringUtils.addSource(prevPDest, "MOVZNPREVIDX")
-    BoringUtils.addSink(prevData, "MOVZNPREVDATA")
+    // val prevPDest = exeIn.prevPDest
+    // val prevData  = Wire(UWord)
+    // BoringUtils.addSource(prevPDest, "MOVZNPREVIDX")
+    // BoringUtils.addSink(prevData, "MOVZNPREVDATA")
     val isMovzn = aluType === AluType.MOVN || aluType === AluType.MOVZ
     val wprf    = exeOut.wPrf
     val movWen =
       (aluType === AluType.MOVN && !BrHandler.io.rtEqZero) || (aluType === AluType.MOVZ && BrHandler.io.rtEqZero)
     when(isMovzn) {
-      asg(wprf.result, Mux(movWen, srcs(0), prevData))
+      asg(wprf.result, Mux(movWen, srcs(0), exeIn.prevData))
     }
   }
 

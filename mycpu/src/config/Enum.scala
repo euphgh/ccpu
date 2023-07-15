@@ -67,6 +67,12 @@ object MemType extends ChiselEnum {
   def rightPat = BitPat("b0010?")
   def bytePat  = BitPat("b010??")
   def halfPat  = BitPat("b011??")
+  def isLoad(op: MemType.Type) = {
+    op.isOneOf(LW, LL, LB, LBU, LH, LHU, LWL, LWR)
+  }
+  def isStore(op: MemType.Type) = {
+    op.isOneOf(SW, SC, SWL, SWR, SB, SH)
+  }
 }
 object BranchType extends ChiselEnum {
   val BEQ, BNE, BGEZ, BLEZ, BLTZ, BGTZ, BLTZAL, BGEZAL, J, JAL, JR, JALR, JRHB, NON = Value

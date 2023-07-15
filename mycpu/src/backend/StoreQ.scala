@@ -21,6 +21,8 @@ class StoreQueue(entries: Int) extends MycpuModule {
       val backPC = if (debug) Some(Input(UWord)) else None //from mem2
     }
 
+    val ldFire = Input(Bool()) // saying load fire in mem2
+
     val query = Flipped(new QuerySQ) //mem2 load query
     val flush = Input(Bool()) // only flush not retired
     val empty = Output(Bool())
@@ -33,6 +35,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val stqEnq     = mem1InBits.stqEnq
   val inExInfo   = mem1InBits.exDetect
   val inWbInfo   = mem1InBits.wbInfo
+  val queryBits  = io.query.req
 
   //=================== pipe reg =======================
   val fromM1Decp = Wire(Decoupled(new Mem1ToStqIO))
@@ -55,12 +58,9 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val full         = counterMatch && !signMatch
   asg(io.full, full)
   asg(io.empty, empty)
-  // assert((enq_ptr - deq_ptr)(counterWidth - 1) === false.B)
-  // assert((ret_ptr - deq_ptr)(counterWidth - 1) === false.B)
-  // assert((req_ptr - deq_ptr)(counterWidth - 1) === false.B)
 
   //=================== enq =======================
-  fromMem1.ready := (!full || io.deq.back) //&& (!io.fromMem1.valid || io.writeBack.ready)
+  fromMem1.ready := (!full || io.deq.back) && io.writeBack.ready
   when(do_enq && !io.fromMem1.bits.scFail) {
     ram(enq_ptr) := stqEnq
     enq_ptr      := enq_ptr + 1.U
@@ -102,6 +102,8 @@ class StoreQueue(entries: Int) extends MycpuModule {
   }
 
   //=================== query ====================
+  val queryHead = RegEnable(enq_ptr, io.ldFire)
+  assert(Mux(io.ldFire, io.fromMem1.valid === false.B, true.B))
   val addrMatch = WireInit(VecInit.fill(entries)(false.B))
   val strbMatch = WireInit(VecInit.fill(4)(VecInit.fill(entries)(false.B))) //4行 entries列
   (0 until entries).map(i => {
@@ -116,7 +118,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val getMemMask = WireInit(VecInit.fill(4)(false.B))
   (0 until 4).map(i => {
     val matchWen = addrMatch.asUInt & strbMatch(i).asUInt
-    val oneHots  = getOHIndex(enq_ptr, deq_ptr, matchWen, entries)
+    val oneHots  = getOHIndex(queryHead, deq_ptr, matchWen, entries)
     asg(getStqData(i), Mux1H(oneHots, (0 until entries).map(ram(_).rwReq.wWord((i + 1) * 8 - 1, i * 8))))
     asg(getSqMask(i), oneHots.orR)
 

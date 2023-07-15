@@ -70,8 +70,10 @@ class Prf extends MycpuModule {
     })
     addSink(checkArchRegs.io.en, "hasValidRetire")
   }
-  val movznPrevIdx = Wire(PRegIdx)
-  val prevData     = WireInit(phyRegs(movznPrevIdx))
-  addSink(movznPrevIdx, "MOVZNPREVIDX")
-  addSource(prevData, "MOVZNPREVDATA")
+
+  // //movzn
+  // val movznPrevIdx = Wire(PRegIdx)
+  // val prevData     = WireInit(phyRegs(movznPrevIdx))
+  // addSink(movznPrevIdx, "MOVZNPREVIDX")
+  // addSource(prevData, "MOVZNPREVDATA")
 }

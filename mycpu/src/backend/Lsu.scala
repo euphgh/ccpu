@@ -9,10 +9,10 @@ import chisel3.util._
 import chisel3.util.experimental.BoringUtils._
 
 class Lsu extends FuncUnit(FuType.Lsu) {
-  val tlb     = IO(new TLBSearchIO)
-  val dram    = IO(new DramIO)
-  val scommit = IO(Vec(retireNum, Input(Bool())))
-
+  val tlb          = IO(new TLBSearchIO)
+  val dram         = IO(new DramIO)
+  val scommit      = IO(Vec(retireNum, Input(Bool())))
+  val stqEmpty     = IO(Bool())
   val oldestRobIdx = IO(Input(ROBIdx))
 
   // module and alias
@@ -35,6 +35,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1RO.bits.exDetect, roOutBits.exDetect)
   asg(mem1RO.bits.memType, roOutBits.uOp.memType.get)
   asg(mem1RO.bits.srcData, roOutBits.srcData)
+  asg(mem1RO.bits.preDstSrc, roOutBits.prevData)
   asg(mem1RO.bits.rwReq, roOutBits.mem.get.cache.rwReq.get)
   asg(mem1RO.bits.immOffset, roOutBits.mem.get.immOffset)
   asg(mem1RO.bits.carryout, roOutBits.mem.get.carryout)
@@ -48,6 +49,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
 
   // pipeline connect storeQ/roStage => mem1Stage
   memStage1.io.out.toStoreQ <> storeQ.io.fromMem1
+  storeQ.io.ldFire := memStage1.io.out.toMem2.fire && !memStage1.io.out.toMem2.bits.isSQ
   //PipelineConnect(memStage1.io.out.toStoreQ, storeQ.io.fromMem1, storeQ.io.writeBack.fire, io.flush)
 
   // pipeline connect storeQ/roStage => mem1Stage
@@ -80,11 +82,11 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   storeQ.io.flush := io.flush
   (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
   storeQ.io.writeBack.ready := io.out.ready
+  stqEmpty                  := storeQ.io.empty
 
   io.out.valid := storeQ.io.writeBack.valid || memStage2.io.out.valid
   // select writeback
-  when(storeQ.io.writeBack.valid) {
-    assert(memStage2.io.out.valid === false.B)
-    io.out.bits := storeQ.io.writeBack.bits
-  }
+  memStage2.io.out.ready    := io.out.ready
+  storeQ.io.writeBack.ready := !memStage2.io.out.valid && io.out.ready
+  asg(io.out.bits, Mux(memStage2.io.out.valid, memStage2.io.out.bits, storeQ.io.writeBack.bits))
 }

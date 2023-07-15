@@ -79,11 +79,17 @@ class DiffDCacheIO extends DifftestBundle {
   val hitWays    = Input(UInt(2.W))
   val isHit      = Input(Bool())
   val victimWay  = Input(UInt(2.W))
-  val vicTag     = Input(UInt(32.W))
-  val vicDirty   = Input(Bool())
-  val vicValid   = Input(Bool())
-  val vicLine    = Input(Input(Vec(8, UInt(32.W))))
+  val tagFrom1   = Input(Vec(4, UInt(32.W)))
+  val dirtyFrom1 = Input(Vec(4, Bool()))
+  val validFrom1 = Input(Vec(4, Bool()))
+  val wbBuffer   = Input(Input(Vec(8, UInt(32.W))))
+  val wbAddr     = Input(UInt(32.W))
   val writeState = Input(UInt(4.W))
+
+  val instrState = Input(UInt(3.W))
+  val instrValid = Input(Bool())
+  val tagWay     = Input(UInt(2.W))
+  val instrOp    = Input(UInt(5.W))
 }
 
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {

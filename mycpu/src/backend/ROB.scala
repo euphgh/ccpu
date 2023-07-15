@@ -218,11 +218,11 @@ class ROB extends MycpuModule {
     *             else retire it,send mispreFlush next cycle
     */
 
-  val retireInst  = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
-  val doneMask    = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).valid && retireInst(i).done)))
-  val readyRetire = (0 until retireNum).map(i => doneMask.asUInt(i, 0).andR)
-
+  val retireInst   = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).bits)))
+  val doneMask     = WireInit(VecInit((0 until retireNum).map(i => robEntries.io.pop(i).valid && retireInst(i).done)))
+  val readyRetire  = (0 until retireNum).map(i => doneMask.asUInt(i, 0).andR)
   val retireSpType = WireInit(VecInit((0 until retireNum).map(i => retireInst(i).uOp.specialType)))
+  val retirePcVal  = WireInit(VecInit((0 until retireNum).map(i => retireInst(i).exception.basic.pc)))
   //waitNext--msipredict | cacheinst
   val waitNextVec = WireInit(
     VecInit(
@@ -284,7 +284,7 @@ class ROB extends MycpuModule {
 
   //automachine
   object RetireState extends ChiselEnum {
-    val normal, waitNext, misFlush, exerFlush = Value
+    val normal, mpNext, misFlush, exerFlush, ciNext = Value
   }
   import RetireState._
   val hasExer     = exerVec.asUInt.orR
@@ -318,13 +318,14 @@ class ROB extends MycpuModule {
   io.out.mispreFlushBackend := false.B
   io.out.flushAll           := false.B
   io.out.robRedirect.flush  := false.B
+  asg(io.out.robRedirect.target, dstHB.value.bits)
   switch(state) {
     is(normal) {
       when(hasExer && firExEr <= firWaitNext && firExEr <= firSingle) {
         asg(state, exerFlush)
         asg(allowRobPop, VecInit(exerMask.asBools)) //mask itself and the inst behind
       }.elsewhen(hasWaitNext && firWaitNext < firSingle) {
-        asg(state, waitNext)
+        asg(state, Mux(retireSpType(0) === SpecialType.CACHEINST, ciNext, mpNext))
         asg(allowRobPop, VecInit(waitNextMask.asBools)) //mask the inst behind
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
       }.elsewhen(hasSingle) {
@@ -332,10 +333,11 @@ class ROB extends MycpuModule {
         asg(allowRobPop, VecInit(singleRetireMask.asBools))
       }
     }
-    is(waitNext) { //CACHEINST 或 MISPRE(JRHB)转移而来
+    is(mpNext) { //CACHEINST 或 MISPRE(JRHB)转移而来
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B)) //default
       when(readyRetire(0)) {
-        when(exerVec(0) || !retireInst(0).exception.basic.isBd) { //不是分支延迟槽(前一条是CI)或分支延迟槽异常
+        assert(retireInst(0).exception.basic.isBd)
+        when(exerVec(0)) { //ds is exception
           asg(state, exerFlush)
         }.otherwise {
           asg(state, misFlush)
@@ -344,10 +346,20 @@ class ROB extends MycpuModule {
         }
       }
     }
+    is(ciNext) {
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
+      asg(io.out.robRedirect.target, retirePcVal(0))
+      when(robEntries.io.headPtr =/= robEntries.io.tailPtr) {
+        io.out.flushAll          := true.B
+        io.out.robRedirect.flush := true.B
+        asg(state, normal)
+      }
+    }
     is(misFlush) {
       asg(state, normal)
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
       io.out.mispreFlushBackend := true.B
+      asg(io.out.robRedirect.target, dstHB.value.bits)
       when(findHBinRob) {
         io.out.flushAll          := true.B
         io.out.robRedirect.flush := true.B
@@ -358,7 +370,6 @@ class ROB extends MycpuModule {
       asg(state, normal)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
       io.out.flushAll := true.B
-
       when(retireInst(0).exception.detect.happen) { //exception
         io.out.exCommit.valid := true.B
         val exceptType = retireInst(0).exception.detect.excCode
@@ -368,17 +379,10 @@ class ROB extends MycpuModule {
       }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
         io.out.eretFlush := true.B
         allowRobPop(0)   := true.B
-      }.otherwise {
-        io.out.robRedirect.flush := true.B //cacheinst
       }
     }
   }
-  val retirePcVal =
-    WireInit(
-      VecInit((0 until retireNum).map(i => retireInst(i).exception.basic.pc))
-    ) //pc记录在robEntry中
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.flushAll)
-  asg(io.out.robRedirect.target, Mux(state === exerFlush, retirePcVal(0), dstHB.value.bits)) //CI_NEXT或DSTHB
 
   //exception connect
   val oldestInst = retireInst(0)

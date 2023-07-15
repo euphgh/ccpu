@@ -440,6 +440,8 @@ class CacheStage2[T <: Data](
       }
     }
     is(instr) {
+      io.out.valid := false.B
+      io.in.ready  := false.B
       // not return run there, until instrState set mainState to run
     }
   }
@@ -582,7 +584,7 @@ class CacheStage2[T <: Data](
       addSource(io.cacheInst.finish.get, "iCacheFinishInstr")
     }
     io.cacheInst.finish.get := false.B
-    assert(io.in.valid || (instrState === instrIdle) || (instrState === waitRetire))
+    if (isDcache) assert(io.in.valid || (instrState === instrIdle) || (instrState === waitRetire))
     switch(instrState) {
       is(decode) {
         if (isDcache) {

@@ -35,7 +35,7 @@ class MemStage2 extends MycpuModule {
   })
   val outBits    = io.out.bits
   val inBits     = io.in.bits
-  val prevDstSrc = inBits.prevDstSrc
+  val prevDstSrc = word2Bytes(inBits.prevDstSrc)
   outBits.wbRob.robIndex     := inBits.wbInfo.robIndex
   outBits.wbRob.isMispredict := false.B
   outBits.wbRob.exDetect     := inBits.exDetect
@@ -96,7 +96,7 @@ class MemStage2 extends MycpuModule {
     l2sb,
     Seq(
       0.U -> Cat(validBytes(0), prevDstSrc(2), prevDstSrc(1), prevDstSrc(0)),
-      1.U -> Cat(validBytes(1), validBytes(0), validBytes(1), prevDstSrc(0)),
+      1.U -> Cat(validBytes(1), validBytes(0), prevDstSrc(1), prevDstSrc(0)),
       2.U -> Cat(validBytes(2), validBytes(1), validBytes(0), prevDstSrc(0)),
       3.U -> Cat(validBytes(3), validBytes(2), validBytes(1), validBytes(0))
     )

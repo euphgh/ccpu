@@ -312,7 +312,9 @@ class MemStage1 extends MycpuModule {
   val addrErrExp = LookupEnumDefault(roBits.memType, false.B)(
     Seq(
       MemType.SW  -> (l2sb =/= "b00".U),
+      MemType.SC  -> (l2sb =/= "b00".U),
       MemType.LW  -> (l2sb =/= "b00".U),
+      MemType.LL  -> (l2sb =/= "b00".U),
       MemType.SH  -> (l2sb(0) =/= "b0".U),
       MemType.LH  -> (l2sb(0) =/= "b0".U),
       MemType.LHU -> (l2sb(0) =/= "b0".U)

@@ -103,6 +103,7 @@ class ROB extends MycpuModule {
         Valid(new Bundle {
           val toArat  = new RATWriteBackIO //to arat
           val scommit = Output(Bool()) //to storeQ
+          val debugPC = if (debug) Some(Output(UWord)) else None
         })
       )
 
@@ -305,12 +306,12 @@ class ROB extends MycpuModule {
   dstHB.start <> dstHBFromAlu
   dstHB.end := io.out.flushAll || io.out.mispreFlushBackend
   // SC ===========================================================
-  val scMark = Module(new Mark(UInt(0.W)))
-  val scFail = Wire(Flipped(Valid(UInt(0.W))))
+  val scFailMark = Module(new Mark(UInt(0.W)))
+  val scFail     = Wire(Flipped(Valid(UInt(0.W))))
   addSink(scFail, "scFail")
-  scMark.start <> scFail
+  scFailMark.start <> scFail
   // must first because it issue when it is oldest
-  scMark.end := retireSpType(0) === SpecialType.STORE && io.out.multiRetire(0).fire
+  scFailMark.end := retireSpType(0) === SpecialType.STORE && io.out.multiRetire(0).fire
 
   // init
   io.out.eretFlush          := false.B
@@ -373,7 +374,7 @@ class ROB extends MycpuModule {
       when(retireInst(0).exception.detect.happen) { //exception
         io.out.exCommit.valid := true.B
         val exceptType = retireInst(0).exception.detect.excCode
-        when(exceptType === ExcCode.Sys || exceptType === ExcCode.Bp) {
+        when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr)) {
           allowRobPop(0) := true.B
         }
       }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
@@ -415,8 +416,9 @@ class ROB extends MycpuModule {
     // asg(io.out.flRecover(i), retireInst(i).fromDispatcher.prevPDest)
     asg(retireOut.toArat.aDest, retireInst(i).uOp.currADest)
     asg(retireOut.toArat.pDest, retireInst(i).uOp.currPDest)
-    if (i == 0) asg(retireOut.scommit, retireSpType(i) === SpecialType.STORE && !scFail.valid)
+    if (i == 0) asg(retireOut.scommit, retireSpType(i) === SpecialType.STORE && !scFailMark.isSet)
     else asg(retireOut.scommit, retireSpType(i) === SpecialType.STORE)
+    if (debug) asg(retireOut.debugPC.get, robEntries.io.pop(i).bits.debugPC.get)
   })
 
   //singleRetire connect

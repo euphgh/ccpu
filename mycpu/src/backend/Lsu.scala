@@ -12,6 +12,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   val tlb          = IO(new TLBSearchIO)
   val dram         = IO(new DramIO)
   val scommit      = IO(Vec(retireNum, Input(Bool())))
+  val scommitPC    = if (debug) Some(IO(Vec(retireNum, Input(UWord)))) else None
   val stqEmpty     = IO(Bool())
   val oldestRobIdx = IO(Input(ROBIdx))
 
@@ -80,7 +81,10 @@ class Lsu extends FuncUnit(FuType.Lsu) {
 
   // storeQ to outside
   storeQ.io.flush := io.flush
-  (0 until retireNum).foreach(i => { storeQ.io.retire(i) := scommit(i) })
+  (0 until retireNum).foreach(i => {
+    storeQ.io.retire(i)                  := scommit(i)
+    if (debug) storeQ.io.retirePC.get(i) := scommitPC.get(i)
+  })
   storeQ.io.writeBack.ready := io.out.ready
   stqEmpty                  := storeQ.io.empty
 

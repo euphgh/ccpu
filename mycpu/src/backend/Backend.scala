@@ -193,7 +193,10 @@ class Backend extends MycpuModule {
   asg(prf.io.writePorts, wPrf) //WB->Prf
 
   //lsu extra
-  (0 until retireNum).map(i => asg(lsuFU.scommit(i), mulRe(i).valid && mulRe(i).bits.scommit))
+  (0 until retireNum).foreach(i => {
+    asg(lsuFU.scommit(i), mulRe(i).valid && mulRe(i).bits.scommit)
+    if (debug) asg(lsuFU.scommitPC.get(i), mulRe(i).bits.debugPC.get)
+  })
   lsuFU.dram <> io.dram
   asg(lsuFU.oldestRobIdx, robOut.oldestIdx)
 

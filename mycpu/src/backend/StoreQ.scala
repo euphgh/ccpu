@@ -14,7 +14,8 @@ class StoreQueue(entries: Int) extends MycpuModule {
     val fromMem1  = Flipped(Decoupled(new Mem1ToStqIO)) //mem1 ro store
     val writeBack = Decoupled(new FunctionUnitOutIO) //writeback
 
-    val retire = Vec(retireNum, Input(Bool())) //from rob commit
+    val retire   = Vec(retireNum, Input(Bool())) //from rob commit
+    val retirePC = if (debug) Some(Input(Vec(retireNum, UWord))) else None
     val deq = new Bundle {
       val req    = Decoupled(new StoreQIO) //to mem1
       val back   = Input(Bool()) //from mem2
@@ -87,6 +88,13 @@ class StoreQueue(entries: Int) extends MycpuModule {
   when(io.retire.asUInt.orR) {
     val scommitNum = PopCount(io.retire.asUInt)
     ret_ptr := ret_ptr + scommitNum
+    if (debug) {
+      (0 until retireNum).foreach(i => {
+        when(io.retire(i)) {
+          assert(ram(ret_ptr + OHToUInt(CountMask.oneHot(io.retire.asUInt(i, 0)))).debugPC.get === io.retirePC.get(i))
+        }
+      })
+    }
   }
 
   //=================== deq =======================

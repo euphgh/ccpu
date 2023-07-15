@@ -159,7 +159,7 @@ class Backend extends MycpuModule {
 
   val lsuIn     = lsuFU.io.in
   val lsuInType = lsuIn.bits.uOp.memType.get
-  val validLwlr = lsuInType.isOneOf(LWL, LWR)
+  val validLwlr = lsuInType.isOneOf(LWL, LWR) && lsuIn.valid
   val blkLwlr   = Wire(Bool())
   val lwlrReg   = RegNext(blkLwlr)
   blkLwlr := Mux(lwlrReg || flushBackend, false.B, validLwlr)

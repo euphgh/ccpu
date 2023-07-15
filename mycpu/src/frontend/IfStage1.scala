@@ -280,7 +280,7 @@ class IfStage1 extends MycpuModule {
     val ci = icacheInst.get
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
-    io.tlb.req.valid := ci.valid && !CacheOp.isHitInv(ci.bits.op)
+    io.tlb.req.valid := ci.valid && !CacheOp.isIdxInv(ci.bits.op)
   }
 
   asg(io.out.valid, true.B)

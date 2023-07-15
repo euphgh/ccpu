@@ -19,6 +19,7 @@ class CountLeadZero extends MycpuModule {
   val tmp                       = RegInit(0.U(32.W))
   val idle :: run :: res :: Nil = Enum(3)
   val state                     = RegInit(run)
+  val bit                       = RegInit(false.B)
   io.out.valid := false.B
   assert(~(io.out.valid & state =/= res))
   switch(state) {
@@ -26,11 +27,17 @@ class CountLeadZero extends MycpuModule {
       state := Mux(io.in.valid, run, idle)
       sum   := 0.U
       tmp   := inBits.src
+      bit   := Mux(inBits.zero, false.B, true.B)
       widthCounter.reset()
     }
     is(run) {
-      sum   := sum + (tmp(31) === inBits.zero)
-      state := Mux(widthCounter.inc(), res, run)
+      when(tmp(31) === bit) {
+        sum   := sum + 1.U
+        tmp   := tmp << 1;
+        state := Mux(widthCounter.inc(), res, run)
+      }.otherwise {
+        state := res
+      }
     }
     is(res) {
       state        := idle

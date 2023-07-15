@@ -59,7 +59,7 @@ class TLB extends MycpuModule {
 
   (0 until 2).foreach(i => {
     val searchAddr = search(i).req.bits
-    dir(i) := ((searchAddr === "b10".U) && erl || !search(i).req.valid)
+    dir(i) := ((searchAddr(31, 30) === "b10".U) && erl || !search(i).req.valid)
     // direct result
     val dirRes = Wire(new TLBSearchRes)
     dirRes.refill := false.B

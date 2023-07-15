@@ -318,7 +318,8 @@ class ROB extends MycpuModule {
   io.out.exCommit.valid     := false.B
   io.out.mispreFlushBackend := false.B
   io.out.flushAll           := false.B
-  io.out.robRedirect.flush  := false.B
+  addSource(io.out.flushAll, "ROB_FLUSH_ALL")
+  io.out.robRedirect.flush := false.B
   asg(io.out.robRedirect.target, dstHB.value.bits)
   switch(state) {
     is(normal) {
@@ -489,10 +490,6 @@ class ROB extends MycpuModule {
       ) + i.U
       io.out.flRecover(i).bits := retireInst(sel).uOp.prevPDest
     }
-    // ROB push ready ===============================================================
-    // (0 until dispatchNum).foreach(i => {
-    //   io.in.fromDispatcher(i).ready := robEntries.io.push(i).ready && !robEntries.io.flush
-    // })
   }
   //DiffTest ===================================================
   import difftest.DifftestInstrCommit

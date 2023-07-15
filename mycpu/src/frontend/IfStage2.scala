@@ -6,6 +6,7 @@ import chisel3.util._
 import utils._
 import cache._
 import decodemacro.MacroDecode
+import chisel3.util.experimental.BoringUtils._
 
 /**
   * out.predictResult := stage1.out.bpuOut(bpuOut.takenMask become a "taken" bit)
@@ -29,10 +30,9 @@ import decodemacro.MacroDecode
   */
 class IfStage2 extends Module with MycpuParam {
   val io = IO(new Bundle {
-    val in       = Flipped(Decoupled(new IfStage1OutIO))
-    val out      = Decoupled(new IfStage2OutIO)
-    val imem     = new DramReadIO
-    val ciRetire = Input(Bool())
+    val in   = Flipped(Decoupled(new IfStage1OutIO))
+    val out  = Decoupled(new IfStage2OutIO)
+    val imem = new DramReadIO
 
     val noBrMispreRedirect = new FrontRedirctIO
     val bpuUpdate          = Decoupled(new BpuUpdateIO)
@@ -49,7 +49,9 @@ class IfStage2 extends Module with MycpuParam {
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
   asg(icache2.io.in.bits.imask.get, io.in.bits.validMask)
   if (enableCacheInst) {
-    icache2.io.cacheInst.redirect.get := io.ciRetire
+    val robFlushAll = Wire(Bool())
+    addSink(robFlushAll, "ROB_FLUSH_ALL")
+    icache2.io.cacheInst.redirect.get := robFlushAll
   }
   io.imem.ar <> icache2.dram.ar
   io.imem.r <> icache2.dram.r

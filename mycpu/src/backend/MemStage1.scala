@@ -389,12 +389,12 @@ class MemStage1 extends MycpuModule {
     toICache1.valid      := cache1.io.in.valid && ci.valid && CacheOp.isIop(ci.bits.op)
   }
   // LL and SC =================================================
-  val llRdyGo = WireInit(toMem2.fire && roBits.memType === LL && !io.flush)
+  val llRdyGo = WireInit(toMem2.fire && roBits.memType === LL && !io.flush && !outEx.happen)
   addSource(llRdyGo, "llWen")
 
   val llbitInMem1 = Wire(Bool())
   addSink(llbitInMem1, "llbit")
-  io.out.toStoreQ.bits.scFail := !llbitInMem1 && roBits.memType === SC
+  toSQbits.scFail := !llbitInMem1 && roBits.memType === SC && !outEx.happen
   val scFailMark = Wire(Valid(UInt(0.W)))
   scFailMark.bits  := DontCare
   scFailMark.valid := toStoreQ.fire && toSQbits.scFail && !io.flush

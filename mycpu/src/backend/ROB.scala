@@ -233,10 +233,12 @@ class ROB extends MycpuModule {
     )
   )
   //exception | eret
+  val hasInt = Wire(Bool())
+  addSink(hasInt, "hasInterrupt")
   val exerVec = WireInit(
     VecInit(
       (0 until retireNum).map(i =>
-        (retireInst(i).exception.detect.happen || retireSpType(i) === SpecialType.ERET) &&
+        (retireInst(i).exception.detect.happen || retireSpType(i) === SpecialType.ERET || hasInt) &&
           readyRetire(i)
       )
     )
@@ -372,7 +374,7 @@ class ROB extends MycpuModule {
       asg(state, normal)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
       io.out.flushAll := true.B
-      when(retireInst(0).exception.detect.happen) { //exception
+      when(retireInst(0).exception.detect.happen || hasInt) { //exception
         io.out.exCommit.valid := true.B
         val exceptType = retireInst(0).exception.detect.excCode
         when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr)) {
@@ -410,6 +412,9 @@ class ROB extends MycpuModule {
   )
   asg(exCommit.basic, oldestInst.exception.basic)
   asg(exCommit.detect, oldestInst.exception.detect)
+  when(hasInt) {
+    exCommit.detect.excCode := ExcCode.Int
+  }
 
   //multiRetire connect
   List.tabulate(retireNum)(i => {

@@ -83,7 +83,7 @@ class TLB extends MycpuModule {
     assert(PopCount(hitMask(i) & validMask1) < 2.U)
     val hitEntry = Mux1H(hitMask(i), entries)
     val isOdd    = searchAddr(12)
-    tlbRes(i).refill := hitMask(i).asUInt.orR
+    tlbRes(i).refill := hitMask(i).asUInt.orR === false.B
     // if refill set hit will not valid
     tlbRes(i).hit   := Mux(isOdd, hitEntry.v1, hitEntry.v0)
     tlbRes(i).dirty := Mux(isOdd, hitEntry.d1, hitEntry.d0)

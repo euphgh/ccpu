@@ -153,10 +153,10 @@ class CacheStage2[T <: Data](
     else 0.U(roads.W)
   val newLine = WireInit(0.U((dataWidth * wordNum).W)) //init
   if (isDcache) {
-    val oldWord = Mux1H(hitMask, stage1.ddata.get)
+    val wordSel = lowAddr.offset >> 2
+    val oldWord = Mux(mainState === refill, readBuffer(wordSel), Mux1H(hitMask, stage1.ddata.get))
     val oldLine = Mux(mainState === refill, readBuffer, Mux1H(hitMask, stage1.dataline.get))
     val newWord = maskWord(dreq.wWord, dreq.wStrb).asUInt | maskWord(oldWord, ~dreq.wStrb).asUInt
-    val wordSel = lowAddr.offset >> 2
     asg(
       newLine,
       MuxCase(

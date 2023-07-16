@@ -142,7 +142,10 @@ class CP0 extends BasicCOP with MycpuParam {
   addSource(statusReg, "status")
 
   //Interrupt input
-  asg(causeReg.iph7, io.in.extInt(5) || causeReg.ti.asBool)
+  asg(causeReg.iph7, causeReg.iph7.asBool || io.in.extInt(5) || (countReg.all === compareReg.all))
+  when(compareWen) {
+    causeReg.iph7 := false.B
+  }
   asg(causeReg.iph6, io.in.extInt(4))
   asg(causeReg.iph5, io.in.extInt(3))
   asg(causeReg.iph4, io.in.extInt(2))
@@ -187,8 +190,10 @@ class CP0 extends BasicCOP with MycpuParam {
     difftestCP0.io.ebase    := ebaseReg.read
     difftestCP0.io.config0  := config0Reg.read
     difftestCP0.io.config1  := config1Reg.read
-    val checkCp0En = RegNext(io.in.eretFlush || io.in.mtc0.wen || io.in.exCommit.valid || tlbpWreq || tlbrReq)
-    asg(difftestCP0.io.en, checkCp0En)
+    // val checkCp0En = RegNext()
+    // val checkCp0En = RegNext(io.in.eretFlush || io.in.mtc0.wen || io.in.exCommit.valid || tlbpWreq || tlbrReq)
+    // asg(difftestCP0.io.en, checkCp0En)
+    addSink(difftestCP0.io.en, "hasValidRetire")
   }
 
 }

@@ -73,9 +73,6 @@ package object cop extends MycpuParam {
     }
     class compare(sel: Int = 0, rd: Int = 11) {
       val all = (31, 0, 0, WR)
-      def write(data: UInt) = {
-        causeReg.ti := 0.U
-      }
     }
     class status(sel: Int = 0, rd: Int = 12) {
       val cu321  = (31, 29, 0)
@@ -107,11 +104,6 @@ package object cop extends MycpuParam {
       val z7_7    = (7, 7, 0)
       val exccode = (6, 2, 0)
       val z1_0    = (1, 0, 0)
-      def create = {
-        when((countReg.all === compareReg.all) && !compareWen) {
-          causeReg.ti := 1.U
-        }
-      }
     }
     class epc(sel: Int = 0, rd: Int = 14) {
       val all = (31, 0, 0, WR)

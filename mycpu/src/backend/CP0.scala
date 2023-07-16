@@ -88,14 +88,12 @@ class CP0 extends BasicCOP with MycpuParam {
     when(statusReg.exl === 0.U) {
       causeReg.bd := exCommit.basic.isBd
       epcReg.all  := Mux(exCommit.basic.isBd, exCommit.basic.pc - 4.U, exCommit.basic.pc)
-      trapOffs := Mux(
-        exCommit.detect.refill,
-        0.U(32.W),
-        (Mux(
-          excCode === ExcCode.Int && causeReg.iv === 1.U && statusReg.bev === 1.U,
-          0x200.U(32.W),
-          0x180.U(32.W)
-        ))
+      trapOffs := MuxCase(
+        0x180.U(32.W),
+        Seq(
+          (excCode.isOneOf(ExcCode.TLBL, ExcCode.TLBS) && exCommit.detect.refill) -> 0.U(32.W),
+          (excCode === ExcCode.Int && causeReg.iv === 1.U)                        -> 0x200.U(32.W)
+        )
       )
     }
   }

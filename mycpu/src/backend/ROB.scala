@@ -503,24 +503,14 @@ class ROB extends MycpuModule {
     val difftestRetire = Module(new DifftestInstrCommit)
     difftestRetire.io.clock := clock
     val retireInt = io.out.exCommit.valid && (io.out.exCommit.bits.detect.excCode === ExcCode.Int)
-    difftestRetire.io.retireNum := RegNext(
-      Mux(retireInt, 1.U, PopCount((0 until retireNum).map(io.out.multiRetire(_).valid)))
+    difftestRetire.io.retireNum := Mux(retireInt, 1.U, PopCount((0 until retireNum).map(io.out.multiRetire(_).valid)))
+    difftestRetire.io.lastPC := PriorityMux(
+      (0 until retireNum).map(i => { io.out.multiRetire(i).valid -> retirePcVal(i) }).reverse
     )
-    difftestRetire.io.lastPC := RegNext(
-      PriorityMux(
-        (0 until retireNum)
-          .map(i => {
-            io.out.multiRetire(i).valid -> retirePcVal(i)
-          })
-          .reverse
-      )
-    )
-    difftestRetire.io.interrSeq := RegNext(
-      Mux(retireInt, 0.U, retireNum.U)
-    )
-    difftestRetire.io.en := true.B
+    difftestRetire.io.interrSeq := Mux(retireInt, 0.U, retireNum.U)
+    difftestRetire.io.en        := true.B
     val validRetire = Wire(Bool())
-    validRetire := difftestRetire.io.retireNum > 0.U
+    validRetire := RegNext(difftestRetire.io.retireNum > 0.U)
     addSource(validRetire, "hasValidRetire")
 
     val difftestPyhROB = Module(new DifftestPhyRegInROB)

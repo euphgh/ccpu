@@ -44,6 +44,8 @@ class CP0 extends BasicCOP with MycpuParam {
     }
     val redirectTarget = Output(UWord) //eret exception redirect target
   })
+  val hasValidRetire = Wire(Bool())
+  addSink(hasValidRetire, "hasValidRetire")
   val exCommit = io.in.exCommit.bits
   val badVaddr = exCommit.badVaddr
   val excCode  = exCommit.detect.excCode
@@ -96,6 +98,11 @@ class CP0 extends BasicCOP with MycpuParam {
         )
       )
     }
+  }
+  // random
+  randomReg.random := Mux(randomReg.random === wireReg.wire, (tlbEntriesNum - 1).U, randomReg.random - 1.U)
+  when(wireWen) {
+    randomReg.random := (tlbEntriesNum - 1).U
   }
 
   // TLB instr ===========================================
@@ -188,10 +195,7 @@ class CP0 extends BasicCOP with MycpuParam {
     difftestCP0.io.ebase    := ebaseReg.read
     difftestCP0.io.config0  := config0Reg.read
     difftestCP0.io.config1  := config1Reg.read
-    // val checkCp0En = RegNext()
-    // val checkCp0En = RegNext(io.in.eretFlush || io.in.mtc0.wen || io.in.exCommit.valid || tlbpWreq || tlbrReq)
-    // asg(difftestCP0.io.en, checkCp0En)
-    addSink(difftestCP0.io.en, "hasValidRetire")
+    difftestCP0.io.en       := hasValidRetire
   }
 
 }

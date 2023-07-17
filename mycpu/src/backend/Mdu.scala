@@ -89,6 +89,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   addSource(tlbrReq, "tlbrReq")
   addSource(tlbwiReq, "tlbwiReq")
   addSource(tlbwrReq, "tlbwrReq")
+  addSource(exeIn.debugPC.get, "mduPC")
 
   val fuOutValid = List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
   //List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)

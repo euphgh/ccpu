@@ -92,6 +92,26 @@ class DiffDCacheIO extends DifftestBundle {
   val instrOp    = Input(UInt(5.W))
 }
 
+class DiffTLBIO extends DifftestBundle with MycpuParam {
+  val g    = Input(Vec(tlbEntriesNum, Bool()))
+  val v0   = Input(Vec(tlbEntriesNum, Bool()))
+  val v1   = Input(Vec(tlbEntriesNum, Bool()))
+  val d0   = Input(Vec(tlbEntriesNum, Bool()))
+  val d1   = Input(Vec(tlbEntriesNum, Bool()))
+  val c0   = Input(Vec(tlbEntriesNum, UInt(3.W)))
+  val c1   = Input(Vec(tlbEntriesNum, UInt(3.W)))
+  val pfn0 = Input(Vec(tlbEntriesNum, UInt(20.W)))
+  val pfn1 = Input(Vec(tlbEntriesNum, UInt(20.W)))
+  val vpn2 = Input(Vec(tlbEntriesNum, UInt(19.W)))
+  val asid = Input(Vec(tlbEntriesNum, UInt(8.W)))
+  val rand = Input(UInt(tlbIndexWidth.W))
+  val iswr = Input(Bool())
+  val pc   = Input(UInt(32.W))
+}
+class DiffTLBWRIO extends DifftestBundle with MycpuParam {
+  val rand = Input(UInt(tlbIndexWidth.W))
+}
+
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {
   val io: T
 
@@ -179,7 +199,7 @@ abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExt
          |`ifdef VERILATOR
          |$dpicDecl
          |${argToVec.mkString}
-         |  always @(posedge io_clock) begin
+         |  always @(negedge io_clock) begin
          |    if (io_en) begin
          |      $dpicName (${funcCallStr.mkString(",")});
          |    end 
@@ -205,3 +225,4 @@ class DifftestArchIntRegState extends DifftestBaseModule(new DiffArchIntRegState
 class DifftestPhyRegInROB extends DifftestBaseModule(new DiffPhyRegInROBIO)
 class DifftestPhyRegInFreeList extends DifftestBaseModule(new DiffPhyRegInFreeListIO)
 class DifftestCacheRun extends DifftestBaseModule(new DiffDCacheIO)
+class DifftestTLBAll extends DifftestBaseModule(new DiffTLBIO)

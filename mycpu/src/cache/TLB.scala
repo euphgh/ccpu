@@ -6,10 +6,11 @@ import bundle.TLBEntry
 import bundle._
 import chisel3.util._
 import utils._
+import difftest.DifftestTLBAll
 
 class TLB extends MycpuModule {
   val search  = IO(Vec(2, Flipped(new TLBSearchIO)))
-  val entries = RegInit(VecInit(Seq.fill(tlbEntriesNum)(0.U.asTypeOf(new TLBEntry))))
+  val entries = RegInit(VecInit.fill(tlbEntriesNum)(0.U.asTypeOf(new TLBEntry)))
   //Reg(VecInit.fill(tlbEntriesNum)(0.U.asTypeOf(new TLBEntry)))
   // aliases =======================================
   import cop._
@@ -113,4 +114,23 @@ class TLB extends MycpuModule {
   tlbpRes   := (dir(0) || dir(1)) && tlbpReq
   tlbpFound := Mux(dir(0), hitMask(0).orR, hitMask(1).orR)
   tlbpIndex := Mux(dir(0), OHToUInt(hitMask(0)), OHToUInt(hitMask(1)))
+  val difftestTLB = Module(new DifftestTLBAll)
+  asg(difftestTLB.io.g, VecInit(entries.map(e => e.g)))
+  asg(difftestTLB.io.v0, VecInit(entries.map(e => e.v0)))
+  asg(difftestTLB.io.v1, VecInit(entries.map(e => e.v1)))
+  asg(difftestTLB.io.d0, VecInit(entries.map(e => e.d0)))
+  asg(difftestTLB.io.d1, VecInit(entries.map(e => e.d1)))
+  asg(difftestTLB.io.c0, VecInit(entries.map(e => e.c0)))
+  asg(difftestTLB.io.c1, VecInit(entries.map(e => e.c1)))
+  asg(difftestTLB.io.pfn0, VecInit(entries.map(e => e.pfn0)))
+  asg(difftestTLB.io.pfn1, VecInit(entries.map(e => e.pfn1)))
+  asg(difftestTLB.io.vpn2, VecInit(entries.map(e => e.vpn2)))
+  asg(difftestTLB.io.asid, VecInit(entries.map(e => e.asid)))
+  difftestTLB.io.clock := clock
+  difftestTLB.io.en    := RegNext(tlbwiReq || tlbwrReq || reset.asBool)
+  difftestTLB.io.rand  := RegNext(randomReg.random)
+  asg(difftestTLB.io.iswr, RegNext(tlbwrReq))
+  val mduPC = Wire(UWord)
+  addSink(mduPC, "mduPC")
+  difftestTLB.io.pc := RegNext(mduPC)
 }

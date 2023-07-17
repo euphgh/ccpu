@@ -84,9 +84,8 @@ class TLB extends MycpuModule {
     val hitEntry = Mux1H(hitMask(i), entries)
     val isOdd    = searchAddr(12)
     tlbRes(i).refill := hitMask(i).asUInt.orR === false.B
-    // if refill set hit will not valid
-    tlbRes(i).hit   := Mux(isOdd, hitEntry.v1, hitEntry.v0)
-    tlbRes(i).dirty := Mux(isOdd, hitEntry.d1, hitEntry.d0)
+    tlbRes(i).hit    := Mux(isOdd, hitEntry.v1, hitEntry.v0) && !tlbRes(i).refill
+    tlbRes(i).dirty  := Mux(isOdd, hitEntry.d1, hitEntry.d0) && tlbRes(i).hit
     asg(tlbRes(i).pTag, getTag(Cat(Mux(isOdd, hitEntry.pfn1, hitEntry.pfn0), (searchAddr(i) & "hfff".U(12.W)))))
     tlbRes(i).ccAttr := Mux(isOdd, CCAttr.safe(hitEntry.c1)._1, CCAttr.safe(hitEntry.c0)._1)
 

@@ -308,7 +308,7 @@ class MemStage1 extends MycpuModule {
   // only from RoStage has Exception, fromSQ no exception
   val isWriteReq = roBits.rwReq.isWrite
   val tlbExp     = (tlbRes.refill || !tlbRes.hit) || (isWriteReq && tlbRes.dirty)
-  val tlbExcCode = Mux(isWriteReq, Mux(tlbRes.dirty, ExcCode.TLBS, ExcCode.Mod), ExcCode.TLBL)
+  val tlbExcCode = Mux(isWriteReq, Mux(tlbRes.dirty, ExcCode.Mod, ExcCode.TLBS), ExcCode.TLBL)
   val addrErrExp = LookupEnumDefault(roBits.memType, false.B)(
     Seq(
       MemType.SW  -> (l2sb =/= "b00".U),

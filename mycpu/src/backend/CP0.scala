@@ -6,6 +6,7 @@ import cop._
 import utils._
 import chisel3.util.experimental.BoringUtils._
 import chisel3.util._
+import config.MycpuInit.{CP0Reset, LLBITReset}
 
 class Mtc0Bundle extends MycpuBundle {
   val wen   = Output(Bool())
@@ -30,7 +31,7 @@ class Mtc0Bundle extends MycpuBundle {
   * we have make sure that at 1 cycle
   *   at most 1 inst can retire to CP0!
   */
-class CP0 extends BasicCOP with MycpuParam {
+class CP0 extends BasicCOP(CP0Reset) with MycpuProperties {
   val io = IO(new Bundle {
     val in = new Bundle {
       val eretFlush = Input(Bool())
@@ -44,12 +45,10 @@ class CP0 extends BasicCOP with MycpuParam {
     }
     val redirectTarget = Output(UWord) //eret exception redirect target
   })
-  val hasValidRetire = Wire(Bool())
-  addSink(hasValidRetire, "hasValidRetire")
   val exCommit = io.in.exCommit.bits
   val badVaddr = exCommit.badVaddr
   val excCode  = exCommit.detect.excCode
-  val llbit    = RegInit(false.B)
+  val llbit    = RegInit(LLBITReset)
   addSource(llbit, "llbit")
 
   // write llbits
@@ -195,7 +194,6 @@ class CP0 extends BasicCOP with MycpuParam {
     difftestCP0.io.ebase    := ebaseReg.read
     difftestCP0.io.config0  := config0Reg.read
     difftestCP0.io.config1  := config1Reg.read
-    difftestCP0.io.en       := hasValidRetire
+    addSink(difftestCP0.io.en, "hasValidRetire")
   }
-
 }

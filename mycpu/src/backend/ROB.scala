@@ -180,7 +180,7 @@ class ROB extends MycpuModule {
     asg(enqData.exception.basic, fromDper.basicExInfo)
     asg(enqData.done, false.B)
     asg(enqData.isMispredict, false.B)
-    asg(enqData.debugPC.get, io.in.fromDispatcher(i).bits.basicExInfo.pc)
+    if (debug) asg(enqData.debugPC.get, io.in.fromDispatcher(i).bits.basicExInfo.pc)
     asg(enqData.exception.detect, 0.U.asTypeOf(new DetectExInfoBundle))
     asg(robEnq(i).valid, io.in.fromDispatcher(i).valid)
     asg(io.in.fromDispatcher(i).ready, robEnq(i).ready && !robEntries.io.flush)
@@ -193,8 +193,10 @@ class ROB extends MycpuModule {
     robEntries.wb(i).idx        := wdata(i).robIndex
     robEntries.wb(i).exDetect   := wdata(i).exDetect
     robEntries.wb(i).misPredict := wdata(i).isMispredict
-    when(io.in.wbRob(i).valid) {
-      assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
+    if (debug) {
+      when(io.in.wbRob(i).valid) {
+        assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
+      }
     }
   })
 

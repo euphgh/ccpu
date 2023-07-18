@@ -7,6 +7,7 @@ import utils.asg
 import utils.BytesWordUtils._
 import difftest.DifftestArchIntRegState
 import chisel3.util.experimental.BoringUtils._
+import config.MycpuInit.PRFReset
 
 /**
   * connect rs.out.renamed.srcPregs to prf.readPorts.addr in Backend
@@ -32,7 +33,7 @@ class PrfBundle extends MycpuBundle {
 class Prf extends MycpuModule {
   val io = IO(new PrfBundle)
 
-  val phyRegs = RegInit(VecInit(Seq.fill(pRegNum)(0.U(dataWidth.W))))
+  val phyRegs = RegInit(VecInit(PRFReset))
 
   //read
   (0 until issueNum).map(i => {
@@ -44,7 +45,6 @@ class Prf extends MycpuModule {
   (0 until wBNum).map(i => {
     val write = io.writePorts(i)
     val wBits = write.bits
-    //TODO:mask api
     val wdata = maskWord(wBits.result, wBits.wmask).asUInt | maskWord(phyRegs(wBits.pDest), ~wBits.wmask).asUInt
     when(write.valid && wBits.pDest =/= 0.U(pRegAddrWidth.W)) {
       phyRegs(wBits.pDest) := wdata

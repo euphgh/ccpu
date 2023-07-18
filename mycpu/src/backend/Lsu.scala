@@ -41,12 +41,14 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1RO.bits.immOffset, roOutBits.mem.get.immOffset)
   asg(mem1RO.bits.carryout, roOutBits.mem.get.carryout)
   asg(mem1RO.bits.cacheInst.get, roOutBits.mem.get.cache.cacheInst.get)
-  asg(mem1RO.bits.debugPC.get, roOutBits.debugPC.get)
   asg(mem1SQ.bits.pTag, deqSQ.bits.pTag)
   asg(mem1SQ.bits.cAttr, deqSQ.bits.cAttr)
   asg(mem1SQ.bits.rwReq, deqSQ.bits.rwReq)
-  asg(mem1SQ.bits.debugPC.get, deqSQ.bits.debugPC.get)
   asg(memStage1.io.oldestRobIdx, oldestRobIdx)
+  if (debug) {
+    asg(mem1RO.bits.debugPC.get, roOutBits.debugPC.get)
+    asg(mem1SQ.bits.debugPC.get, deqSQ.bits.debugPC.get)
+  }
 
   // pipeline connect storeQ/roStage => mem1Stage
   memStage1.io.out.toStoreQ <> storeQ.io.fromMem1
@@ -72,7 +74,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // stage2 connect with storeQ
   storeQ.io.deq.back := memStage2.io.doneSQ // when store finish, release storeQ
   memStage2.io.querySQ <> storeQ.io.query // search storeQ while load
-  storeQ.io.deq.backPC.get := memStage2.io.donePC.get // when store finish, release storeQ
+  if (debug) storeQ.io.deq.backPC.get := memStage2.io.donePC.get // when store finish, release storeQ
 
   // mem2 to outside
   dram <> memStage2.io.dmem

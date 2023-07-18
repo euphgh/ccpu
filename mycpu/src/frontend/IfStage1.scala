@@ -8,6 +8,7 @@ import cache._
 import utils._
 import chisel3.util.experimental.decode._
 import chisel3.util.experimental.BoringUtils
+import config.MycpuInit.PCReset
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -152,7 +153,7 @@ class IfStage1 extends MycpuModule {
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready
-  val resetPc         = if (linux) "h80100000".U else "hbfc00000".U
+  val resetPc         = PCReset
   val pc              = RegEnable(npc, resetPc, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
 

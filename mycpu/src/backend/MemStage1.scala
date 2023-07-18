@@ -88,15 +88,16 @@ class MemStage1 extends MycpuModule {
     val req  = Bool()
     val isSQ = Bool()
   })
-  sqDecp.ready                     := false.B
-  roDecp.ready                     := false.B
-  cache1Update.isSQ                := false.B
-  cache1Update.req                 := false.B
-  toStoreQ.valid                   := false.B
-  toStoreQ.bits.stqEnq.debugPC.get := roBits.debugPC.get
-  toMem2.valid                     := false.B
-  roFireOut                        := false.B
-  sqFireOut                        := false.B
+  sqDecp.ready      := false.B
+  roDecp.ready      := false.B
+  cache1Update.isSQ := false.B
+  cache1Update.req  := false.B
+  toStoreQ.valid    := false.B
+  toMem2.valid      := false.B
+  roFireOut         := false.B
+  sqFireOut         := false.B
+
+  if (debug) toStoreQ.bits.stqEnq.debugPC.get := roBits.debugPC.get
   val sqDecpRdy    = !sqDecp.valid || toMem2.fire
   val roDecpRdy    = !roDecp.valid || toStoreQ.fire
   val storeModeRdy = sqDecpRdy && roDecpRdy

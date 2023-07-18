@@ -29,10 +29,18 @@ object MacroCOP {
       val initStr = fields
         .map(attr => {
           val (fieldName, msb, lsb, initValue, writable) = attr
-          s"$fieldName := $initValue.U"
+          s"""
+          $fieldName := (if (hasOpt) optValue($msb, $lsb) else $initValue.U)
+          """
         })
         .mkString("\n")
-      val initCode = c.parse(s"def init = { $initStr }")
+      val initCode = c.parse(s"""
+      def init(opt: Option[UInt] = None) = {
+        val hasOpt = opt.isDefined
+        val optValue = opt.getOrElse(0.U)
+        $initStr
+      }
+      """)
       val readStr = fields
         .map(attr => {
           val (fieldName, msb, lsb, initValue, writable) = attr
@@ -79,9 +87,10 @@ object MacroCOP {
             // init
             val createfunc = body.collectFirst({ case q"def create = {..$body}" => body })
             val nameStr    = regName.toTermName.toString + "Reg"
-            regDefStr.append(s"""val $nameStr = chisel3.RegInit(new ${regName.toTermName}, {
+            regDefStr.append(s"""
+            val $nameStr = chisel3.RegInit(new ${regName.toTermName}, {
                 val init = Wire(new $regName)
-                init.init
+                init.init(initValues.get("$regName"))
                 init
               })
               """)
@@ -112,7 +121,7 @@ object MacroCOP {
           }
         }
         val copRegs = c.parse(s"""
-        class BasicCOP extends chisel3.Module {
+        class BasicCOP(initValues: Map[String, chisel3.UInt] = Map()) extends chisel3.Module {
           val isMtc0 = WireInit(false.B)
           val writeSel = WireInit(0.U(3.W))
           val writeRd  = WireInit(0.U(5.W))
@@ -151,7 +160,7 @@ object MacroCOP {
     annottees.map(_.tree) match {
       case (param: ModuleDef) :: Nil => {
         val res = extractClassNameAndBody(param)
-        // println(res)
+        println(res)
         c.Expr(res)
       }
       case _ => {

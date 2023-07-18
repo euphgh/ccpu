@@ -89,15 +89,16 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   addSource(tlbrReq, "tlbrReq")
   addSource(tlbwiReq, "tlbwiReq")
   addSource(tlbwrReq, "tlbwrReq")
-  addSource(exeIn.debugPC.get, "mduPC")
+  if (debug) addSource(exeIn.debugPC.get, "mduPC")
 
   val fuOutValid = List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
   //List(mul.io.out.valid, div.io.out.valid, clz.io.out.valid, tlbpRes)
   val fuOutData = List(multRes, divRes, clz.io.out.bits, 0.U)
 
   // speculate ============================================================================
-  val specHi = RegInit(UWord, 0.U)
-  val specLo = RegInit(UWord, 0.U)
+  import config.MycpuInit.{HIReset, LOReset}
+  val specHi = RegInit(UWord, HIReset)
+  val specLo = RegInit(UWord, LOReset)
   addSource(specHi, "specHIdata")
   addSource(specLo, "specLOdata")
   val data64Q   = Module(new Queue(gen = UInt(64.W), entries = 4, hasFlush = true)) //muldiv
@@ -189,8 +190,8 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     *   mthi mtlo:write arch,data32 enq
     *   mtc0:data32 deq,mtc0addr deq,give cp0 writeBundle
     */
-  val archHi       = RegInit(UWord, 0.U)
-  val archLo       = RegInit(UWord, 0.U)
+  val archHi       = RegInit(UWord, HIReset)
+  val archLo       = RegInit(UWord, LOReset)
   val commitData64 = data64Q.io.deq.bits
   val commitData32 = data32Q.io.deq.bits
   val commit       = robRetire.bits

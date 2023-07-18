@@ -79,11 +79,11 @@ class StoreQueue(entries: Int) extends MycpuModule {
   wPrf.pDest          := m1DecpWb.destPregAddr //should be 0
   wPrf.result         := !fromM1Decp.bits.scFail
   wPrf.wmask          := "hf".U(4.W)
-  wRob.debugPC.get    := fromM1Decp.bits.stqEnq.debugPC.get
   wRob.exDetect       := m1DecpEx
   wRob.isMispredict   := false.B
   wRob.robIndex       := m1DecpWb.robIndex
 
+  if (debug) wRob.debugPC.get := fromM1Decp.bits.stqEnq.debugPC.get
   //=================== retire =====================
   when(io.retire.asUInt.orR) {
     val scommitNum = PopCount(io.retire.asUInt)
@@ -106,7 +106,9 @@ class StoreQueue(entries: Int) extends MycpuModule {
   //deq back
   when(do_deq) {
     deq_ptr := deq_ptr + 1.U
-    assert(io.deq.backPC.get === ram(deq_ptr).debugPC.get)
+    if (debug) {
+      assert(io.deq.backPC.get === ram(deq_ptr).debugPC.get)
+    }
   }
 
   //=================== query ====================

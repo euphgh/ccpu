@@ -1,4 +1,4 @@
-import config.MycpuParam
+import config._
 package object cop extends MycpuParam {
   import copmacro._
   import chisel3._

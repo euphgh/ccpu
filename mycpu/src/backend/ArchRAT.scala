@@ -26,5 +26,5 @@ class ArchRAT extends MycpuModule {
     io.recover(i).inPrf := true.B
     io.recover(i).pIdx  := pIdxMap(i)
   })
-  addSource(pIdxMap, s"DiffArchRegNum")
+  if (verilator) addSource(pIdxMap, s"DiffArchRegNum")
 }

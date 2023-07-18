@@ -22,23 +22,8 @@ object PipelineConnect {
     when(isFlush) { valid := false.B }
 
     left.ready  := right.ready
-    right.bits  := RegEnable(left.bits, left.valid && right.ready)
+    right.bits  := RegEnable(left.bits, 0.U.asTypeOf(right.bits), left.valid && right.ready)
     right.valid := valid //attention:here right.valid means "pipex_valid"
-  }
-  def notFlush[T <: Data](left: DecoupledIO[T], right: DecoupledIO[T], rightOutFire: Bool, isFlush: Bool) = {
-    val valid    = RegInit(false.B)
-    val canceled = RegInit(false.B)
-    when(rightOutFire) {
-      valid    := false.B
-      canceled := false.B
-    }
-    when(right.ready) { valid := left.valid }
-    when(isFlush) { canceled := true.B }
-
-    left.ready  := right.ready
-    right.bits  := RegEnable(left.bits, left.valid && right.ready)
-    right.valid := valid //attention:here right.valid means "pipex_valid"
-    canceled
   }
 }
 

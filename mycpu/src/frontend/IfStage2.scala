@@ -127,7 +127,7 @@ class IfStage2 extends Module with MycpuParam {
       //change its preResult      ATTENTION:这里preRes无所谓改不改，因为ALU里会根据realBrType来操作
       misPreRes.btbType := BtbType.non
       //redirect frontend
-      asg(io.noBrMispreRedirect.flush, true.B)
+      asg(io.noBrMispreRedirect.flush, io.out.fire)
       asg(io.noBrMispreRedirect.target, misPc + 4.U)
       //enq bpuUpdateQ
       val bpuUpdateEnq = bpuUpdateQueue.io.enq.bits

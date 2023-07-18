@@ -58,7 +58,7 @@ class InstFetch extends MycpuModule {
     ifStage1.io.out,
     ifStage2.io.in,
     ifStage2.io.out.fire,
-    (io.redirect.flush | ifStage2.io.noBrMispreRedirect.flush)
+    (io.redirect.flush | ifStage2.io.noBrMispreRedirect.flush) // noBrFlush only set when if2 out fire
   )
   ifStage2.io.imem <> io.imem
   io.out <> ifStage2.io.out

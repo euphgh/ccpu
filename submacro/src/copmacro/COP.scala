@@ -160,7 +160,7 @@ object MacroCOP {
     annottees.map(_.tree) match {
       case (param: ModuleDef) :: Nil => {
         val res = extractClassNameAndBody(param)
-        println(res)
+        // println(res)
         c.Expr(res)
       }
       case _ => {

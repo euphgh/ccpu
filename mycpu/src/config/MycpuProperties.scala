@@ -7,7 +7,11 @@ trait MycpuProperties extends MycpuParam {
     import java.io.FileInputStream
     import java.util.Properties
     import scala.jdk.CollectionConverters._
-    System.getProperties.asScala.toMap
+    val prop         = new Properties()
+    val propFileName = "application.properties"
+    val inputStream  = new FileInputStream(propFileName)
+    prop.load(inputStream)
+    prop.asScala.toMap
   }
   val jpy = getJavaProperty
 

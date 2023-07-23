@@ -15,7 +15,7 @@ verilog:
 	mill -i $(MainModule).runMain SubMain -td $(BUILD_DIR)
 
 
-$(VSRC): $(SSRC)
+$(VSRC): $(SSRC) ./application.properties
 	mkdir -p $(BUILD_DIR)
 	mill -i $(MainModule).runMain Elaborate -td $(BUILD_DIR)
 	mv $(BUILD_DIR)/$(TOPNAME).v $(BUILD_DIR)/mycpu_top.v
@@ -24,7 +24,7 @@ $(VSRC): $(SSRC)
 mycpu: $(VSRC)
 
 sim: $(VSRC)
-	cd hitd; nix develop --command make sim -j 32;
+	cd hitd; nix develop --command make sim SS=$(SS) -j 32;
 
 help:
 	mill -i $(MainModule).test.runMain Elaborate --help

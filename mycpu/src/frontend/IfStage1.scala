@@ -7,7 +7,7 @@ import chisel3.util._
 import cache._
 import utils._
 import chisel3.util.experimental.decode._
-import chisel3.util.experimental.BoringUtils
+import chisel3.util.experimental.BoringUtils._
 import config.MycpuInit.PCReset
 
 class BtbOutIO extends MycpuBundle {
@@ -141,7 +141,7 @@ class IfStage1 extends MycpuModule {
     if (enableCacheInst) Some(Wire(Flipped(Valid(new ICacheInstIO))))
     else None
   if (enableCacheInst) {
-    BoringUtils.addSink(icacheInst.get, "ICacheInstrReq")
+    addSink(icacheInst.get, "ICacheInstrReq")
   }
   // alias ===============================================
   val npc = io.in.npc
@@ -152,7 +152,7 @@ class IfStage1 extends MycpuModule {
   fakeCacheInst.bits  := 0.U.asTypeOf(new ICacheInstIO)
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
-  val update          = io.in.flush || isCacheInst || io.out.ready
+  val update          = WireInit(io.in.flush || isCacheInst || io.out.ready)
   val resetPc         = PCReset - 16.U
   val pc              = RegEnable(npc, resetPc, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
@@ -285,6 +285,10 @@ class IfStage1 extends MycpuModule {
     when(ci.valid && CacheOp.isIdxInv(ci.bits.op)) {
       io.tlb.req.valid := false.B
     }
+    when(ci.valid && !io.out.fire) {
+      update := false.B
+    }
+    addSource(ci.valid, "ICacheInstrWaitEntry")
   }
   val valid = RegEnable(true.B, false.B, update)
   asg(io.out.valid, valid)

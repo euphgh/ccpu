@@ -52,13 +52,15 @@ class InstFetch extends MycpuModule {
     asg(ifStage1.io.bpuUpdateIn.btb.valid, false.B)
     asg(ifStage1.io.bpuUpdateIn.pht.valid, false.B)
   }
+  val stage1IsCacheInstr = ifStage1.io.out.bits.iCache.cacheInst.get.valid
 
   //IF2 in
   PipelineConnect(
     ifStage1.io.out,
     ifStage2.io.in,
     ifStage2.io.out.fire,
-    (io.redirect.flush | ifStage2.io.noBrMispreRedirect.flush) // noBrFlush only set when if2 out fire
+    // noBrMissFlush only set when if2 out fire
+    !stage1IsCacheInstr && (io.redirect.flush || ifStage2.io.noBrMispreRedirect.flush)
   )
   ifStage2.io.imem <> io.imem
   io.out <> ifStage2.io.out

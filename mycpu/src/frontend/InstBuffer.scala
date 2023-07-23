@@ -5,6 +5,7 @@ import config._
 import chisel3.util._
 import utils._
 import decodemacro._
+import chisel3.util.experimental.BoringUtils
 
 /**
   * implement instbuffer in this stage, can not use queue api
@@ -35,7 +36,12 @@ class InstBuffer extends MycpuModule {
   })
   // sub decode ==================================================
   val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 8, true))
-  asg(ib.io.flush, io.flush)
+
+  // avoid icReq(if1) -> iCache data out(if2) -> instbuffer full ->
+  // dispatch lsu -> lsu wait iCache instr finish
+  val iCacheInstrWait = Wire(Bool())
+  BoringUtils.addSink(iCacheInstrWait, "ICacheInstrWaitEntry")
+  asg(ib.io.flush, io.flush || iCacheInstrWait)
   // input ========================================================
   (0 until fetchNum).foreach(i => {
     val pushBits = ib.io.push(i).bits

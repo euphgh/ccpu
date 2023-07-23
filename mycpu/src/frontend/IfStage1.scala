@@ -153,7 +153,7 @@ class IfStage1 extends MycpuModule {
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = io.in.flush || isCacheInst || io.out.ready
-  val resetPc         = PCReset
+  val resetPc         = PCReset - 16.U
   val pc              = RegEnable(npc, resetPc, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
 
@@ -286,7 +286,7 @@ class IfStage1 extends MycpuModule {
       io.tlb.req.valid := false.B
     }
   }
-
-  asg(io.out.valid, true.B)
+  val valid = RegEnable(true.B, false.B, update)
+  asg(io.out.valid, valid)
   asg(io.toPreIf.stage1Rdy, io.out.fire)
 }

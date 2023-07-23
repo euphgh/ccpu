@@ -34,7 +34,7 @@ class InstBuffer extends MycpuModule {
     val flush = Input(Bool())
   })
   // sub decode ==================================================
-  val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 32, true))
+  val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 8, true))
   asg(ib.io.flush, io.flush)
   // input ========================================================
   (0 until fetchNum).foreach(i => {

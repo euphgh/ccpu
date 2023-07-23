@@ -591,10 +591,10 @@ class CacheStage2[T <: Data](
           instrState := MuxCase(
             decode,
             Seq(
+              CacheOp.isIop(ciOp)         -> fake,
               CacheOp.isIdxInv(ciOp)      -> idxInv,
               CacheOp.isIdxStoreTag(ciOp) -> idxStTag,
-              CacheOp.isHitInv(ciOp)      -> hitInv,
-              CacheOp.isIop(ciOp)         -> fake
+              CacheOp.isHitInv(ciOp)      -> hitInv
             )
           )
         } else {
@@ -636,7 +636,8 @@ class CacheStage2[T <: Data](
         instrState := Mux(writeState === wIdel, waitRetire, waitWauto)
       }
       is(waitRetire) {
-        io.cacheInst.finish.get := true.B
+        // bacasue iCache valid may be clear but Dcache must not
+        io.cacheInst.finish.get := (if (isDcache) io.in.valid else true.B)
         when(io.cacheInst.redirect.get) {
           mainState  := run
           instrState := instrIdle
@@ -644,7 +645,7 @@ class CacheStage2[T <: Data](
       }
       is(fake) { // when Dcache recieve ICache Instr, it should listen
         if (isDcache) {
-          io.cacheInst.finish.get := iCacheFinishInstr
+          io.cacheInst.finish.get := iCacheFinishInstr && io.in.valid
           when(iCacheFinishInstr) {
             instrState := waitRetire
           }

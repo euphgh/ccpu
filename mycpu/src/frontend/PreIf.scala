@@ -44,7 +44,6 @@ class PreIf extends MycpuModule {
   val if1InPc = io.in.fromIf1.pcVal
   val pc314   = if1InPc(31, 4)
   val alignPC = Mux(if1InPc(4, 2) > 4.U(3.W), Cat(pc314 + 1.U, 0.U(4.W)), Cat(pc314 + 1.U, if1InPc(3, 0)))
-  //Cat(io.in.fromIf1.pcVal(31, 4) + 1.U, io.in.fromIf1.pcVal(3, 0)) //Cat(io.in.fromIf1.pcVal(31, 4) + 1.U, 0.U(4.W))
   object PreIfState extends ChiselEnum {
     val normal, keepDest = Value
   }

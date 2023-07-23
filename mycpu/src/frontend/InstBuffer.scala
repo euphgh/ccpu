@@ -51,10 +51,12 @@ class InstBuffer extends MycpuModule {
 
   // >> Assert ========================================================
   val validMask = io.in.bits.validMask.asUInt
-  assert(
-    validMask === "b0000".U || validMask === "b0001".U ||
-      validMask === "b0011".U || validMask === "b0111".U || validMask === "b1111".U
-  )
+  when(io.in.valid) {
+    assert(
+      validMask === "b0000".U || validMask === "b0001".U ||
+        validMask === "b0011".U || validMask === "b0111".U || validMask === "b1111".U
+    )
+  }
   val ibRdy = VecInit.tabulate(fetchNum)(i => ib.io.push(i).ready)
   assert(ibRdy(0) === ibRdy(1))
   assume(ibRdy(0) === ibRdy(2))

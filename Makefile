@@ -24,7 +24,7 @@ $(VSRC): $(SSRC) ./application.properties
 mycpu: $(VSRC)
 
 sim: $(VSRC)
-	cd hitd; nix develop --command make sim SS=$(SS) -j 32;
+	cd hitd; nix develop --command make -j 32 sim $(if $(SS), SS=$(SS),);
 
 help:
 	mill -i $(MainModule).test.runMain Elaborate --help

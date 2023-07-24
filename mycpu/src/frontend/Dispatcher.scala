@@ -155,9 +155,10 @@ class Decoder extends MycpuModule {
   val break     = deExType === DeExType.BP
   val inExcCode = io.in.exception
   val inIsEx    = FrontExcCode.happen(inExcCode)
+  val trap      = decoder.aluType.isOneOf(AluType.TRAPEQ, AluType.TRAPNE)
   val outEx     = io.out.exception
   //connect
-  asg(outEx.happen, inIsEx || ri || syscall || break)
+  asg(outEx.happen, inIsEx || ri || syscall || break || trap)
   asg(outEx.refill, FrontExcCode.isRefill(inExcCode))
   asg(
     outEx.excCode,
@@ -167,7 +168,8 @@ class Decoder extends MycpuModule {
         inIsEx  -> FrontExcCode.trans(inExcCode),
         ri      -> ExcCode.RI,
         syscall -> ExcCode.Sys,
-        break   -> ExcCode.Bp
+        break   -> ExcCode.Bp,
+        trap    -> ExcCode.Tr
       )
     )
   )

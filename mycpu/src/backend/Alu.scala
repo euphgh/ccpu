@@ -245,8 +245,19 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     val inBrInfo  = exeIn.branch.get
     val predict   = inBrInfo.predict
     val BrHandler = Module(new BrHandler)
-    val genTaken  = BrHandler.access(srcs(0), srcs(1), brType)
-    val preCnt    = predict.counter
+    val genTaken =
+      BrHandler.access(
+        srcs(0),
+        srcs(1),
+        MuxCase(
+          brType,
+          Seq(
+            (aluType === AluType.TRAPEQ) -> BranchType.BEQ,
+            (aluType === AluType.TRAPNE) -> BranchType.BNE
+          )
+        )
+      )
+    val preCnt = predict.counter
     /*==================== Update BPU ====================*/
     val bpUp = bpuUpdate.get
     val btb  = bpUp.btb
@@ -299,6 +310,10 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     when(isMovzn) {
       asg(wprf.result, Mux(movWen, srcs(0), exeIn.prevData))
     }
+
+    when(aluType.isOneOf(AluType.TRAPEQ, AluType.TRAPNE)) {
+      asg(outExDetect.happen, genTaken)
+    }
   }
 
   /**
@@ -309,16 +324,5 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
   when(!inExDetect.happen && aluCpOut.overflow) {
     asg(outExDetect.happen, true.B)
     asg(outExDetect.excCode, ExcCode.Ov)
-  }
-
-  //attach interrupt to SubAlu to prevent(mispre & exception)when retire
-  //p172：中断是电平输入信号
-  if (!main) {
-    val hasInt = Wire(Bool())
-    BoringUtils.addSink(hasInt, "hasInterrupt")
-    when(hasInt) {
-      asg(outExDetect.excCode, ExcCode.Int)
-      asg(outExDetect.happen, true.B)
-    }
   }
 }

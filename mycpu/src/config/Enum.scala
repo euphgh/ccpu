@@ -106,7 +106,7 @@ object BranchType extends ChiselEnum {
 }
 object AluType extends ChiselEnum {
   val ADD, ADDI, ADDU, ADDIU, SUB, SUBU, AND, ANDI, OR, ORI, XOR, XORI, NOR, SLT, SLTI, SLTU, SLTIU, SLL, SRL, SRA,
-    SLLV, SRLV, SRAV, LUI, MOVN, MOVZ, NON = Value
+    SLLV, SRLV, SRAV, LUI, MOVN, MOVZ, TRAPEQ, TRAPNE, NON = Value
   def useAdd(op:  AluType.Type): Bool = op === ADD || op === ADDI || op === ADDU || op === ADDIU
   def useSub(op:  AluType.Type): Bool = op === SUB || op === SUBU
   def useAnd(op:  AluType.Type): Bool = op === AND || op === ANDI

@@ -4,6 +4,7 @@ import config._
 import chisel3._
 import chisel3.util._
 import decodemacro.MacroDecode
+import backend.Alu
 
 object AllInsts {
   def apply(): Seq[Tuple2[chisel3.util.BitPat, List[chisel3.ChiselEnum#Type]]] = {
@@ -88,8 +89,8 @@ object AllInsts {
       TLBWR -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MDU, MduType.TLBWR),
       LL    -> List(SRCType.RS, DSTType.toRT, ChiselFuType.LSU, MemType.LL, SpecialType.LOAD),
       SC    -> List(SRCType.RSRT, DSTType.toRT, ChiselFuType.LSU, MemType.SC, SpecialType.STORE),
-      TNE   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
-      TEQ   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU),
+      TNE   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU, AluType.TRAPNE),
+      TEQ   -> List(SRCType.RSRT, DSTType.noDST, ChiselFuType.MainALU, AluType.TRAPEQ),
       CLZ   -> List(SRCType.RSRT, DSTType.toRD, ChiselFuType.MDU, MduType.CLZ),
       PREF  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU), //NON
       WAIT  -> List(SRCType.noSRC, DSTType.noDST, ChiselFuType.MainALU) //NON

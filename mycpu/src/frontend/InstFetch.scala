@@ -94,7 +94,7 @@ class InstFetch extends MycpuModule {
   when(outBits.validMask(0) && io.out.fire) { dsReg := false.B }
   when(validBr.asUInt.orR) {
     asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
-    when(lastDs >= outValidNum) {
+    when(lastDs >= outValidNum && io.out.fire) {
       dsReg := true.B
     }
   }

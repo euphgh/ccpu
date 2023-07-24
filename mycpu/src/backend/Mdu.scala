@@ -48,7 +48,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val isBlock                    = mduType.isOneOf(TLBP, MULT, MULTU, MUL, MADD, MADDU, MSUB, MSUBU, DIV, DIVU, CLZ) && instValid
 
   // multiplier ======================================================
-  val mul   = Module(new Multiplier)
+  val mul   = Module(new MulComponent)
   val mulIn = mul.io.in.bits
   mulIn.isSign := mduType.isOneOf(Seq(MULT, MSUB, MADD, MUL))
   mulIn.isAdd  := mduType.isOneOf(MADD, MADDU)

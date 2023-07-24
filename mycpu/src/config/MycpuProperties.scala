@@ -33,7 +33,7 @@ trait MycpuProperties extends MycpuParam {
   val debug     = jprops.get("DEBUG").fold(if (sim) true else false)(_.toBoolean)
   val linux     = if (sim) jprops.get("SIM").get == "LINUX" else false
 
-  val hasSnapShot = jprops.get("SNAPSHOT").isDefined
+  val hasSnapShot = jprops.get("SNAPSHOT").isDefined || linux
 }
 object MycpuInit extends MycpuProperties {
   val PCReset = initProps.get("PC").fold(if (linux) "h80100000".U else "hbfc00000".U)(_.U)

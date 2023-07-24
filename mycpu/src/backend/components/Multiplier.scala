@@ -50,7 +50,7 @@ class MultiplierIP extends BlackBox with HasBlackBoxInline {
   )
 }
 
-class Multiplier extends MycpuModule {
+class MulComponent extends MycpuModule {
   val io = IO(new Bundle {
     val in = Flipped(Valid(new Bundle {
       val srcs   = Vec(srcDataNum, Output(UInt(dataWidth.W)))

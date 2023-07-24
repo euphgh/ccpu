@@ -5,7 +5,7 @@ import cache._
 import Chisel.UInt
 import frontend.Dispatcher
 import frontend._
-import backend.components.Multiplier
+import backend.components.MulComponent
 import config.MycpuModule
 import chisel3._
 import bundle.TLBSearchIO

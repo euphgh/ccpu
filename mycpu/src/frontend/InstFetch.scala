@@ -8,6 +8,7 @@ import utils.PipelineConnect
 import chisel3.util.experimental.BoringUtils
 import utils.PriorityCount
 import utils.SignExt
+import config.MycpuInit.PCReset
 
 /**
   * preif.in.redirect:
@@ -41,7 +42,17 @@ class InstFetch extends MycpuModule {
   val ifStage2   = Module(new IfStage2)
 
   //PreIf in
-  asg(preIfStage.io.in.redirect, Mux(io.redirect.flush, io.redirect, ifStage2.io.noBrMispreRedirect))
+  if (hasSnapShot) {
+    val resetRedirect = Wire(new FrontRedirctIO)
+    resetRedirect.flush  := true.B
+    resetRedirect.target := PCReset
+    asg(
+      preIfStage.io.in.redirect,
+      Mux(RegNext(reset.asBool), resetRedirect, Mux(io.redirect.flush, io.redirect, ifStage2.io.noBrMispreRedirect))
+    )
+  } else {
+    asg(preIfStage.io.in.redirect, Mux(io.redirect.flush, io.redirect, ifStage2.io.noBrMispreRedirect))
+  }
   asg(preIfStage.io.in.fromIf1, ifStage1.io.toPreIf)
 
   //If1 in

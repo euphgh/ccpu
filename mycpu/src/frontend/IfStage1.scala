@@ -8,7 +8,6 @@ import cache._
 import utils._
 import chisel3.util.experimental.decode._
 import chisel3.util.experimental.BoringUtils._
-import config.MycpuInit.PCReset
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -153,8 +152,7 @@ class IfStage1 extends MycpuModule {
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = WireInit(io.in.flush || isCacheInst || io.out.ready)
-  val resetPc         = PCReset - 16.U
-  val pc              = RegEnable(npc, resetPc, update)
+  val pc              = RegEnable(npc, "hbfc00000".U, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
 
   // use wire io.in direct ================================
@@ -290,7 +288,9 @@ class IfStage1 extends MycpuModule {
     }
     addSource(ci.valid, "ICacheInstrWaitEntry")
   }
-  val valid = RegEnable(true.B, false.B, update)
-  asg(io.out.valid, valid)
+  if (hasSnapShot) {
+    val valid = RegNext(!reset.asBool)
+    asg(io.out.valid, valid)
+  } else io.out.valid := true.B
   asg(io.toPreIf.stage1Rdy, io.out.fire)
 }

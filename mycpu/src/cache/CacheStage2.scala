@@ -113,7 +113,7 @@ class CacheStage2[T <: Data](
       io.out.bits.toUser(i) := Mux1H(
         hitMask,
         (0 until roads).map(j => {
-          trans(stage1.idata.get(j)(i))
+          Mux(io.in.bits.cancel, 0.U.asTypeOf(userGen), trans(stage1.idata.get(j)(i)))
         })
       )
     } // default
@@ -405,6 +405,7 @@ class CacheStage2[T <: Data](
             })
           )
         )
+        (0 until fetchNum).foreach(i => { outBits.toUser(i) := trans(outBits.idata.get(i)) })
       }
       // wait write ok to get next req
       when(writeState === wIdel) {
@@ -432,9 +433,7 @@ class CacheStage2[T <: Data](
         } else {
           outBits.idata.get := ucIBuffer.get
           // miacro decode
-          (0 until fetchNum).foreach(i => {
-            outBits.toUser(i) := trans(ucIBuffer.get(i))
-          })
+          (0 until fetchNum).foreach(i => { outBits.toUser(i) := trans(ucIBuffer.get(i)) })
         }
         mainState := Mux(io.out.fire || !io.in.valid, run, uncache)
       }

@@ -31,18 +31,19 @@ class MultiplierIP extends BlackBox with HasBlackBoxInline {
       |    .P                      (P)  //output */
       |); 
       |`else
-      |    reg [65:0] seg1,seg0;
+      |    reg [65:0] seg0;
+      |    // reg [65:0] seg1;
       |    always @(posedge clk) begin
       |        if (!rst) begin
       |            seg0 <= 0;
-      |            seg1 <= 0;
+      |            // seg1 <= 0;
       |        end
       |        else begin
       |            seg0 <= {{33{A[32]}}, A} * {{33{B[32]}}, B};	// MyMultipler.scala:9:{20,34}
-      |            seg1 <= seg0;
+      |            // seg1 <= seg0;
       |        end
       |    end
-      |    assign P = seg1;
+      |    assign P = seg0;
       |`endif
       |
       |endmodule
@@ -82,16 +83,15 @@ class MulComponent extends MycpuModule {
   addSink(wirehi, "specHIdata")
   addSink(wirelo, "specLOdata")
   io.out.valid := false.B
-  val run :: mul :: addsub :: finish :: Nil = Enum(4)
+  val run :: addsub :: finish :: Nil = Enum(3)
   // state
   val state = RegInit(run)
   assert(~(io.out.valid & state =/= finish))
   switch(state) {
     is(run) {
-      state := Mux(io.flush, run, Mux(io.in.valid, mul, run))
-    }
-    is(mul) {
-      state := Mux(io.flush, run, Mux(add || sub, addsub, finish))
+      when(io.in.valid) {
+        state := Mux(add || sub, addsub, finish)
+      }
     }
     is(finish) {
       state        := run
@@ -107,6 +107,9 @@ class MulComponent extends MycpuModule {
       asg(sres, Mux(add, sOp(0) + sOp(1), sOp(0) - sOp(1)))
       mres := Mux(inBits.isSign, sres.asUInt, ures)
     }
+  }
+  when(io.flush) {
+    state := run
   }
   asg(io.out.bits, Mux(inBits.isAdd || inBits.isSub, mresReg, ip.io.P(63, 0)))
 }

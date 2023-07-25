@@ -52,7 +52,8 @@ class DPTemplate[T <: Data](
   set:         Int,
   shouldReset: Boolean = false,
   holdRead:    Boolean = false,
-  singlePort:  Boolean = false)
+  singlePort:  Boolean = false,
+  writefirst:  Boolean = true)
     extends Module {
   val io = IO(new Bundle {
     val r = Flipped(new DPReadBus(gen, set))
@@ -82,6 +83,15 @@ class DPTemplate[T <: Data](
 
   val rdata = (if (holdRead) ReadAndHold(array, io.r.req.bits.setIdx, realRen)
                else array.read(io.r.req.bits.setIdx, realRen)).asTypeOf(gen)
+
+  if (writefirst) {
+    val reqConf  = (io.r.req.valid && io.w.req.valid) && (io.r.req.bits.setIdx === io.w.req.bits.setIdx)
+    val confSign = RegNext(reqConf, false.B)
+    val confData = RegEnable(io.w.req.bits.data.asUInt, 0.U, reqConf)
+    require(io.w.req.bits.data.getWidth == rdata.getWidth)
+    when(confSign) { rdata := confData.asTypeOf(gen) }
+  }
+
   io.r.resp.data := rdata
 
   io.r.req.ready := !resetState && (if (singlePort) !wen else true.B)

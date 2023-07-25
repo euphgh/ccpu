@@ -32,10 +32,27 @@
         "type": "indirect"
       }
     },
+    "nixpkgs_2": {
+      "locked": {
+        "lastModified": 1624561540,
+        "narHash": "sha256-izJ2PYZMGMsSkg+e7c9A1x3t/yOLT+qzUM6WQsc2tqo=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "c6a049a3d32293b24c0f894a840872cf67fd7c11",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixpkgs-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "vivado20192": "vivado20192"
       }
     },
     "systems": {
@@ -50,6 +67,24 @@
       "original": {
         "owner": "nix-systems",
         "repo": "default",
+        "type": "github"
+      }
+    },
+    "vivado20192": {
+      "inputs": {
+        "nixpkgs": "nixpkgs_2"
+      },
+      "locked": {
+        "lastModified": 1690209606,
+        "narHash": "sha256-R0qS7y2RaQBqMkNnZO4D4cL39AsMMtvJ9Yw25QeeqY4=",
+        "owner": "euphgh",
+        "repo": "nur-vivado-2019.2",
+        "rev": "3bc39df77834c398025437ff98da54d28d8fa14d",
+        "type": "github"
+      },
+      "original": {
+        "owner": "euphgh",
+        "repo": "nur-vivado-2019.2",
         "type": "github"
       }
     }

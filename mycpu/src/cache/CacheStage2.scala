@@ -239,7 +239,7 @@ class CacheStage2[T <: Data](
   val ucDBuffer      = if (isDcache) Some(RegInit(0.U(32.W))) else None
   io.in.ready  := false.B // default, only in run state assign
   io.out.valid := false.B // defualt, only in run state assign
-  if (isDcache) {
+  if (isDcache && verilator) {
     val diffDCache = Module(new DifftestCacheRun)
     diffDCache.io.clock     := clock
     diffDCache.io.en        := true.B

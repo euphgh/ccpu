@@ -128,7 +128,7 @@ class IfStage2 extends Module with MycpuParam {
       asg(io.noBrMispreRedirect.target, misPc + 4.U)
       //enq bpuUpdateQ
       val bpuUpdateEnq = bpuUpdateQueue.io.enq.bits
-      asg(bpuUpdateQueue.io.enq.valid, true.B)
+      asg(bpuUpdateQueue.io.enq.valid, io.out.fire)
       asg(bpuUpdateEnq.pc, misPc)
       asg(bpuUpdateEnq.moreData, 0.U) //TODO:not sure
       //btb

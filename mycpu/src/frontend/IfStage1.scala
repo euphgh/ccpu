@@ -269,13 +269,13 @@ class IfStage1 extends MycpuModule {
     Seq(
       addrError -> FrontExcCode.AdEL,
       tlbExp -> Mux(
-        io.tlb.res.refill,
+        tlbRes.refill,
         FrontExcCode.RefillTLBL,
         FrontExcCode.InvalidTLBL
       )
     )
   )
-  io.out.bits.isUncached := io.tlb.res.ccAttr =/= CCAttr.Cached
+  io.out.bits.isUncached := tlbRes.ccAttr =/= CCAttr.Cached
   if (enableCacheInst) {
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag

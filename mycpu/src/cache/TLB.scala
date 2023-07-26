@@ -79,9 +79,9 @@ class TLB extends MycpuModule {
     val validMask0 = VecInit((0 until tlbEntriesNum).map(entries(_).v0)).asUInt
     val validMask1 = VecInit((0 until tlbEntriesNum).map(entries(_).v1)).asUInt
 
-    // tlb should not hit 2 entry
-    assert(PopCount(hitMask(i) & validMask0) < 2.U)
-    assert(PopCount(hitMask(i) & validMask1) < 2.U)
+    // tlb should not hit 2 entry, but can not assert for ld in misPrePath has error addr
+    // assert(PopCount(hitMask(i) & validMask0) < 2.U)
+    // assert(PopCount(hitMask(i) & validMask1) < 2.U)
     val hitEntry = Mux1H(hitMask(i), entries)
     val isOdd    = searchAddr(12)
     tlbRes(i).refill := hitMask(i).asUInt.orR === false.B

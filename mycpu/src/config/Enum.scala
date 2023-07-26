@@ -207,7 +207,7 @@ object ExcCode extends ChiselEnum {
 }
 
 object FrontExcCode extends ChiselEnum {
-  val AdEL, InvalidTLBL, RefillTLBL, NONE = Value
+  val NONE, AdEL, InvalidTLBL, RefillTLBL = Value
   def happen(code:   FrontExcCode.Type): Bool         = code =/= NONE
   def isRefill(code: FrontExcCode.Type): Bool         = code === RefillTLBL
   def trans(code:    FrontExcCode.Type): ExcCode.Type = Mux(code === AdEL, ExcCode.AdEL, ExcCode.TLBL)

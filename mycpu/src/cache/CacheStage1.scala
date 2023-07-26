@@ -2,6 +2,7 @@ package cache
 
 import utils._
 import config._
+import config.MycpuInit.PCReset
 import bundle._
 import chisel3._
 import chisel3.util._
@@ -51,7 +52,17 @@ class CacheStage1(
   // Reg stage
   io.in.ready := true.B // ifstage1 and mem1 should keep
   val searchIndex = Wire(UInt(cacheIndexWidth.W)) // becasue bram should take one cycle
-  val stageReg    = RegEnable(io.in.bits, 0.U.asTypeOf(new CacheStage1In(isDcache)), io.in.valid)
+  val stageReg = RegEnable(
+    io.in.bits, {
+      val init = WireInit(0.U.asTypeOf(new CacheStage1In(isDcache)))
+      if (!isDcache) {
+        asg(init.ifReq.get.index, PCReset(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth))
+        asg(init.ifReq.get.offset, PCReset(cacheOffsetWidth - 1, 0))
+      }
+      init
+    },
+    io.in.valid
+  )
   if (!isDcache) {
     asg(searchIndex, Mux(io.in.valid, io.in.bits.ifReq.get.index, stageReg.ifReq.get.index))
   } else {

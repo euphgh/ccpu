@@ -8,6 +8,7 @@ import cache._
 import utils._
 import chisel3.util.experimental.decode._
 import chisel3.util.experimental.BoringUtils._
+import config.MycpuInit.PCReset
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -152,7 +153,7 @@ class IfStage1 extends MycpuModule {
   val usableCacheInst = icacheInst.getOrElse(fakeCacheInst)
   val isCacheInst     = usableCacheInst.valid
   val update          = WireInit(io.in.flush || isCacheInst || io.out.ready)
-  val pc              = RegEnable(npc, "hbfc00000".U, update)
+  val pc              = RegEnable(npc, PCReset, update)
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
 
   // use wire io.in direct ================================
@@ -258,7 +259,7 @@ class IfStage1 extends MycpuModule {
   io.toPreIf.pcVal  := pc
   io.out.bits.pcVal := pc
   // >> tlb ================
-  val tlbSearchTick = RegNext(update)
+  val tlbSearchTick = RegNext(update, true.B)
   val tlbRes        = HoldUnless(io.tlb.res, tlbSearchTick)
   val tlbExp        = tlbRes.refill || !tlbRes.hit
   io.tlb.req.bits            := pc
@@ -288,9 +289,15 @@ class IfStage1 extends MycpuModule {
     }
     addSource(ci.valid, "ICacheInstrWaitEntry")
   }
-  if (hasSnapShot) {
-    val valid = RegNext(!reset.asBool)
-    asg(io.out.valid, valid)
-  } else io.out.valid := true.B
+  io.out.valid := true.B
   asg(io.toPreIf.stage1Rdy, io.out.fire)
+
+  // Reset for 512
+  val resetWidth = log2Ceil(128)
+  val resetCnt   = RegInit(0.U(resetWidth.W))
+  when(resetCnt =/= ~(0.U(resetWidth.W))) {
+    resetCnt := resetCnt + 1.U
+    asg(io.out.valid, false.B)
+    asg(update, false.B)
+  }
 }

@@ -70,7 +70,7 @@ class TLB extends MycpuModule {
     dirRes.ccAttr := Mux(searchAddr(29), CCAttr.Uncached, CCAttr.safe(k0)._1)
 
     // when not use tlb translate, use tlb for probe
-    val reqVpn = Mux(dir(i), indexReg.index, search(i).req.bits(31, 13))
+    val reqVpn = Mux(dir(i), entryhiReg.vpn2, search(i).req.bits(31, 13))
     hitMask(i) := VecInit((0 until tlbEntriesNum).map(j => {
       val entry   = entries(j)
       val addrHit = entry.vpn2 === reqVpn

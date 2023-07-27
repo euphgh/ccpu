@@ -13,6 +13,7 @@ import frontend.BpuUpdateIO
 import frontend.MispreSignal
 import chisel3.util.Valid
 import difftest.DifftestBackPred
+import frontend.PatternHistoryTable
 
 class Adder extends MycpuModule {
   val io = IO(new Bundle {
@@ -264,7 +265,6 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     val btb  = bpUp.btb
     val pht  = bpUp.pht
     asg(bpUp.pc, inBrInfo.pcVal)
-    asg(bpUp.moreData, 1.U(1.W)) //not sure
     //btb update
     asg(btb.bits.instType, inBrInfo.realBtbType)
     asg(btb.bits.target, inBrInfo.realTarget) //Mux(genTaken, inBrInfo.realTarget, inBrInfo.pcVal + 8.U(32.W)))
@@ -274,8 +274,8 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     )
     //pht update
     val cat = Cat(preCnt, genTaken)
-    asg(pht.valid, brValid && cat.andR =/= cat.orR)
-    asg(pht.bits, Mux(genTaken, preCnt + 1.U, preCnt - 1.U))
+    asg(pht.valid, brValid && BranchType.isB(brType))
+    asg(pht.bits, PatternHistoryTable.calNextCnt(preCnt, genTaken))
     /*==================== MisPre Signal to Dper/ROB ====================*/
     val misSignal  = mispre.get
     val takenWrong = genTaken ^ predict.taken

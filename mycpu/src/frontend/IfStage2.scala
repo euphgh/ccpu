@@ -93,7 +93,7 @@ class IfStage2 extends MycpuModule {
     */
 
   val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
-  val firNonBrMispre = WireDefault(0.U(log2Up(retireNum).W))
+  val firNonBrMispre = WireDefault(0.U(log2Up(fetchNum).W))
   val bpuUpdateQueue = Module(new Queue(gen = new BpuUpdateIO, entries = 4))
 
   //default
@@ -101,7 +101,6 @@ class IfStage2 extends MycpuModule {
   asg(io.noBrMispreRedirect.target, 0.U(vaddrWidth.W))
   asg(bpuUpdateQueue.io.enq.valid, false.B)
   asg(bpuUpdateQueue.io.enq.bits, 0.U.asTypeOf(new BpuUpdateIO))
-  //asg(bpuUpdateQueue.io.flush.get, io.flush)
 
   //predecode
   (0 until fetchNum).foreach(i => {
@@ -124,7 +123,7 @@ class IfStage2 extends MycpuModule {
       VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).taken && inValidMask(i) && io.in.valid))
     )
     val firPreTake = PriorityEncoder(preTakeVec)
-    when(firNonBrMispre === firPreTake) { //FIXME:这里确实不需要flush，但是可能还是得更新BPU
+    when(firNonBrMispre === firPreTake) {
       val misPreRes = outBits.predictResult(firNonBrMispre)
       val misPc     = outBits.basicInstInfo(firNonBrMispre).pcVal
       //mask the inst behind it
@@ -138,7 +137,6 @@ class IfStage2 extends MycpuModule {
       val bpuUpdateEnq = bpuUpdateQueue.io.enq.bits
       asg(bpuUpdateQueue.io.enq.valid, io.out.fire)
       asg(bpuUpdateEnq.pc, misPc)
-      asg(bpuUpdateEnq.moreData, 0.U) //TODO:not sure
       //btb
       val updateBtb = bpuUpdateEnq.btb
       asg(updateBtb.valid, true.B)

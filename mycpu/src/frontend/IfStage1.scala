@@ -67,6 +67,7 @@ class IfStage1 extends MycpuModule {
   val isCacheInst     = usableCacheInst.valid
   val update          = WireInit(io.in.flush || isCacheInst || io.out.ready)
   val pc              = RegEnable(npc, PCReset, update)
+  val bpuSel          = VecInit.tabulate(fetchNum)(i => RegEnable(npc(3, 2) + i.U, PCReset(3, 2), update))
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
 
   // use wire io.in direct ================================
@@ -114,9 +115,9 @@ class IfStage1 extends MycpuModule {
     asg(phtRes(i), pht.readRes(i))
   })
   (0 until fetchNum).foreach(i => {
-    bpuout(i).btbType := btbRes(pc(3, 2)).instType
-    bpuout(i).target  := btbRes(pc(3, 2)).target
-    bpuout(i).counter := phtRes(pc(3, 2))
+    bpuout(i).btbType := btbRes(bpuSel(i)).instType
+    bpuout(i).target  := btbRes(bpuSel(i)).target
+    bpuout(i).counter := phtRes(bpuSel(i))
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================
@@ -217,7 +218,7 @@ class IfStage1 extends MycpuModule {
   asg(io.toPreIf.stage1Rdy, io.out.fire)
 
   // Reset for 512
-  val resetWidth = log2Ceil(128)
+  val resetWidth = log2Ceil(1024)
   val resetCnt   = RegInit(0.U(resetWidth.W))
   when(resetCnt =/= ~(0.U(resetWidth.W))) {
     resetCnt := resetCnt + 1.U

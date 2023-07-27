@@ -7,6 +7,7 @@ import utils._
 import cache._
 import decodemacro.MacroDecode
 import chisel3.util.experimental.BoringUtils._
+import difftest.DifftestFrontPred
 
 /**
   * out.predictResult := stage1.out.bpuOut(bpuOut.takenMask become a "taken" bit)
@@ -153,4 +154,12 @@ class IfStage2 extends MycpuModule {
 
   //0707
   (0 until fetchNum).map(i => outBits.isBd(i) := false.B)
+  if (verilator) {
+    val frontPreDiff = Module(new DifftestFrontPred)
+    frontPreDiff.io.clock := clock
+    asg(frontPreDiff.io.debugPC, VecInit(io.out.bits.basicInstInfo.map(_.pcVal)))
+    asg(frontPreDiff.io.predType, VecInit(io.in.bits.predictResult.map(_.btbType.asUInt)))
+    asg(frontPreDiff.io.realType, VecInit(io.out.bits.realBrType.map(_.asUInt)))
+    asg(frontPreDiff.io.en, io.out.fire)
+  }
 }

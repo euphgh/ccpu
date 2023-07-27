@@ -9,6 +9,7 @@ import utils._
 import chisel3.util.experimental.decode._
 import chisel3.util.experimental.BoringUtils._
 import config.MycpuInit.PCReset
+import difftest.DifftestBPUWrite
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -177,6 +178,17 @@ class IfStage1 extends MycpuModule {
   btb.update.data <> io.bpuUpdateIn.btb
   pht.update.pc := io.bpuUpdateIn.pc
   pht.update.data <> io.bpuUpdateIn.pht
+  if (verilator) {
+    val bpuDiff = Module(new DifftestBPUWrite)
+    bpuDiff.io.clock  := clock
+    bpuDiff.io.en     := io.bpuUpdateIn.btb.valid || io.bpuUpdateIn.pht.valid
+    bpuDiff.io.phtWen := io.bpuUpdateIn.pht.valid
+    bpuDiff.io.btbWen := io.bpuUpdateIn.btb.valid
+    asg(bpuDiff.io.pc, io.bpuUpdateIn.pc)
+    asg(bpuDiff.io.phtCount, io.bpuUpdateIn.pht.bits)
+    asg(bpuDiff.io.btbType, io.bpuUpdateIn.btb.bits.instType.asUInt)
+    asg(bpuDiff.io.btbTarget, io.bpuUpdateIn.btb.bits.target)
+  }
   // >> >> >> read =========================================
   val bpuout = Wire(Vec(fetchNum, new PredictResultBundle))
   val btbRes = Wire(Vec(fetchNum, new BtbOutIO))

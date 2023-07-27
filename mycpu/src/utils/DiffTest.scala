@@ -112,6 +112,31 @@ class DiffTLBWRIO extends DifftestBundle with MycpuParam {
   val rand = Input(UInt(tlbIndexWidth.W))
 }
 
+class DiffFrontBrPredIO extends DifftestBundle with MycpuParam {
+  val debugPC  = Input(Vec(fetchNum, UWord))
+  val predType = Input(Vec(fetchNum, UInt(3.W)))
+  val realType = Input(Vec(fetchNum, UInt(4.W)))
+}
+
+class DiffBackBrPredIO extends DifftestBundle with MycpuParam {
+  val debugPC  = Input(UWord)
+  val predTake = Input(Bool())
+  val realTake = Input(Bool())
+  val predDest = Input(UWord)
+  val realDest = Input(UWord)
+  val btbType  = Input(UInt(3.W))
+}
+
+class DiffBPUWriteIO extends DifftestBundle with MycpuParam {
+  val pc        = Input(UWord)
+  val btbWen    = Input(Bool())
+  val btbTarget = Input(UWord)
+  val btbType   = Input(UInt(3.W))
+
+  val phtWen   = Input(Bool())
+  val phtCount = Input(UInt(2.W))
+}
+
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {
   val io: T
 
@@ -226,3 +251,6 @@ class DifftestPhyRegInROB extends DifftestBaseModule(new DiffPhyRegInROBIO)
 class DifftestPhyRegInFreeList extends DifftestBaseModule(new DiffPhyRegInFreeListIO)
 class DifftestCacheRun extends DifftestBaseModule(new DiffDCacheIO)
 class DifftestTLBAll extends DifftestBaseModule(new DiffTLBIO)
+class DifftestBackPred extends DifftestBaseModule(new DiffBackBrPredIO)
+class DifftestFrontPred extends DifftestBaseModule(new DiffFrontBrPredIO)
+class DifftestBPUWrite extends DifftestBaseModule(new DiffBPUWriteIO)

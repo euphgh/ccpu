@@ -12,6 +12,7 @@ import chisel3.util.experimental.BoringUtils
 import frontend.BpuUpdateIO
 import frontend.MispreSignal
 import chisel3.util.Valid
+import difftest.DifftestBackPred
 
 class Adder extends MycpuModule {
   val io = IO(new Bundle {
@@ -295,6 +296,21 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     //JRHB无论是否mispre都要设为mispre，ROB进行处理
     //前端无所谓是否重定向，由ROB重定向到JRHB的TARGET
     when(jrhbSignal.valid) { asg(exeOut.wbRob.isMispredict, true.B) }
+    if (verilator && debug) {
+      val backBrDiff = Module(new DifftestBackPred)
+      asg(backBrDiff.io.clock, clock)
+      asg(backBrDiff.io.en, io.out.fire && brValid)
+      asg(backBrDiff.io.debugPC, io.out.bits.wbRob.debugPC.get)
+      asg(backBrDiff.io.predDest, predict.target)
+      asg(backBrDiff.io.predTake, predict.taken)
+      asg(backBrDiff.io.realDest, inBrInfo.realTarget)
+      asg(backBrDiff.io.predTake, predict.taken)
+      asg(backBrDiff.io.realTake, genTaken)
+      asg(backBrDiff.io.btbType, bpuUpdate.get.btb.bits.instType.asUInt)
+      val lastBrValid = RegNext(brValid)
+      val lastPC      = RegNext(inBrInfo.pcVal)
+      assert(!(brValid && lastBrValid && lastPC === inBrInfo.pcVal))
+    }
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
 

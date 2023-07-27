@@ -28,7 +28,7 @@ import chisel3.util.experimental.BoringUtils._
   * this connect to IfStage1 can use pipeline connect
   * so all io.in is from regs
   */
-class IfStage2 extends Module with MycpuParam {
+class IfStage2 extends MycpuModule {
   val io = IO(new Bundle {
     val in   = Flipped(Decoupled(new IfStage1OutIO))
     val out  = Decoupled(new IfStage2OutIO)
@@ -37,7 +37,18 @@ class IfStage2 extends Module with MycpuParam {
     val noBrMispreRedirect = new FrontRedirctIO
     val bpuUpdate          = Decoupled(new BpuUpdateIO)
   })
-  val icache2 = Module(new CacheStage2(IcachRoads, IcachLineBytes)())
+  def getIntrBrType(instr: UInt): BranchType.Type = {
+    @MacroDecode
+    class IF2PreDecodeOut extends MycpuBundle {
+      val brType = BranchType.NON
+    }
+    import chisel3.util.experimental.decode.QMCMinimizer
+    require(instr.getWidth == 32)
+    val foo = Wire(new IF2PreDecodeOut)
+    foo.decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
+    foo.brType
+  }
+  val icache2 = Module(new CacheStage2(IcachRoads, IcachLineBytes, false, BranchType())(getIntrBrType))
   icache2.io.in.valid := io.in.valid
   io.in.ready         := icache2.io.in.ready
   asg(icache2.io.in.bits.fromStage1, io.in.bits.iCache)
@@ -80,12 +91,6 @@ class IfStage2 extends Module with MycpuParam {
     *         set a queue,when q full,just don't get into Q
     */
 
-  @MacroDecode
-  class IF2PreDecodeOut extends MycpuBundle {
-    val brType = BranchType.NON
-  }
-  import chisel3.util.experimental.decode.QMCMinimizer
-  val preDecoder     = Wire(Vec(fetchNum, new IF2PreDecodeOut))
   val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
   val firNonBrMispre = WireDefault(0.U(log2Up(retireNum).W))
   val bpuUpdateQueue = Module(new Queue(gen = new BpuUpdateIO, entries = 4))
@@ -99,12 +104,14 @@ class IfStage2 extends Module with MycpuParam {
 
   //predecode
   (0 until fetchNum).foreach(i => {
-    val instr     = io.out.bits.basicInstInfo(i).instr
-    val preRes    = io.out.bits.predictResult(i)
-    val preTake   = preRes.taken
-    val instValid = inValidMask(i) && io.in.valid //inValid
-    preDecoder(i).decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
-    val realBrType = preDecoder(i).brType
+    val instr      = io.out.bits.basicInstInfo(i).instr
+    val preRes     = io.out.bits.predictResult(i)
+    val preTake    = preRes.taken
+    val instValid  = inValidMask(i) && io.in.valid //inValid
+    val realBrType = icache2.io.out.bits.toUser(i)
+    when(icache2.io.out.valid) {
+      if (sim) assert(realBrType === getIntrBrType(instr))
+    }
     nonBrMisPreVec(i) := (realBrType === BranchType.NON && preTake && instValid)
     asg(io.out.bits.realBrType(i), realBrType)
   })
@@ -146,27 +153,4 @@ class IfStage2 extends Module with MycpuParam {
 
   //0707
   (0 until fetchNum).map(i => outBits.isBd(i) := false.B)
-
-  /**
-    * is延迟槽
-    *   目前放在IF2段处理
-    *   PRE-IF那还不太一样，如果分支没被预测跳转，是不会进入单走延迟槽的状态的
-    */
-  // val validBr = WireInit(
-  //   VecInit((0 until fetchNum).map(i => BranchType.isBr(outBits.realBrType(i)) && outBits.validMask(i))) //outValid
-  // )
-  // val dsReg       = RegInit(false.B)
-  // val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
-  // val outValidNum = PriorityCount(outBits.validMask.asUInt)
-  // when(outBits.validMask(0) && io.out.valid) { dsReg := false.B }
-  // when(validBr.asUInt.orR) {
-  //   asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
-  //   when(lastDs >= outValidNum) {
-  //     dsReg := true.B
-  //   }
-  // }
-  // val isBd = outBits.isBd
-  // (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
-  // asg(isBd(0), dsReg)
-  // when(io.flushIn) { dsReg := false.B }
 }

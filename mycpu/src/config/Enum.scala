@@ -75,7 +75,7 @@ object MemType extends ChiselEnum {
   }
 }
 object BranchType extends ChiselEnum {
-  val BEQ, BNE, BGEZ, BLEZ, BLTZ, BGTZ, BLTZAL, BGEZAL, J, JAL, JR, JALR, JRHB, NON = Value
+  val NON, BEQ, BNE, BGEZ, BLEZ, BLTZ, BGTZ, BLTZAL, BGEZAL, J, JAL, JR, JALR, JRHB = Value
   def isJr(op: BranchType.Type): Bool = op === JR || op === JALR || op === JRHB
   def isJ(op:  BranchType.Type): Bool = op === J || op === JAL
   def isB(op:  BranchType.Type): Bool =
@@ -105,8 +105,8 @@ object BranchType extends ChiselEnum {
   def isBr(op: BranchType.Type): Bool = op =/= NON
 }
 object AluType extends ChiselEnum {
-  val ADD, ADDI, ADDU, ADDIU, SUB, SUBU, AND, ANDI, OR, ORI, XOR, XORI, NOR, SLT, SLTI, SLTU, SLTIU, SLL, SRL, SRA,
-    SLLV, SRLV, SRAV, LUI, MOVN, MOVZ, TRAPEQ, TRAPNE, NON = Value
+  val NON, ADD, ADDI, ADDU, ADDIU, SUB, SUBU, AND, ANDI, OR, ORI, XOR, XORI, NOR, SLT, SLTI, SLTU, SLTIU, SLL, SRL, SRA,
+    SLLV, SRLV, SRAV, LUI, MOVN, MOVZ, TRAPEQ, TRAPNE = Value
   def useAdd(op:  AluType.Type): Bool = op === ADD || op === ADDI || op === ADDU || op === ADDIU
   def useSub(op:  AluType.Type): Bool = op === SUB || op === SUBU
   def useAnd(op:  AluType.Type): Bool = op === AND || op === ANDI
@@ -143,12 +143,12 @@ object FuType extends Enumeration {
 }
 
 object BtbType extends ChiselEnum {
-  val jcall  = Value("b000".U)
-  val jret   = Value("b001".U)
-  val jmp    = Value("b010".U)
-  val jr     = Value("b011".U)
-  val b, non = Value
-  def isJump(brType: BtbType.Type) = !brType.asUInt(2).asBool
+  val non, b = Value
+  val jcall  = Value("b100".U)
+  val jret   = Value("b101".U)
+  val jmp    = Value("b110".U)
+  val jr     = Value("b111".U)
+  def isJump(brType: BtbType.Type) = brType.asUInt(2).asBool
 }
 
 object CCAttr extends ChiselEnum {

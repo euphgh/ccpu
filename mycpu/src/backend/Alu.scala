@@ -309,7 +309,6 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
       asg(backBrDiff.io.btbType, bpuUpdate.get.btb.bits.instType.asUInt)
       val lastBrValid = RegNext(brValid)
       val lastPC      = RegNext(inBrInfo.pcVal)
-      assert(!(brValid && lastBrValid && lastPC === inBrInfo.pcVal))
     }
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }

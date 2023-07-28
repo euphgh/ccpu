@@ -108,6 +108,7 @@ class DiffTLBIO extends DifftestBundle with MycpuParam {
   val iswr = Input(Bool())
   val pc   = Input(UInt(32.W))
 }
+
 class DiffTLBWRIO extends DifftestBundle with MycpuParam {
   val rand = Input(UInt(tlbIndexWidth.W))
 }
@@ -125,6 +126,21 @@ class DiffBackBrPredIO extends DifftestBundle with MycpuParam {
   val predDest = Input(UWord)
   val realDest = Input(UWord)
   val btbType  = Input(UInt(3.W))
+}
+
+class DiffSpecRASIO extends DifftestBundle with MycpuParam {
+  val push     = Input(Bool())
+  val pushData = Input(UWord)
+  val pop      = Input(Bool())
+  val topData  = Input(UWord)
+  val flush    = Input(Bool())
+}
+
+class DiffArchRASIO extends DifftestBundle with MycpuParam {
+  val push     = Input(Bool())
+  val pushData = Input(UWord)
+  val pop      = Input(Bool())
+  val topData  = Input(UWord)
 }
 
 class DiffBPUWriteIO extends DifftestBundle with MycpuParam {
@@ -254,3 +270,5 @@ class DifftestTLBAll extends DifftestBaseModule(new DiffTLBIO)
 class DifftestBackPred extends DifftestBaseModule(new DiffBackBrPredIO)
 class DifftestFrontPred extends DifftestBaseModule(new DiffFrontBrPredIO)
 class DifftestBPUWrite extends DifftestBaseModule(new DiffBPUWriteIO)
+class DifftestSpecRAS extends DifftestBaseModule(new DiffSpecRASIO)
+class DifftestArchRAS extends DifftestBaseModule(new DiffArchRASIO)

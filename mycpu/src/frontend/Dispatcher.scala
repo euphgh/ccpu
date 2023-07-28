@@ -8,6 +8,7 @@ import chisel3.util.Cat
 import chisel3.util.experimental.decode.QMCMinimizer
 import chisel3.experimental.conversions._
 import difftest.DifftestPhyRegInFreeList
+import chisel3.util.experimental.BoringUtils._
 
 class RATWriteBackIO extends MycpuBundle {
   val aDest = ARegIdx
@@ -344,6 +345,7 @@ class Dispatcher extends MycpuModule {
     *   t3:fl recoverd
     */
   val realTargetReg = RegInit(0.U(vaddrWidth.W))
+  addSource(io.fronRedirect.flush, "MisPredFrontRedirct")
   asg(io.fronRedirect.flush, false.B) //default
   asg(io.fronRedirect.target, realTargetReg) //default
 

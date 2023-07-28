@@ -14,6 +14,7 @@ import frontend.MispreSignal
 import chisel3.util.Valid
 import difftest.DifftestBackPred
 import frontend.PatternHistoryTable
+import frontend.RetAddrStack
 
 class Adder extends MycpuModule {
   val io = IO(new Bundle {
@@ -265,17 +266,22 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     val btb  = bpUp.btb
     val pht  = bpUp.pht
     asg(bpUp.pc, inBrInfo.pcVal)
-    //btb update
+    // BTB update ====================================================
     asg(btb.bits.instType, inBrInfo.realBtbType)
-    asg(btb.bits.target, inBrInfo.realTarget) //Mux(genTaken, inBrInfo.realTarget, inBrInfo.pcVal + 8.U(32.W)))
+    asg(btb.bits.target, inBrInfo.realTarget)
     asg(
       btb.valid,
       brValid && (inBrInfo.realBtbType =/= predict.btbType || inBrInfo.realTarget =/= predict.target)
     )
-    //pht update
+    // PHT update =====================================================
     val cat = Cat(preCnt, genTaken)
     asg(pht.valid, brValid && BranchType.isB(brType))
     asg(pht.bits, PatternHistoryTable.calNextCnt(preCnt, genTaken))
+    // RAS update =====================================================
+    val ras = Module(new RetAddrStack(false, retAddrStackSize))
+    ras.io.push.valid := inBrInfo.realBtbType === BtbType.jcall && brValid
+    ras.io.pop        := inBrInfo.realBtbType === BtbType.jret && brValid
+    asg(ras.io.push.bits, inBrInfo.pcVal + 8.U)
     /*==================== MisPre Signal to Dper/ROB ====================*/
     val misSignal  = mispre.get
     val takenWrong = genTaken ^ predict.taken
@@ -307,9 +313,6 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
       asg(backBrDiff.io.predTake, predict.taken)
       asg(backBrDiff.io.realTake, genTaken)
       asg(backBrDiff.io.btbType, bpuUpdate.get.btb.bits.instType.asUInt)
-      val lastBrValid = RegNext(brValid)
-      val lastPC      = RegNext(inBrInfo.pcVal)
-      assert(!(brValid && lastBrValid && lastPC === inBrInfo.pcVal))
     }
     /*==================== Take LinkAddr ====================*/
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }

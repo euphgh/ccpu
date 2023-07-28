@@ -85,10 +85,13 @@ class DPTemplate[T <: Data](
                else array.read(io.r.req.bits.setIdx, realRen)).asTypeOf(gen)
 
   if (writefirst) {
-    val rReqReg  = RegNext(io.r.req)
-    val wReqReg  = RegNext(io.w.req)
-    val reqConf  = (rReqReg.valid && wReqReg.valid) && (rReqReg.bits.setIdx === wReqReg.bits.setIdx)
-    val confData = wReqReg.bits.data
+    val rReqIndexReg = RegNext(io.r.req.bits.setIdx)
+    val rReqValidReg = RegNext(io.r.req.valid)
+    val wReqIndexReg = RegNext(io.w.req.bits.setIdx)
+    val wReqValidReg = RegNext(io.w.req.valid)
+    val wReqDataReg  = RegNext(io.w.req.bits.data)
+    val reqConf      = (rReqValidReg && wReqValidReg) && (rReqIndexReg === wReqIndexReg)
+    val confData     = wReqDataReg
     require(io.w.req.bits.data.getWidth == rdata.getWidth)
     when(reqConf) { rdata := confData }
   }

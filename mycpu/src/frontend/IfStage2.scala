@@ -74,7 +74,10 @@ class IfStage2 extends MycpuModule {
     val outBasic = outBits.basicInstInfo(i)
     val inPcVal  = inBits.pcVal
     outBits.predictResult(i) := inBits.predictResult(i)
-    asg(outBasic.pcVal, Cat(inPcVal(31, 5), inPcVal(4, 2) + i.U, inPcVal(1, 0)))
+    asg(
+      outBasic.pcVal,
+      Cat(inPcVal(31, instrOffMsb + 1), inPcVal(instrOffMsb, instrOffLsb) + i.U, inPcVal(1, 0))
+    )
     asg(outBasic.instr, icache2.io.out.bits.idata.get(i)) //要求cache根据自动机状态返回全0
     outBits.validMask(i) := inBits.validMask(i) //default noBrMispre May change it
   })

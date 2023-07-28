@@ -314,6 +314,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
       asg(backBrDiff.io.realTake, genTaken)
       asg(backBrDiff.io.btbType, bpuUpdate.get.btb.bits.instType.asUInt)
     }
+    when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
     //movz movn
     // val prevPDest = exeIn.prevPDest
     // val prevData  = Wire(UWord)

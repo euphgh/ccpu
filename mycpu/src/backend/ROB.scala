@@ -24,6 +24,8 @@ class RobEntry extends MycpuBundle {
     val detect = new DetectExInfoBundle
   }
   val isMispredict = Bool()
+  val isNoBrMis    = Bool()
+  val isFirPreTake = Bool()
   val done         = Bool()
   val debugPC      = if (debug) Some(UWord) else None
 }
@@ -159,7 +161,6 @@ class ROB extends MycpuModule {
     ) =/= mispreIdx + 1.U)
 
   }
-  //val mispreIdxReg=RegEnable
   val mispreIdxReg = Module(new Mark(UInt(5.W)))
   mispreIdxReg.start.valid <> io.in.fromAluIsMisPre
   mispreIdxReg.start.bits <> io.in.misPredictIdx
@@ -178,6 +179,8 @@ class ROB extends MycpuModule {
     val fromDper = io.in.fromDispatcher(i).bits
     asg(enqData.uOp, fromDper.uOp)
     asg(enqData.exception.basic, fromDper.basicExInfo)
+    asg(enqData.isNoBrMis, fromDper.isNoBrMis)
+    asg(enqData.isFirPreTake, fromDper.isFirPreTake)
     asg(enqData.done, false.B)
     asg(enqData.isMispredict, false.B)
     if (debug) asg(enqData.debugPC.get, io.in.fromDispatcher(i).bits.basicExInfo.pc)
@@ -230,7 +233,9 @@ class ROB extends MycpuModule {
   val waitNextVec = WireInit(
     VecInit(
       (0 until retireNum).map(i =>
-        (retireInst(i).isMispredict || retireSpType(i) === SpecialType.CACHEINST) && readyRetire(i)
+        (retireInst(i).isNoBrMis || retireInst(i).isMispredict || retireSpType(
+          i
+        ) === SpecialType.CACHEINST) && readyRetire(i)
       )
     )
   )
@@ -297,11 +302,14 @@ class ROB extends MycpuModule {
   val hasSingle   = singleRetireVec.asUInt.orR
   val state       = RegInit(normal)
   import utils._
-  val normalSel    = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
-  val exerMask     = ~PriorityMask(exerVec.asUInt)
-  val waitNextMask = ~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
-
+  val normalSel        = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
+  val exerMask         = ~PriorityMask(exerVec.asUInt)
+  val waitNextMask     = ~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
   val singleRetireMask = ~Cat(PriorityMask(singleRetireVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
+
+  // noBr   =======================================================
+  val isFirPreTakeReg = RegInit(false.B)
+  val pcReg           = RegInit(0.U(32.W))
   // JMP HB =======================================================
   val findHBinRob  = RegInit(false.B)
   val dstHBFromAlu = Wire(Flipped(Valid(UWord)))
@@ -330,16 +338,22 @@ class ROB extends MycpuModule {
       when(hasExer && firExEr <= firWaitNext && firExEr <= firSingle) {
         asg(state, exerFlush)
         asg(allowRobPop, VecInit(exerMask.asBools)) //mask itself and the inst behind
-      }.elsewhen(hasWaitNext && firWaitNext < firSingle) {
-        asg(state, Mux(retireSpType(0) === SpecialType.CACHEINST, ciNext, mpNext))
+      }.elsewhen(hasWaitNext && firWaitNext <= firSingle) {
+        asg(
+          state,
+          Mux(retireSpType(firWaitNext) === SpecialType.CACHEINST || retireInst(firWaitNext).isNoBrMis, ciNext, mpNext)
+        )
         asg(allowRobPop, VecInit(waitNextMask.asBools)) //mask the inst behind
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
+        io.out.singleRetire.valid := hasSingle && (firWaitNext === firSingle) //nobrMis 指令可能是singleRetire指令
+        asg(isFirPreTakeReg, retireInst(firWaitNext).isFirPreTake)
+        asg(pcReg, retireInst(firWaitNext).exception.basic.pc)
       }.elsewhen(hasSingle) {
         io.out.singleRetire.valid := true.B
         asg(allowRobPop, VecInit(singleRetireMask.asBools))
       }
     }
-    is(mpNext) { //CACHEINST 或 MISPRE(JRHB)转移而来
+    is(mpNext) { //MISPRE(JRHB)转移而来
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B)) //default
       when(readyRetire(0)) {
         assert(retireInst(0).exception.basic.isBd)
@@ -354,7 +368,7 @@ class ROB extends MycpuModule {
     }
     is(ciNext) {
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
-      asg(io.out.robRedirect.target, retirePcVal(0))
+      asg(io.out.robRedirect.target, Mux(isFirPreTakeReg, pcReg + 4.U(32.W), retirePcVal(0))) //retirePcVal(0))
       when(robEntries.io.headPtr =/= robEntries.io.tailPtr) {
         io.out.flushAll          := true.B
         io.out.robRedirect.flush := true.B

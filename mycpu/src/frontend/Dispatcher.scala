@@ -426,6 +426,11 @@ class Dispatcher extends MycpuModule {
     asg(toRobUop.currADest, slots(i).inst.aRegsIdx.dest)
     asg(toRobUop.currPDest, slots(i).toRsBasic.destPregAddr)
     asg(toRobUop.specialType, decoder(i).io.out.decoded.specialType)
+    //noBrMis
+    val preTaken       = slots(i).inst.predictResult.taken
+    val noBrMisPredict = preTaken && slots(i).inst.realBrType === BranchType.NON
+    asg(toRobBits.isNoBrMis, noBrMisPredict)
+    asg(toRobBits.isFirPreTake, slots(i).inst.isFirPreTake)
   })
 
   //to fl

@@ -52,6 +52,7 @@ class InstBuffer extends MycpuModule {
     pushBits.exception     := inBits.exception
     pushBits.realBrType    := inBits.realBrType(i)
     pushBits.isBd          := inBits.isBd(i)
+    pushBits.isFirPreTake  := inBits.isFirPreTake(i)
   })
   io.in.ready := ib.io.push(0).ready // any number is ok
 
@@ -77,6 +78,7 @@ class InstBuffer extends MycpuModule {
     outBits.predictResult := ibPop.predictResult
     outBits.realBrType    := ibPop.realBrType
     outBits.isBd          := ibPop.isBd
+    outBits.isFirPreTake  := ibPop.isFirPreTake
     io.out(i).valid       := ib.io.pop(i).valid
     ib.io.pop(i).ready    := io.out(i).ready
   })

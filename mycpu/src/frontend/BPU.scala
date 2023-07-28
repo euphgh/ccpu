@@ -84,7 +84,7 @@ class BranchTargetBuffer extends BasicBPU(new BtbOutIO()) {
   */
 class PatternHistoryTable extends BasicBPU(UInt(2.W)) {
   override def missFunc(entry: UInt, addr: UInt): UInt = {
-    0.U(2.W)
+    1.U(2.W)
   }
 }
 

@@ -82,75 +82,35 @@ class IfStage2 extends MycpuModule {
   asg(io.out.valid, icache2.io.out.valid)
   asg(icache2.io.out.ready, io.out.ready)
 
-  /**
-    * pre-decode
-    *   find out if a no-branch inst have been predicted taken
-    *     change its predict result
-    *     mask the inst behind it
-    *     need to redirect frontend
-    *     need to update BPU:
-    *         set a queue,when q full,just don't get into Q
-    */
-
-  val nonBrMisPreVec = Wire(Vec(fetchNum, Bool()))
-  val firNonBrMispre = WireDefault(0.U(log2Up(fetchNum).W))
-  val bpuUpdateQueue = Module(new Queue(gen = new BpuUpdateIO, entries = 4))
-
   //default
   asg(io.noBrMispreRedirect.flush, false.B)
   asg(io.noBrMispreRedirect.target, 0.U(vaddrWidth.W))
-  asg(bpuUpdateQueue.io.enq.valid, false.B)
-  asg(bpuUpdateQueue.io.enq.bits, 0.U.asTypeOf(new BpuUpdateIO))
+  io.bpuUpdate       := DontCare
+  io.bpuUpdate.valid := false.B
 
   //predecode
   (0 until fetchNum).foreach(i => {
-    val instr      = io.out.bits.basicInstInfo(i).instr
-    val preRes     = io.out.bits.predictResult(i)
-    val preTake    = preRes.taken
+    val instr = io.out.bits.basicInstInfo(i).instr
+
     val instValid  = inValidMask(i) && io.in.valid //inValid
     val realBrType = icache2.io.out.bits.toUser(i)
     when(icache2.io.out.valid) {
       if (sim) assert(realBrType === getIntrBrType(instr))
     }
-    nonBrMisPreVec(i) := (realBrType === BranchType.NON && preTake && instValid)
     asg(io.out.bits.realBrType(i), realBrType)
   })
 
-  //attention:out valid
-  when(nonBrMisPreVec.asUInt.orR && io.out.valid) {
-    firNonBrMispre := PriorityEncoder(nonBrMisPreVec)
-    val preTakeVec = WireInit(
-      VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).taken && inValidMask(i) && io.in.valid))
-    )
-    val firPreTake = PriorityEncoder(preTakeVec)
-    when(firNonBrMispre === firPreTake) {
-      val misPreRes = outBits.predictResult(firNonBrMispre)
-      val misPc     = outBits.basicInstInfo(firNonBrMispre).pcVal
-      //mask the inst behind it
-      (0 until fetchNum).map(i => { outBits.validMask(i) := (i.U <= firNonBrMispre) })
-      //change its preResult      ATTENTION:这里preRes无所谓改不改，因为ALU里会根据realBrType来操作
-      misPreRes.btbType := BtbType.non
-      //redirect frontend
-      asg(io.noBrMispreRedirect.flush, io.out.fire)
-      asg(io.noBrMispreRedirect.target, misPc + 4.U)
-      //enq bpuUpdateQ
-      val bpuUpdateEnq = bpuUpdateQueue.io.enq.bits
-      asg(bpuUpdateQueue.io.enq.valid, io.out.fire)
-      asg(bpuUpdateEnq.pc, misPc)
-      //btb
-      val updateBtb = bpuUpdateEnq.btb
-      asg(updateBtb.valid, true.B)
-      asg(updateBtb.bits.target, misPreRes.target) //Dontcare
-      asg(updateBtb.bits.instType, BtbType.non)
-      //pht
-      val updatePht = bpuUpdateEnq.pht
-      asg(updatePht.valid, true.B)
-      asg(updatePht.bits, 0.U(2.W))
-    }
+  //fir preTake
+  val preTakeVec = WireInit(
+    VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).taken && inValidMask(i) && io.in.valid))
+  )
+  val firPreTake = PriorityEncoder(preTakeVec)
+  (0 until fetchNum).map(i => outBits.isFirPreTake(i) := false.B) //default
+  when(preTakeVec.asUInt.orR) {
+    outBits.isFirPreTake(firPreTake) := true.B
   }
-  io.bpuUpdate <> bpuUpdateQueue.io.deq
 
-  //0707
+  //isBd
   (0 until fetchNum).map(i => outBits.isBd(i) := false.B)
   if (verilator) {
     val frontPreDiff = Module(new DifftestFrontPred)

@@ -107,8 +107,13 @@ class IfStage1 extends MycpuModule {
   val btbRes = Wire(Vec(fetchNum, new BtbOutIO))
   val phtRes = Wire(Vec(fetchNum, UInt(2.W)))
   (0 until fetchNum).foreach(i => {
-    asg(btb.readAddr(i).bits, Cat(npc(31, 4), 0.U(4.W)))
-    asg(pht.readAddr(i).bits, Cat(npc(31, 4), 0.U(4.W)))
+    val offMsb = log2Ceil(IcachLineBytes / 4) + 2
+    val mid    = Wire(UInt((offMsb - 2).W))
+    dontTouch(mid)
+    asg(mid, RingBits(npc(offMsb - 1, 2), fetchNum, i))
+    val searchAddr = Cat(npc(31, offMsb), mid, 0.U(2.W))
+    asg(btb.readAddr(i).bits, searchAddr)
+    asg(pht.readAddr(i).bits, searchAddr)
     asg(btb.readAddr(i).valid, update)
     asg(pht.readAddr(i).valid, update)
     asg(btbRes(i), btb.readRes(i))

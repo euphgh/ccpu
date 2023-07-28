@@ -73,7 +73,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
 class BranchTargetBuffer extends BasicBPU(new BtbOutIO()) {
   override def missFunc(entry: BtbOutIO, addr: UInt): BtbOutIO = {
     val out = Wire(new BtbOutIO)
-    out.target   := addr + 4.U
+    out.target   := addr
     out.instType := BtbType.non
     out
   }

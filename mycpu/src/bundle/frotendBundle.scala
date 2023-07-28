@@ -95,6 +95,7 @@ class IfStage1OutIO extends MycpuBundle {
 
 class IfStage2OutIO extends MycpuBundle {
   val isBd          = Vec(fetchNum, Bool())
+  val isFirPreTake  = Vec(fetchNum, Bool())
   val predictResult = Vec(fetchNum, new PredictResultBundle)
   val realBrType    = Vec(fetchNum, BranchType())
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
@@ -111,6 +112,7 @@ class InstBufferEntry extends MycpuBundle {
   val basicInstInfo = new BasicInstInfoBundle
   val exception     = FrontExcCode()
   val isBd          = Output(Bool())
+  val isFirPreTake  = Output(Bool())
 }
 class InstBufferOutIO extends InstBufferEntry {
   val whichFu  = ChiselFuType()
@@ -182,8 +184,10 @@ class RobSavedUop extends MycpuBundle {
   val specialType = SpecialType()
 }
 class DispatchToRobBundle extends MycpuBundle {
-  val basicExInfo = new BasicExInfoBundle //PC ALSO use as difftest check execution flow
-  val uOp         = new RobSavedUop
+  val basicExInfo  = new BasicExInfoBundle //PC ALSO use as difftest check execution flow
+  val uOp          = new RobSavedUop
+  val isNoBrMis    = Output(Bool())
+  val isFirPreTake = Output(Bool())
 }
 
 /**

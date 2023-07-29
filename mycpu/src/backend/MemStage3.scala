@@ -36,7 +36,7 @@ class MemStage3 extends MycpuModule {
   if (debug) asg(outBits.wbRob.debugPC.get, inBits.debugPC.get)
   // alias ======================================================
   val isld       = isLoad(inBits.memType)
-  val prevDstSrc = inBits.prevDstSrc
+  val prevDstSrc = word2Bytes(inBits.prevDstSrc)
   // ===================== select ===============================
   val cacheMask  = inBits.cacheMask
   val validWord  = maskWord(inBits.cacheData, cacheMask).asUInt | maskWord(inBits.storeQData, ~cacheMask).asUInt

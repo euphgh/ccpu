@@ -85,7 +85,6 @@ class InstFetch extends MycpuModule {
   (0 until fetchNum).foreach(i => {
     import BranchType._
     val pc = Cat(if2Wio.tagIdx, if2Wio.instrOff(i), 0.U(2.W))
-    dontTouch(pc)
     require(pc.getWidth == 32)
     asg(if2OutWen(i), ifStage2.io.btbDeq.valid && if2Wio.valid(i) && (isB(if2Wio.brType(i)) || isJ(if2Wio.brType(i))))
     asg(if2OutTarget(i), getDst(if2Wio.brType(i), if2Wio.instr(i), pc))
@@ -94,7 +93,6 @@ class InstFetch extends MycpuModule {
 
   (0 until fetchNum).map(i => {
     val sel = VecInit((0 until fetchNum).map(j => { if2Wio.instrOff(j)(1, 0) === i.U }))
-    dontTouch(sel)
     when(ifStage2.io.btbDeq.valid) { PopCount(sel.asUInt === 1.U) }
     asg(if2AssignBtb.instrOff(i), Mux1H(sel, if2Wio.instrOff))
     asg(if2AssignBtb.wen(i), Mux1H(sel, if2OutWen))

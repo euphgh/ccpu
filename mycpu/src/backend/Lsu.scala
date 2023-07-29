@@ -19,7 +19,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // module and alias
   val memStage1 = Module(new MemStage1)
   val memStage2 = Module(new MemStage2)
-  val storeQ    = Module(new StoreQueue(8))
+  val storeQ    = Module(new StoreQueue(storeQSize))
   val roOutBits = roStage.io.out.bits
   val deqSQ     = storeQ.io.deq.req
   val mem1RO    = memStage1.io.fromRO

@@ -20,6 +20,7 @@ trait MycpuParam {
   val enableCacheInst  = true
   val immWidth         = 16
   val retAddrStackSize = 8
+  val storeQSize       = 4
   def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
   def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
   val instrOffLsb   = 2
@@ -48,7 +49,7 @@ trait MycpuParam {
   def PRegIdx = UInt(pRegAddrWidth.W)
   def ROBIdx  = UInt(robIndexWidth.W)
 
-  val tlbEntriesNum = 8
+  val tlbEntriesNum = 4
   val tlbIndexWidth = log2Ceil(tlbEntriesNum)
   def TLBIdx        = UInt(tlbIndexWidth.W)
 

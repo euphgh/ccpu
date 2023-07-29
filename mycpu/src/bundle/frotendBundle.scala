@@ -261,9 +261,8 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     else None
   val mem =
     if (kind == FuType.Lsu) Some(Output(new Bundle {
-      val cache     = Output(new CacheStage1In(true)) //cache.rwReq.wWord is just src2?
-      val immOffset = Output(UInt(16.W))
-      val carryout  = Output(Bool())
+      val cache = Output(new CacheStage1In(true)) //cache.rwReq.wWord is just src2?
+      val vaddr = Output(UWord)
     }))
     else None
 }

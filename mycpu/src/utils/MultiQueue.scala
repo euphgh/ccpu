@@ -63,7 +63,7 @@ class MultiQueue[T <: Data](
   def overflow(add:  UInt) = (headPtr - tailPtr + add - deqFireNum)(counterWidth) //must look ahead a cycle
   def underflow(sub: UInt) = (headPtr - tailPtr - sub)(counterWidth) //only considerate current
   val nextBasicNum = RegNext(Mux(io.flush, 0.U(ptrWidth.W), (headPtr + enqFireNum - tailPtr - deqFireNum)))
-  def overflowR(add:  UInt) = (nextBasicNum + add - deqFireNum)(counterWidth) //must look ahead a cycle
+  def overflowR(add:  UInt) = (nextBasicNum + add)(counterWidth) //must look ahead a cycle
   def underflowR(sub: UInt) = (nextBasicNum - sub)(counterWidth) //only considerate current
   val pushIndex = RegNext(VecInit((0 until enqNum).map(i => {
     val startLine = Mux(io.flush, 0.U(counterWidth.W), headPtr + enqFireNum)

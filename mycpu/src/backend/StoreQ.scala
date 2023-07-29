@@ -61,7 +61,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   asg(io.empty, empty)
 
   //=================== enq =======================
-  fromMem1.ready := (!full || io.deq.back) && io.writeBack.ready
+  fromMem1.ready := !full && io.writeBack.ready
   when(do_enq && !io.fromMem1.bits.scFail) {
     ram(enq_ptr) := stqEnq
     enq_ptr      := enq_ptr + 1.U

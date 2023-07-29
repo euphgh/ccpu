@@ -269,10 +269,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     // BTB update ====================================================
     asg(btb.bits.instType, inBrInfo.realBtbType)
     asg(btb.bits.target, inBrInfo.realTarget)
-    asg(
-      btb.valid,
-      brValid && (inBrInfo.realBtbType =/= predict.btbType || inBrInfo.realTarget =/= predict.target)
-    )
+    asg(btb.valid, brValid && BranchType.isJr(brType))
     // PHT update =====================================================
     val cat = Cat(preCnt, genTaken)
     asg(pht.valid, brValid && BranchType.isB(brType))

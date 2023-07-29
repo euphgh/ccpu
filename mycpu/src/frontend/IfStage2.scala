@@ -9,6 +9,14 @@ import decodemacro.MacroDecode
 import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestFrontPred
 
+class BtbWIO extends MycpuBundle {
+  val valid    = Vec(4, Bool())
+  val tagIdx   = UInt((32 - log2Ceil(IcachLineBytes)).W)
+  val instrOff = Vec(4, UInt(instrOffWidth.W))
+  val brType   = Vec(fetchNum, BranchType())
+  val instr    = Vec(fetchNum, UWord)
+}
+
 /**
   * out.predictResult := stage1.out.bpuOut(bpuOut.takenMask become a "taken" bit)
   *
@@ -36,7 +44,8 @@ class IfStage2 extends MycpuModule {
     val imem = new DramReadIO
 
     val noBrMispreRedirect = new FrontRedirctIO
-    val bpuUpdate          = Decoupled(new BpuUpdateIO)
+
+    val btbDeq = Decoupled(new BtbWIO)
   })
   def getIntrBrType(instr: UInt): BranchType.Type = {
     @MacroDecode
@@ -88,8 +97,6 @@ class IfStage2 extends MycpuModule {
   //default
   asg(io.noBrMispreRedirect.flush, false.B)
   asg(io.noBrMispreRedirect.target, 0.U(vaddrWidth.W))
-  io.bpuUpdate       := DontCare
-  io.bpuUpdate.valid := false.B
 
   //predecode
   (0 until fetchNum).foreach(i => {
@@ -100,7 +107,7 @@ class IfStage2 extends MycpuModule {
     when(icache2.io.out.valid) {
       if (sim) assert(realBrType === getIntrBrType(instr))
     }
-    asg(io.out.bits.realBrType(i), realBrType)
+    asg(outBits.realBrType(i), realBrType)
   })
 
   //fir preTake
@@ -123,4 +130,13 @@ class IfStage2 extends MycpuModule {
     asg(frontPreDiff.io.realType, VecInit(io.out.bits.realBrType.map(_.asUInt)))
     asg(frontPreDiff.io.en, io.out.fire)
   }
+
+  val bpuWQ = Module(new Queue(gen = new BtbWIO, entries = 4, hasFlush = false))
+  asg(bpuWQ.io.enq.valid, io.out.fire)
+  asg(bpuWQ.io.enq.bits.tagIdx, outBits.basicInstInfo(0).pcVal(31, instrOffMsb + 1))
+  asg(bpuWQ.io.enq.bits.instrOff, VecInit(outBits.basicInstInfo.map(_.pcVal(instrOffMsb, instrOffLsb))))
+  asg(bpuWQ.io.enq.bits.brType, outBits.realBrType)
+  asg(bpuWQ.io.enq.bits.valid, outBits.validMask)
+  asg(bpuWQ.io.enq.bits.instr, VecInit(outBits.basicInstInfo.map(_.instr)))
+  io.btbDeq <> bpuWQ.io.deq
 }

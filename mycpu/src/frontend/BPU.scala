@@ -73,10 +73,22 @@ class RetAddrStack(spec: Boolean, size: Int) extends MycpuModule {
   }
 }
 
+class BtbUpdateIO extends MycpuBundle {
+  val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
+  val instrOff = Vec(4, Input(UInt(instrOffWidth.W)))
+  val data     = Vec(fetchNum, Flipped(Valid(new BtbOutIO)))
+}
+class PhtUpdateIO extends MycpuBundle {
+  val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
+  val instrOff = Vec(4, Input(UInt(instrOffWidth.W)))
+  val data     = Vec(fetchNum, Flipped(Valid(UInt(2.W))))
+}
+
 class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModule {
   val update = IO(new Bundle {
-    val pc   = Input(UWord)
-    val data = Flipped(Valid(gen))
+    val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
+    val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
+    val data     = Flipped(Vec(fetchNum, Valid(gen)))
   })
   val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
   val readRes  = List.fill(fetchNum)(IO(Output(gen)))
@@ -102,8 +114,10 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
     val ramWidth = gen.getWidth + bpuTagWidth + 1
     val ram      = Module(new DPTemplate(UInt(ramWidth.W), entriesyNum, true, true))
     // write ========================================
-    val wen = update.data.valid && update.pc(lowWidth - 1, 2) === i.U
-    ram.io.w(wen, Cat(update.data.bits.asUInt, getTag(update.pc), true.B), hash(update.pc))
+    val updatePC = Cat(update.tagIdx, update.instrOff(i), 0.U(2.W))
+    val wen      = update.data(i).valid
+    if (verilator) when(wen) { assert(updatePC(lowWidth - 1, 2) === i.U) }
+    ram.io.w(wen, Cat(update.data(i).bits.asUInt, getTag(updatePC), true.B), hash(updatePC))
     // read ========================================
     // keep input search index stable
     val bpuIdx = HoldUnless(hash(readAddr(i).bits), readAddr(i).valid)

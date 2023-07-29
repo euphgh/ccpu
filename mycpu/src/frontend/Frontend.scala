@@ -14,7 +14,7 @@ class Frontend extends MycpuModule {
 
     val tlbSearch   = new TLBSearchIO
     val imem        = new DramReadIO
-    val bpuUpdateIn = Flipped(Valid(new BpuUpdateIO))
+    val bpuUpdateIn = Flipped(new BpuUpdateIO)
   })
 
   val instFetch  = Module(new InstFetch)

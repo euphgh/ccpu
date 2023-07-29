@@ -22,8 +22,9 @@ trait MycpuParam {
   val retAddrStackSize = 8
   def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
   def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
-  val instrOffLsb = 2
-  val instrOffMsb = log2Ceil(IcachLineBytes) - 1
+  val instrOffLsb   = 2
+  val instrOffMsb   = log2Ceil(IcachLineBytes) - 1
+  val instrOffWidth = instrOffMsb - instrOffLsb + 1
 
   val predictNum  = 4
   val fetchNum    = 4

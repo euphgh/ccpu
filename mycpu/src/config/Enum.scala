@@ -1,6 +1,7 @@
 package config
 import chisel3._
 import chisel3.util._
+import utils._
 
 object SRCType extends ChiselEnum {
   val RSRT, RS, RT, noSRC = Value
@@ -103,6 +104,16 @@ object BranchType extends ChiselEnum {
       )
     )
   def isBr(op: BranchType.Type): Bool = op =/= NON
+  def getDst(brType: BranchType.Type, instr: UInt, pc: UInt) = { // only generate not R
+    require(instr.getWidth == 32)
+    require(pc.getWidth == 32)
+    val imm               = instr(15, 0)
+    val dsPcVal           = pc + 4.U(32.W)
+    val (isJr, isJ, isAl) = (BranchType.isJr(brType), BranchType.isJ(brType), BranchType.isAL(brType))
+    val bDest             = SignExt(Cat(imm, 0.U(2.W)), 32) + dsPcVal
+    val jDest             = Cat(dsPcVal(31, 28), instr(25, 0), 0.U(2.W))
+    Mux(isJ, jDest, bDest)
+  }
 }
 object AluType extends ChiselEnum {
   val NON, ADD, ADDI, ADDU, ADDIU, SUB, SUBU, AND, ANDI, OR, ORI, XOR, XORI, NOR, SLT, SLTI, SLTU, SLTIU, SLL, SRL, SRA,

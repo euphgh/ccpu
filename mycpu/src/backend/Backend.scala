@@ -19,7 +19,7 @@ class Backend extends MycpuModule {
 
     val dram           = new DramIO
     val redirectFront  = new FrontRedirctIO
-    val bpuUpdate      = Valid(new BpuUpdateIO)
+    val bpuUpdate      = new BpuUpdateIO
     val dperOutFireNum = Output(UInt((log2Up(dispatchNum) + 1).W))
   })
 
@@ -240,6 +240,5 @@ class Backend extends MycpuModule {
 
   //bpu update
   val aluUpdateBpu = mAluFU.bpuUpdate.get
-  asg(io.bpuUpdate.valid, aluUpdateBpu.btb.valid || aluUpdateBpu.pht.valid)
-  asg(io.bpuUpdate.bits, aluUpdateBpu)
+  asg(io.bpuUpdate, aluUpdateBpu)
 }

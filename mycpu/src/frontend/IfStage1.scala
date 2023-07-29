@@ -9,7 +9,7 @@ import utils._
 import chisel3.util.experimental.decode._
 import chisel3.util.experimental.BoringUtils._
 import config.MycpuInit.PCReset
-import difftest.DifftestBPUWrite
+import difftest._
 
 class ICacheInstIO extends MycpuBundle {
   val op    = CacheOp()
@@ -47,7 +47,8 @@ class IfStage1 extends MycpuModule {
     val toPreIf = new IfStage1ToPreIf
     val tlb     = new TLBSearchIO
 
-    val bpuUpdateIn = Flipped(new BpuUpdateIO)
+    val btbUpdate = new BtbUpdateIO
+    val phtUpdate = new PhtUpdateIO
   })
 
   val icacheInst =
@@ -88,20 +89,29 @@ class IfStage1 extends MycpuModule {
   val pht = Module(new PatternHistoryTable())
   val ras = Module(new RetAddrStack(true, retAddrStackSize))
   // >> >> >> write =======================================
-  btb.update.pc := io.bpuUpdateIn.pc
-  btb.update.data <> io.bpuUpdateIn.btb
-  pht.update.pc := io.bpuUpdateIn.pc
-  pht.update.data <> io.bpuUpdateIn.pht
+  asg(btb.update.tagIdx, io.btbUpdate.tagIdx)
+  asg(btb.update.instrOff, io.btbUpdate.instrOff)
+  asg(btb.update.data, io.btbUpdate.data)
+  asg(pht.update.tagIdx, io.phtUpdate.tagIdx)
+  asg(pht.update.instrOff, io.phtUpdate.instrOff)
+  asg(pht.update.data, io.phtUpdate.data)
   if (verilator) {
-    val bpuDiff = Module(new DifftestBPUWrite)
-    bpuDiff.io.clock  := clock
-    bpuDiff.io.en     := io.bpuUpdateIn.btb.valid || io.bpuUpdateIn.pht.valid
-    bpuDiff.io.phtWen := io.bpuUpdateIn.pht.valid
-    bpuDiff.io.btbWen := io.bpuUpdateIn.btb.valid
-    asg(bpuDiff.io.pc, io.bpuUpdateIn.pc)
-    asg(bpuDiff.io.phtCount, io.bpuUpdateIn.pht.bits)
-    asg(bpuDiff.io.btbType, io.bpuUpdateIn.btb.bits.instType.asUInt)
-    asg(bpuDiff.io.btbTarget, io.bpuUpdateIn.btb.bits.target)
+    val btbDiff = Module(new DifftestBTBWrite)
+    asg(btbDiff.io.clock, clock)
+    asg(btbDiff.io.en, btbDiff.io.wen.asUInt.orR)
+    asg(btbDiff.io.tagIdx, io.btbUpdate.tagIdx)
+    asg(btbDiff.io.instrOff, io.btbUpdate.instrOff)
+    asg(btbDiff.io.wen, VecInit(io.btbUpdate.data.map(_.valid)))
+    asg(btbDiff.io.target, VecInit(io.btbUpdate.data.map(_.bits.target)))
+    asg(btbDiff.io.btbType, VecInit(io.btbUpdate.data.map(_.bits.instType.asUInt)))
+
+    val phtDiff = Module(new DifftestPHTWrite)
+    asg(phtDiff.io.clock, clock)
+    asg(phtDiff.io.en, phtDiff.io.wen.asUInt.orR)
+    asg(phtDiff.io.tagIdx, io.phtUpdate.tagIdx)
+    asg(phtDiff.io.instrOff, io.phtUpdate.instrOff)
+    asg(phtDiff.io.wen, VecInit(io.phtUpdate.data.map(_.valid)))
+    asg(phtDiff.io.count, VecInit(io.phtUpdate.data.map(_.bits)))
   }
   // >> >> >> read =========================================
   val bpuout = Wire(Vec(fetchNum, new PredictResultBundle))

@@ -5,7 +5,6 @@ import config._
 import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
-import utils.asg
 import utils._
 
 /**
@@ -143,8 +142,9 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     import MemType._
     val outMem    = outBits.mem.get
     val addrL12sb = inBits.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
-    outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(cacheOffsetWidth - 1, 0)
-    outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, cacheOffsetWidth)
+    val vaddr     = SignExt(inBits.immOffset.get, 32) + outSrcs(0)
+    outMem.cache.rwReq.get.lowAddr.offset := vaddr(cacheOffsetWidth - 1, 0)
+    outMem.cache.rwReq.get.lowAddr.index  := vaddr(11, cacheOffsetWidth)
     outMem.cache.rwReq.get.isWrite        := inBits.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR, SC)
     outMem.cache.rwReq.get.wWord          := outSrcs(1)
     outMem.cache.rwReq.get.size           := DontCare
@@ -154,9 +154,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       outMem.cache.cacheInst.get.bits.op    := inBits.cacheOp.get
       outMem.cache.cacheInst.get.bits.taglo := 0.U
     }
-    outMem.immOffset := inBits.immOffset.get
-    outMem.carryout  := addrL12sb(12)
-
+    asg(outMem.vaddr, vaddr)
     //lwl lwr
     val blkLsuRo = Wire(Bool())
     BoringUtils.addSink(blkLsuRo, "blockLsuRo")

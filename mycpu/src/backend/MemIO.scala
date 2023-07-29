@@ -20,11 +20,6 @@ class WriteBackIO extends MycpuBundle {
   val destAregAddr = ARegIdx
 }
 
-class ROplusReq extends MycpuBundle {
-  val immOffset = Output(UInt(16.W))
-  val carryout  = Output(Bool())
-}
-
 class SQplusReq extends MycpuBundle {
   val pTag  = UInt(tagWidth.W)
   val cAttr = CCAttr()
@@ -42,8 +37,7 @@ class MemStage1InIO extends MycpuBundle {
   val preDstSrc = UWord
   val rwReq     = new CacheRWReq
   val cacheInst = if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None
-  val immOffset = Output(UInt(16.W))
-  val carryout  = Output(Bool())
+  val vaddr     = UWord
   val debugPC   = if (debug) Some(UWord) else None
 }
 

@@ -74,8 +74,7 @@ class MemStage1 extends MycpuModule {
   val roBits       = roDecp.bits
 
   // TLB =============================================================
-  val imm    = SignExt(roBits.immOffset, 32)
-  val vTag   = roBits.srcData(0)(31, 12) + imm(31, 12) + roBits.carryout
+  val vTag   = roBits.vaddr(31, 12)
   val tlbRes = io.tlb.res
   asg(io.tlb.req.bits, Cat(vTag, 0.U(12.W)))
   io.tlb.req.valid      := roDecp.valid

@@ -120,7 +120,6 @@ class IfStage1 extends MycpuModule {
   (0 until fetchNum).foreach(i => {
     val offMsb = log2Ceil(IcachLineBytes / 4) + 2
     val mid    = Wire(UInt((offMsb - 2).W))
-    dontTouch(mid)
     asg(mid, RingBits(npc(offMsb - 1, 2), fetchNum, i))
     val searchAddr = Cat(npc(31, offMsb), mid, 0.U(2.W))
     asg(btb.readAddr(i).bits, searchAddr)

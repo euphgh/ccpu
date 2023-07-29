@@ -19,7 +19,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // module and alias
   val memStage1 = Module(new MemStage1)
   val memStage2 = Module(new MemStage2)
-  val storeQ    = Module(new StoreQueue(8))
+  val storeQ    = Module(new StoreQueue(storeQSize))
   val roOutBits = roStage.io.out.bits
   val deqSQ     = storeQ.io.deq.req
   val mem1RO    = memStage1.io.fromRO
@@ -38,8 +38,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1RO.bits.srcData, roOutBits.srcData)
   asg(mem1RO.bits.preDstSrc, roOutBits.prevData)
   asg(mem1RO.bits.rwReq, roOutBits.mem.get.cache.rwReq.get)
-  asg(mem1RO.bits.immOffset, roOutBits.mem.get.immOffset)
-  asg(mem1RO.bits.carryout, roOutBits.mem.get.carryout)
+  asg(mem1RO.bits.vaddr, roOutBits.mem.get.vaddr)
   asg(mem1RO.bits.cacheInst.get, roOutBits.mem.get.cache.cacheInst.get)
   asg(mem1SQ.bits.pTag, deqSQ.bits.pTag)
   asg(mem1SQ.bits.cAttr, deqSQ.bits.cAttr)

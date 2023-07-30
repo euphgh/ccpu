@@ -196,15 +196,14 @@ class ROB extends MycpuModule {
     robEntries.wb(i).idx        := wdata(i).robIndex
     robEntries.wb(i).exDetect   := wdata(i).exDetect
     robEntries.wb(i).misPredict := wdata(i).isMispredict
-    if (debug) {
-      when(io.in.wbRob(i).valid) {
-        assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
-      }
+    when(io.in.wbRob(i).valid) {
+      assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
     }
   })
 
   //io.out.robEmpty := robEntries.isEmpty
   asg(io.out.robIndex, robEntries.headIdx(robIndexWidth - 1, 0))
+  addSource(robEntries.headIdx, "ROB_HEAD_PTR")
 
   /**
     * retire

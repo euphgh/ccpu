@@ -39,6 +39,9 @@ class MemStage2 extends MycpuModule {
   outBits.wbInfo     := inBits.wbInfo
   outBits.prevDstSrc := inBits.prevDstSrc
   outBits.exDetect   := inBits.exDetect
+  when(inBits.memType === MemType.NON) {
+    outBits.exDetect.happen := false.B
+  }
   if (debug) asg(outBits.debugPC.get, inBits.debugPC.get)
   // ======================  Cache ============================
   val cache2  = Module(new CacheStage2(DcachRoads, DcachLineBytes, true)())
@@ -50,11 +53,12 @@ class MemStage2 extends MycpuModule {
   import MemType._
   val isCi       = if (enableCacheInst) io.in.bits.toCache2.cacheInst.get.valid else false.B
   val isld       = !inBits.isSQ && isLoad(inBits.memType)
+  val isNone     = inBits.memType === MemType.NON
   val cacheMask  = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
   val ldHitSQ    = !cacheMask.orR // not write and mem mask==0.U
   val inIndex    = inBits.toCache2.dCacheReq.get.lowAddr.index
   val cancelUart = inBits.pTag === "h1fe40".U && inIndex === 0.U(cacheIndexWidth.W) && inBits.isUncache === false.B
-  asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ || cancelUart) && isld)
+  asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ || cancelUart) && isld || isNone)
   asg(outBits.cacheMask, cacheMask)
   // store req from rostage should not enter cache
   cache2.io.in.valid := io.in.valid
@@ -62,7 +66,7 @@ class MemStage2 extends MycpuModule {
   io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = cache2.io.out.valid
   // store req from rostage should not wait cache
-  io.out.valid        := Mux(isld, cacheFinish, if (enableCacheInst) cache2.io.cacheInst.finish.get else false.B)
+  io.out.valid        := Mux(inBits.isSQ, false.B, Mux(isNone, true.B, cacheFinish))
   io.doneSQ           := cacheFinish && inBits.isSQ
   cache2.io.out.ready := Mux(inBits.isSQ, true.B, io.out.ready)
 
@@ -79,14 +83,13 @@ class MemStage2 extends MycpuModule {
   // CacheInst =====================================================
   if (enableCacheInst) {
     val inci = io.in.bits.toCache2.cacheInst.get
-    when(io.in.valid) {
-      assert(!inBits.isSQ || !inci.valid)
-    }
+    when(io.in.valid) { assert(!inBits.isSQ || !inci.valid) }
+    outBits.isCIntr := false.B
     when(inci.valid) {
-      io.out.valid  := cache2.io.cacheInst.finish.get
-      cinBit.cancel := false.B
+      io.out.valid    := cache2.io.cacheInst.finish.get
+      cinBit.cancel   := false.B
+      outBits.isCIntr := true.B
     }
     asg(cache2.io.cacheInst.redirect.get, io.flush)
-    asg(outBits.isCIntr, cache2.io.cacheInst.finish.get)
   }
 }

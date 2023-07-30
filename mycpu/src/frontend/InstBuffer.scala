@@ -39,9 +39,7 @@ class InstBuffer extends MycpuModule {
 
   // avoid icReq(if1) -> iCache data out(if2) -> instbuffer full ->
   // dispatch lsu -> lsu wait iCache instr finish
-  val iCacheInstrWait = Wire(Bool())
-  BoringUtils.addSink(iCacheInstrWait, "ICacheInstrWaitEntry")
-  asg(ib.io.flush, io.flush || iCacheInstrWait)
+  asg(ib.io.flush, io.flush)
   // input ========================================================
   (0 until fetchNum).foreach(i => {
     val pushBits = ib.io.push(i).bits

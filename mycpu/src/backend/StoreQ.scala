@@ -106,7 +106,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   //deq back
   when(do_deq) {
     deq_ptr := deq_ptr + 1.U
-    assert(io.deq.backPC.get === ram(deq_ptr).debugPC.get)
+    if (debug) assert(io.deq.backPC.get === ram(deq_ptr).debugPC.get)
   }
 
   //=================== query ====================

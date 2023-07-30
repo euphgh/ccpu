@@ -197,7 +197,7 @@ class ROB extends MycpuModule {
     robEntries.wb(i).exDetect   := wdata(i).exDetect
     robEntries.wb(i).misPredict := wdata(i).isMispredict
     when(io.in.wbRob(i).valid) {
-      assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
+      if (debug) assert(robEntries.wb(i).debugPC.get === wdata(i).debugPC.get)
     }
   })
 

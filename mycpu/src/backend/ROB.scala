@@ -481,21 +481,33 @@ class ROB extends MycpuModule {
   }
   when(flrState === recover) {
     val remainNum = flrHeadPtr - flrTailPtr
-    val flrPopMask = VecInit((0 until retireNum).map(i => {
-      ((0 to i).map(j => flrQueue(flrTailPtr + j.U) =/= 0.U).foldLeft(1.U)(_ & _)) & (i.U < remainNum)
-    })).asUInt
-    when(flrPopMask.orR) { flrTailPtr := flrTailPtr + PriorityCount(flrPopMask) }.otherwise {
-      flrTailPtr := flrTailPtr + 1.U
-    }
+    val validPDestVec =
+      WireInit(VecInit((0 until retireNum).map(i => flrQueue(dontTouch(flrTailPtr + i.U)).orR && (i.U < remainNum))))
+    flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
+    val pushFlNum = PopCount(validPDestVec)
+    val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
+    val tempValidVec =
+      WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
+    selVec(0) := PriorityEncoder(validPDestVec)
 
+    (1 until retireNum).map(i => {
+      val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+      temp(selVec(i - 1)) := false.B
+      tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+      selVec(i)           := PriorityEncoder(tempValidVec(i))
+    })
+    //dontTouch()
     // FreeList Push Valid ==========================================================
-    (0 until retireNum).foreach { i =>
-      io.out.flRecover(i).valid := flrPopMask(i)
-      io.out.flRecover(i).bits  := flrQueue(flrTailPtr + i.U)
+    (0 until retireNum).map { i =>
+      io.out.flRecover(i).valid := i.U < pushFlNum
+      io.out.flRecover(i).bits  := DontCare
+      when(io.out.flRecover(i).valid) {
+        io.out.flRecover(i).bits := flrQueue(dontTouch(flrTailPtr + selVec(i)))
+      }
     }
     // ROB push ready ===============================================================
     (0 until dispatchNum).foreach(i => {
-      io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr < 4.U
+      io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr < (3 * retireNum).U
     })
     // back to normal state
     when(flrHeadPtr === flrTailPtr) { flrState := idle }
@@ -512,9 +524,8 @@ class ROB extends MycpuModule {
     (1 until retireNum).map(i => {
       val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
       temp(selVec(i - 1)) := false.B
-      //val tempU=
-      tempValidVec(i) := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
-      selVec(i)       := PriorityEncoder(tempValidVec(i))
+      tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+      selVec(i)           := PriorityEncoder(tempValidVec(i))
     })
     (0 until retireNum).map { i =>
       io.out.flRecover(i).valid := i.U < pushFlNum

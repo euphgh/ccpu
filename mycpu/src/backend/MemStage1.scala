@@ -371,7 +371,6 @@ class MemStage1 extends MycpuModule {
 
   // default
   toSQbits.wbInfo       := roBits.wbInfo
-  toSQbits.exDetect     := roBits.exDetect
   toSQbits.stqEnq.rwReq := roBits.rwReq
   // update
   toSQbits.stqEnq.rwReq.size  := sizeOfmemType

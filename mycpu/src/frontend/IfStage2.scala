@@ -105,7 +105,7 @@ class IfStage2 extends MycpuModule {
     val instValid  = inValidMask(i) && io.in.valid //inValid
     val realBrType = icache2.io.out.bits.toUser(i)
     when(icache2.io.out.valid) {
-      if (sim) assert(realBrType === getIntrBrType(instr))
+      assert(realBrType === getIntrBrType(instr))
     }
     asg(outBits.realBrType(i), realBrType)
   })

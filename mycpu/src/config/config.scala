@@ -35,7 +35,7 @@ trait MycpuParam {
   val wBNum       = 3
   val issueNum    = 4 //should be 4
   val srcDataNum  = 2
-  val retireNum   = 2 //should be 4
+  val retireNum   = 3 //should be 4
 
   val aRegNum       = 32
   val aRegAddrWidth = log2Up(aRegNum)

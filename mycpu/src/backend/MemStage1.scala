@@ -182,7 +182,7 @@ class MemStage1 extends MycpuModule {
     is(cloadMode) { // only one cycle for any load req
       assert(roDecp.valid)
       val isUncache = CCAttr.isUnCache(tlbRes.ccAttr.asUInt) && MemType.isLoad(roBits.memType)
-      val isCinstr  = if (enableCacheInst) io.fromRO.bits.cacheInst.get.valid else false.B
+      val isCinstr  = if (enableCacheInst) roDecp.bits.cacheInst.get.valid else false.B
       when(isCinstr) {
         state             := cInstrWaitNext
         toMem2.valid      := false.B
@@ -421,27 +421,25 @@ class MemStage1 extends MycpuModule {
   PipelineConnect(io.fromSQ, sqDecp, sqFireOut, false.B)
 
   if (enableCacheInst) {
-    val ci = cache1.io.in.bits.cacheInst.get
-    ci <> wireRo.bits.cacheInst.get
+    cache1.io.in.bits.cacheInst.get <> wireRo.bits.cacheInst.get
+    val cio = cache1.io.out.cacheInst.get.bits
     asg(toMem2.bits.toCache2.cacheInst.get, roBits.cacheInst.get)
     // index type cache instr should not require tlb
     // becasue, way infomation is in tag
-    when(roBits.cacheInst.get.valid && CacheOp.isIdxInv(ci.bits.op)) {
+    when(roBits.cacheInst.get.valid && CacheOp.isIdxInv(cio.op)) {
       io.tlb.req.valid := false.B
     }
     import frontend.ICacheInstIO
     val toICache1 = Wire(Valid(new ICacheInstIO))
     addSource(toICache1, "ICacheInstrReq")
-    toICache1.bits.index := cache1.io.in.bits.rwReq.get.lowAddr.index
-    toICache1.bits.taglo := ci.bits.taglo
-    toICache1.bits.op    := ci.bits.op
-    toICache1.valid      := (state === cInstrGo) && CacheOp.isIop(ci.bits.op) && !cInstrExc
+    toICache1.bits.index := cache1.io.out.dCacheReq.get.lowAddr.index
+    toICache1.bits.taglo := cio.taglo
+    toICache1.bits.op    := cio.op
+    toICache1.valid      := (state === cInstrGo) && CacheOp.isIop(cio.op) && !cInstrExc
   }
   // LL and SC =================================================
-  when(roBits.memType === LL) {
-    if (verilator) assert(toMem2.ready)
-  }
-  val llRdyGo = WireInit(toMem2.valid && roBits.memType === LL && !io.flush && !outEx.happen)
+  when(roBits.memType === LL && roDecp.valid) { assert(!io.flush) }
+  val llRdyGo = WireInit(toMem2.valid && roBits.memType === LL && !outEx.happen)
   addSource(llRdyGo, "llWen")
 
   val llbitInMem1 = Wire(Bool())

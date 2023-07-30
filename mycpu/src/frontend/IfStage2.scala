@@ -92,7 +92,7 @@ class IfStage2 extends MycpuModule {
   })
   asg(outBits.exception, inBits.exception)
   asg(io.out.valid, icache2.io.out.valid)
-  asg(icache2.io.out.ready, io.out.ready)
+  asg(icache2.io.out.ready, io.out.ready || !io.in.valid)
 
   //default
   asg(io.noBrMispreRedirect.flush, false.B)

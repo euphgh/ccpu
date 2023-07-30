@@ -503,12 +503,24 @@ class ROB extends MycpuModule {
     val validPDestVec =
       WireInit(VecInit((0 until retireNum).map(i => io.out.multiRetire(i).valid && retireInst(i).uOp.prevPDest.orR)))
     val pushFlNum = PopCount(validPDestVec)
-    (0 until retireNum).foreach { i =>
+    val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
+    val tempValidVec =
+      WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
+    selVec(0) := PriorityEncoder(validPDestVec)
+
+    (1 until retireNum).map(i => {
+      val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+      temp(selVec(i - 1)) := false.B
+      //val tempU=
+      tempValidVec(i) := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+      selVec(i)       := PriorityEncoder(tempValidVec(i))
+    })
+    (0 until retireNum).map { i =>
       io.out.flRecover(i).valid := i.U < pushFlNum
-      val sel = PriorityEncoder(
-        WireInit(VecInit((i until retireNum).map(j => validPDestVec(j))))
-      ) + i.U
-      io.out.flRecover(i).bits := retireInst(sel).uOp.prevPDest
+      io.out.flRecover(i).bits  := DontCare
+      when(io.out.flRecover(i).valid) {
+        io.out.flRecover(i).bits := retireInst(selVec(i)).uOp.prevPDest
+      }
     }
   }
   //DiffTest ===================================================

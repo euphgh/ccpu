@@ -7,7 +7,8 @@ import chisel3.util.experimental.BoringUtils
 import utils.asg
 
 class WakeUpBroadCast extends MycpuBundle {
-  val (fromMainAlu, fromSubAlu, fromLsu) = (Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx))
+  val (fromMainAluIs, fromSubAluIs, fromMainAluRo, fromSubAluRo, fromLsu) =
+    (Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx))
 }
 
 /** rsEntry:
@@ -154,23 +155,32 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
 
   val wakeUpReceive = Wire(new WakeUpBroadCast)
   //BoringUtils.addSink(wakeUpReceive.fromLsu, "LsuMem1WakeUp")
-  wakeUpReceive.fromLsu.valid := false.B
-  wakeUpReceive.fromLsu.bits  := DontCare
+  wakeUpReceive.fromLsu.valid       := false.B
+  wakeUpReceive.fromLsu.bits        := DontCare
+  wakeUpReceive.fromMainAluIs.valid := false.B //default
+  wakeUpReceive.fromMainAluIs.bits  := DontCare //default
+  wakeUpReceive.fromSubAluIs.valid  := false.B //default
+  wakeUpReceive.fromSubAluIs.bits   := DontCare //default
 
   if (rsKind == FuType.MainAlu) {
-    BoringUtils.addSink(wakeUpReceive.fromSubAlu, "sAluIsWakeUp")
-    wakeUpReceive.fromMainAlu := wakeUpSource
+    BoringUtils.addSink(wakeUpReceive.fromSubAluIs, "sAluIsWakeUp")
+    wakeUpReceive.fromMainAluIs := wakeUpSource
     BoringUtils.addSource(wakeUpSource, "mAluIsWakeUp")
   } else if (rsKind == FuType.SubAlu) {
-    BoringUtils.addSink(wakeUpReceive.fromMainAlu, "mAluIsWakeUp")
-    wakeUpReceive.fromSubAlu := wakeUpSource
+    BoringUtils.addSink(wakeUpReceive.fromMainAluIs, "mAluIsWakeUp")
+    wakeUpReceive.fromSubAluIs := wakeUpSource
     BoringUtils.addSource(wakeUpSource, "sAluIsWakeUp")
-  } else {
-    BoringUtils.addSink(wakeUpReceive.fromSubAlu, "sAluRoWakeUp")
-    BoringUtils.addSink(wakeUpReceive.fromMainAlu, "mAluRoWakeUp")
   }
+  BoringUtils.addSink(wakeUpReceive.fromSubAluRo, "sAluRoWakeUp")
+  BoringUtils.addSink(wakeUpReceive.fromMainAluRo, "mAluRoWakeUp")
 
-  val wakeUpBroad = List(wakeUpReceive.fromMainAlu, wakeUpReceive.fromSubAlu, wakeUpReceive.fromLsu)
+  val wakeUpBroad = List(
+    wakeUpReceive.fromMainAluIs,
+    wakeUpReceive.fromSubAluIs,
+    wakeUpReceive.fromMainAluRo,
+    wakeUpReceive.fromSubAluRo,
+    wakeUpReceive.fromLsu
+  )
   wakeUpBroad.foreach(e =>
     List.tabulate(rsSize)(j => {
       val pSrcs = rsEntries(j).basic.srcPregs

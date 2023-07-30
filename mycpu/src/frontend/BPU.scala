@@ -116,7 +116,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
     // write ========================================
     val updatePC = Cat(update.tagIdx, update.instrOff(i), 0.U(2.W))
     val wen      = update.data(i).valid
-    if (verilator) when(wen) { assert(updatePC(lowWidth - 1, 2) === i.U) }
+    when(wen) { assert(updatePC(lowWidth - 1, 2) === i.U) }
     ram.io.w(wen, Cat(update.data(i).bits.asUInt, getTag(updatePC), true.B), hash(updatePC))
     // read ========================================
     // keep input search index stable

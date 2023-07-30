@@ -145,7 +145,7 @@ package object cop extends MycpuParam {
       // val da = (9, 7, 0x1)
 
       val m  = (31, 31, 0) //值为0，表示不存在config2寄存器
-      val ms = (30, 25, 0x7) //TLB大小,7对应8
+      val ms = (30, 25, tlbEntriesNum - 1) //TLB大小,7对应8
 
       val is = (24, 22, 1) //组数目：128
       val il = (21, 19, 0x4) //行大小：32B

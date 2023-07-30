@@ -179,19 +179,19 @@ object CacheOp extends ChiselEnum {
   val HitInvalidD            = Value("b10001".U)
   val HitWriteBackInvalidD   = Value("b10101".U)
   def isDop(op: CacheOp.Type) = {
-    op.asUInt(4) || (op.asUInt === 1.U)
+    op.isOneOf(IndexWriteBackInvalidD, IndexStoreTagD, HitInvalidD, HitWriteBackInvalidD)
   }
   def isIop(op: CacheOp.Type) = {
     !isDop(op)
   }
   def isIdxInv(op: CacheOp.Type) = {
-    op.asUInt < 2.U
+    op.isOneOf(IndexInvalidI, IndexWriteBackInvalidD)
   }
   def isIdxStoreTag(op: CacheOp.Type) = {
-    op.asUInt(4, 1) === "b0100".U
+    op.isOneOf(IndexStoreTagD, IndexStoreTagI)
   }
   def isHitInv(op: CacheOp.Type) = {
-    op.asUInt(4)
+    op.isOneOf(HitInvalidI, HitInvalidD, HitWriteBackInvalidD)
   }
 }
 

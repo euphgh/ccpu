@@ -35,13 +35,11 @@ class InstBuffer extends MycpuModule {
     val flush = Input(Bool())
   })
   // sub decode ==================================================
-  val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 8, true))
+  val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 16, true))
 
   // avoid icReq(if1) -> iCache data out(if2) -> instbuffer full ->
   // dispatch lsu -> lsu wait iCache instr finish
-  val iCacheInstrWait = Wire(Bool())
-  BoringUtils.addSink(iCacheInstrWait, "ICacheInstrWaitEntry")
-  asg(ib.io.flush, io.flush || iCacheInstrWait)
+  asg(ib.io.flush, io.flush)
   // input ========================================================
   (0 until fetchNum).foreach(i => {
     val pushBits = ib.io.push(i).bits

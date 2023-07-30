@@ -19,6 +19,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // module and alias
   val memStage1 = Module(new MemStage1)
   val memStage2 = Module(new MemStage2)
+  val memStage3 = Module(new MemStage3)
   val storeQ    = Module(new StoreQueue(storeQSize))
   val roOutBits = roStage.io.out.bits
   val deqSQ     = storeQ.io.deq.req
@@ -75,10 +76,12 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   memStage2.io.querySQ <> storeQ.io.query // search storeQ while load
   if (debug) storeQ.io.deq.backPC.get := memStage2.io.donePC.get // when store finish, release storeQ
 
+  // stage3 connect to stage2
+  PipelineConnect(memStage2.io.out, memStage3.io.in, memStage2.io.out.fire, io.flush)
   // mem2 to outside
   dram <> memStage2.io.dmem
   memStage2.io.flush := io.flush
-  io.out <> memStage2.io.out
+  io.out <> memStage3.io.out
 
   // storeQ to outside
   storeQ.io.flush := io.flush
@@ -89,9 +92,9 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   storeQ.io.writeBack.ready := io.out.ready
   stqEmpty                  := storeQ.io.empty
 
-  io.out.valid := storeQ.io.writeBack.valid || memStage2.io.out.valid
+  io.out.valid := storeQ.io.writeBack.valid || memStage3.io.out.valid
   // select writeback
-  memStage2.io.out.ready    := io.out.ready
-  storeQ.io.writeBack.ready := !memStage2.io.out.valid && io.out.ready
-  asg(io.out.bits, Mux(memStage2.io.out.valid, memStage2.io.out.bits, storeQ.io.writeBack.bits))
+  memStage3.io.out.ready    := io.out.ready
+  storeQ.io.writeBack.ready := !memStage3.io.out.valid && io.out.ready
+  asg(io.out.bits, Mux(memStage3.io.out.valid, memStage3.io.out.bits, storeQ.io.writeBack.bits))
 }

@@ -5,7 +5,7 @@ import config._
 import chisel3.util._
 import utils.asg
 import utils.PipelineConnect
-import chisel3.util.experimental.BoringUtils
+import chisel3.util.experimental.BoringUtils._
 import utils.PriorityCount
 import utils.SignExt
 import config.MycpuInit.PCReset
@@ -49,13 +49,20 @@ class InstFetch extends MycpuModule {
   ifStage1.io.tlb <> io.tlb
   val stage1IsCacheInstr = ifStage1.io.out.bits.iCache.cacheInst.get.valid
 
+  val iCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
+  if (enableCacheInst) {
+    addSink(iCacheInst, "ICacheInstrReq")
+  } else {
+    iCacheInst.bits  := DontCare
+    iCacheInst.valid := false.B
+  }
   //IF2 in
   PipelineConnect(
     ifStage1.io.out,
     ifStage2.io.in,
     ifStage2.io.out.fire,
     // noBrMissFlush only set when if2 out fire
-    !stage1IsCacheInstr && (io.redirect.flush || ifStage2.io.noBrMispreRedirect.flush)
+    !stage1IsCacheInstr && (io.redirect.flush || ifStage2.io.noBrMispreRedirect.flush || iCacheInst.valid)
   )
   ifStage2.io.imem <> io.imem
   io.out <> ifStage2.io.out

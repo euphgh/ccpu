@@ -219,7 +219,6 @@ class IfStage1 extends MycpuModule {
     when(ci.valid && !io.out.fire) {
       update := false.B
     }
-    addSource(ci.valid, "ICacheInstrWaitEntry")
   }
   io.out.valid := true.B
   asg(io.toPreIf.stage1Rdy, io.out.fire)

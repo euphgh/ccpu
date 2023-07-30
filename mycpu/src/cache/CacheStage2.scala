@@ -644,7 +644,8 @@ class CacheStage2[T <: Data](
       }
       is(fake) { // when Dcache recieve ICache Instr, it should listen
         if (isDcache) {
-          io.cacheInst.finish.get := iCacheFinishInstr && io.in.valid
+          io.cacheInst.finish.get := iCacheFinishInstr
+          assert(io.in.valid)
           when(iCacheFinishInstr) {
             instrState := waitRetire
           }

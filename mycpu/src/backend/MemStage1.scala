@@ -270,7 +270,7 @@ class MemStage1 extends MycpuModule {
       cache1Update.req  := false.B
       val robHead = Wire(ROBIdx)
       addSink(robHead, "ROB_HEAD_PTR")
-      when(roBits.wbInfo.robIndex =/= robHead) {
+      when(roBits.wbInfo.robIndex + 1.U =/= robHead && toMem2.ready) {
         state := cInstrGo
       }
     }

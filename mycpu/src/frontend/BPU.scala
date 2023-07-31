@@ -84,7 +84,84 @@ class PhtUpdateIO extends MycpuBundle {
   val data     = Vec(fetchNum, Flipped(Valid(UInt(2.W))))
 }
 
-class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModule {
+class LHT(val idxWidth: Int = 5, cntWidth: Int = 4, hisWidth: Int = 12) extends MycpuModule {
+  val lhtTagWidth = 32 - idxWidth - 4
+  val lhtTagLsb   = 32 - lhtTagWidth
+  val entriesNum  = math.pow(2, idxWidth).toInt
+  def calNextCnt(cnt: UInt, take: Bool): UInt = {
+    MuxCase(
+      Mux(take, cnt + 1.U, cnt - 1.U),
+      Seq(
+        cnt.andR -> Mux(take, cnt, cnt - 1.U),
+        !cnt.orR -> Mux(take, 1.U, 0.U)
+      )
+    )
+  }
+  def getTag(address: UInt) = {
+    require(address.getWidth == 32)
+    val res = update.bits.pc(31, lhtTagLsb)
+    require(res.getWidth == lhtTagWidth)
+    res
+  }
+  def getIdx(address: UInt) = {
+    require(address.getWidth == 32)
+    val res = update.bits.pc(lhtTagLsb - 1, 4)
+    require(res.getWidth == idxWidth)
+    res
+  }
+  val update = IO(Valid(new Bundle {
+    val pc       = Input(UWord)
+    val realTake = Input(Bool())
+  }))
+  val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
+  val readRes  = List.fill(fetchNum)(IO(Output(Bool())))
+
+  val writeStage2 = RegInit(false.B)
+  val pcReg       = RegNext(update.bits.pc)
+  val wenIdx      = getIdx(update.bits.pc)
+  val wenIdxReg   = getIdx(pcReg)
+  (0 until fetchNum).foreach(i => {
+    // write when valid
+    val clearCnt = RegInit(VecInit.fill(entriesNum)(0.U(cntWidth.W)))
+    // write in next cycle
+    val history  = RegInit(VecInit.fill(entriesNum)(0.U(hisWidth.W)))
+    val allTags  = RegInit(VecInit.fill(entriesNum)(0.U(hisWidth.W)))
+    val takeCnts = RegInit(VecInit.fill(entriesNum)(VecInit.fill(math.pow(2, hisWidth).toInt)(1.U(2.W))))
+    val fastCnt  = RegInit(VecInit.fill(entriesNum)(1.U(2.W)))
+
+    // Read ==============================================================
+    val readIdx = RegEnable(getIdx(readAddr(i).bits), readAddr(i).valid)
+    readRes(i) := fastCnt(readIdx) > 1.U
+
+    // Write =============================================================
+    val takeReg = RegNext(update.bits.realTake)
+    val hisReg  = RegNext(history(getIdx(update.bits.pc)))
+    val fastReg = RegNext(fastCnt(getIdx(update.bits.pc)))
+    when(update.valid) {
+      val tagMatch = allTags(wenIdx) === getTag(update.bits.pc)
+      val cntZero  = clearCnt(wenIdx) === 0.U
+      when(tagMatch) {
+        asg(writeStage2, true.B)
+        asg(clearCnt(wenIdx), calNextCnt(clearCnt(wenIdx), true.B))
+      }.elsewhen(cntZero) {
+        asg(writeStage2, true.B)
+      }.otherwise {
+        asg(clearCnt(wenIdx), calNextCnt(clearCnt(wenIdx), false.B))
+      }
+    }
+    when(writeStage2) {
+      val nextHis = Cat(hisReg(hisWidth - 2, 0), takeReg)
+      require(nextHis.getWidth == hisWidth)
+      asg(history(wenIdxReg), nextHis)
+      asg(allTags(wenIdxReg), getTag(pcReg))
+      val wCnt = calNextCnt(fastReg, takeReg)
+      asg(takeCnts(wenIdxReg)(hisReg), wCnt)
+      asg(fastCnt(wenIdxReg), takeCnts(wenIdxReg)(nextHis))
+    }
+  })
+}
+
+class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean = true) extends MycpuModule {
   val update = IO(new Bundle {
     val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
     val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
@@ -112,7 +189,17 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
   (0 until fetchNum).foreach(i => {
 
     val ramWidth = gen.getWidth + bpuTagWidth + 1
-    val ram      = Module(new DPTemplate(UInt(ramWidth.W), entriesyNum, true, true))
+    val ram = Module(
+      DualPortsSRAM(
+        gen         = UInt(ramWidth.W),
+        set         = entriesyNum,
+        useSRAM     = false,
+        shouldReset = true,
+        holdRead    = false,
+        singlePort  = false,
+        writefirst  = true
+      )
+    )
     // write ========================================
     val updatePC = Cat(update.tagIdx, update.instrOff(i), 0.U(2.W))
     val wen      = update.data(i).valid
@@ -147,7 +234,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10) extends MycpuModul
   * back  update: JR(jret and jr), JALR(jcall)
   * out should keep out until posedge that in.search.valid is true
   */
-class BranchTargetBuffer extends BasicBPU(new BtbOutIO()) {
+class BranchTargetBuffer extends BasicBPU(new BtbOutIO(), 10) {
   override def missFunc(entry: BtbOutIO, addr: UInt): BtbOutIO = {
     val out = Wire(new BtbOutIO)
     out.target   := addr + 8.U
@@ -159,7 +246,7 @@ class BranchTargetBuffer extends BasicBPU(new BtbOutIO()) {
 /**
   * only back update Branch
   */
-class PatternHistoryTable extends BasicBPU(UInt(2.W)) {
+class PatternHistoryTable extends BasicBPU(UInt(2.W), 10) {
   override def missFunc(entry: UInt, addr: UInt): UInt = {
     1.U(2.W)
   }

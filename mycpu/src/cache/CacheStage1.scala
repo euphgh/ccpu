@@ -71,8 +71,8 @@ class CacheStage1(
   val r2data = List.fill(roads)(Wire(Flipped(new DPReadBus(Vec(wordNum, UWord), lineNum))))
   val w2data = List.fill(roads)(Wire(Flipped(new DPWriteBus(Vec(wordNum, UWord), lineNum))))
   val w2meta = List.fill(roads)(Wire(Flipped(new DPWriteBus(new CacheMeta(isDcache), lineNum))))
-  val metas  = List.fill(roads)(Module(new DPTemplate(new CacheMeta(isDcache), lineNum, true)))
-  val datas  = List.fill(roads)(Module(new DPTemplate(Vec(wordNum, UWord), lineNum, true)))
+  val metas  = List.fill(roads)(Module(DualPortsSRAM(new CacheMeta(isDcache), lineNum, true, true)))
+  val datas  = List.fill(roads)(Module(DualPortsSRAM(Vec(wordNum, UWord), lineNum, true, true)))
   (0 until roads).foreach(i => {
     r2data(i).req.ready := true.B
     if (isDcache) {

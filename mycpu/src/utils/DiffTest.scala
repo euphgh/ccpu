@@ -156,6 +156,7 @@ class DiffPHTWirteIO extends DifftestBundle with MycpuParam {
   val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
   val wen      = Input(Vec(4, Bool()))
   val count    = Input(Vec(4, UInt(2.W)))
+  val take     = Input(Vec(4, Bool()))
 }
 
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {

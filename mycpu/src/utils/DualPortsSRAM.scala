@@ -58,9 +58,8 @@ object DualPortsSRAM {
     gen:         T,
     set:         Int,
     shouldReset: Boolean = false,
-    holdRead:    Boolean = false,
     singlePort:  Boolean = false,
-    writefirst:  Boolean = true)
+    initValue:   UInt    = 0.U)
       extends MemTemplate(gen, set) {
 
     val wordType               = UInt(gen.getWidth.W)
@@ -79,8 +78,8 @@ object DualPortsSRAM {
     val (ren, wen) = (io.r.req.valid, io.w.req.valid || resetState)
     val realRen    = (if (singlePort) ren && !wen else ren)
 
-    val setIdx    = io.w.req.bits.setIdx
-    val wdataword = io.w.req.bits.data.asUInt
+    val setIdx    = Mux(resetState, resetSet, io.w.req.bits.setIdx)
+    val wdataword = Mux(resetState, initValue.asTypeOf(wordType), io.w.req.bits.data.asUInt)
     val wdata     = wdataword
     when(wen) { array.write(setIdx, wdata) }
 

@@ -12,6 +12,10 @@ class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
   val target   = UWord
 }
+class PhtOutIO extends MycpuBundle {
+  val cnt  = UInt(2.W)
+  val take = Bool()
+}
 
 class RetAddrStack(spec: Boolean, size: Int) extends MycpuModule {
   class RecoverIO extends MycpuBundle {
@@ -81,82 +85,158 @@ class BtbUpdateIO extends MycpuBundle {
 class PhtUpdateIO extends MycpuBundle {
   val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
   val instrOff = Vec(4, Input(UInt(instrOffWidth.W)))
-  val data     = Vec(fetchNum, Flipped(Valid(UInt(2.W))))
+  val data     = Vec(fetchNum, Flipped(Valid(new PhtOutIO)))
 }
 
-class LHT(val idxWidth: Int = 5, cntWidth: Int = 4, hisWidth: Int = 12) extends MycpuModule {
+object LocHisTab {
+  val idxWidth: Int = 4
+  val clrWidth: Int = 4
+  val hisWidth: Int = 9
   val lhtTagWidth = 32 - idxWidth - 4
   val lhtTagLsb   = 32 - lhtTagWidth
   val entriesNum  = math.pow(2, idxWidth).toInt
+  val takeCntNum  = math.pow(2, hisWidth).toInt
+  class LhtOutIO extends MycpuBundle {
+    val take = Bool()
+    val cnt  = UInt(clrWidth.W)
+  }
   def calNextCnt(cnt: UInt, take: Bool): UInt = {
-    MuxCase(
+    val ioWidth = cnt.getWidth
+    val res = MuxCase(
       Mux(take, cnt + 1.U, cnt - 1.U),
       Seq(
         cnt.andR -> Mux(take, cnt, cnt - 1.U),
         !cnt.orR -> Mux(take, 1.U, 0.U)
       )
     )
+    require(res.getWidth == ioWidth)
+    res
   }
   def getTag(address: UInt) = {
     require(address.getWidth == 32)
-    val res = update.bits.pc(31, lhtTagLsb)
+    val res = address(31, lhtTagLsb)
     require(res.getWidth == lhtTagWidth)
     res
   }
   def getIdx(address: UInt) = {
     require(address.getWidth == 32)
-    val res = update.bits.pc(lhtTagLsb - 1, 4)
+    val res = address(lhtTagLsb - 1, 4)
     require(res.getWidth == idxWidth)
     res
   }
-  val update = IO(Valid(new Bundle {
-    val pc       = Input(UWord)
-    val realTake = Input(Bool())
-  }))
-  val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
-  val readRes  = List.fill(fetchNum)(IO(Output(Bool())))
+}
+class LocHisTab extends MycpuModule {
+  import LocHisTab._
+  val update = IO(new Bundle {
+    val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
+    val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
+    val data     = Flipped(Vec(fetchNum, Valid(Bool())))
+  })
 
-  val writeStage2 = RegInit(false.B)
-  val pcReg       = RegNext(update.bits.pc)
-  val wenIdx      = getIdx(update.bits.pc)
-  val wenIdxReg   = getIdx(pcReg)
+  val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
+  val readRes  = List.fill(fetchNum)(IO(Output(new LhtOutIO)))
+
+  val writePC = Wire(UWord)
+  asg(writePC, Cat(update.tagIdx, update.instrOff(0), 0.U(2.W)))
   (0 until fetchNum).foreach(i => {
+    val readPC = Reg(UWord)
+    asg(readPC, readAddr(i).bits)
+    val rPCIdx = getIdx(readPC)
+    val wPCIdx = WireInit(getIdx(writePC))
     // write when valid
-    val clearCnt = RegInit(VecInit.fill(entriesNum)(0.U(cntWidth.W)))
-    // write in next cycle
-    val history  = RegInit(VecInit.fill(entriesNum)(0.U(hisWidth.W)))
-    val allTags  = RegInit(VecInit.fill(entriesNum)(0.U(hisWidth.W)))
-    val takeCnts = RegInit(VecInit.fill(entriesNum)(VecInit.fill(math.pow(2, hisWidth).toInt)(1.U(2.W))))
-    val fastCnt  = RegInit(VecInit.fill(entriesNum)(1.U(2.W)))
+    val clrMem   = Mem(entriesNum, UInt(clrWidth.W))
+    val clrROut  = clrMem.read(rPCIdx)
+    val clrWOut  = clrMem.read(wPCIdx)
+    val clrWen   = WireInit(false.B)
+    val clrWData = WireInit(0.U(clrWidth.W))
+    when(clrWen) { clrMem.write(wPCIdx, clrWData) }
+
+    val tagsMem   = Mem(entriesNum, UInt(lhtTagWidth.W))
+    val tagsROut  = tagsMem.read(rPCIdx)
+    val tagsWOut  = tagsMem.read(wPCIdx)
+    val tagsWen   = WireInit(false.B)
+    val tagsWData = WireInit(0.U(lhtTagWidth.W))
+    when(tagsWen) { tagsMem.write(wPCIdx, tagsWData) }
+
+    val fastCntMem   = Mem(entriesNum, UInt(2.W))
+    val fastCntROut  = fastCntMem.read(rPCIdx)
+    val fastCntWOut  = fastCntMem.read(wPCIdx)
+    val fastCntWen   = WireInit(false.B)
+    val fastCntWData = WireInit(1.U(2.W))
+    when(fastCntWen) { fastCntMem.write(wPCIdx, fastCntWData) }
+
+    val hisAndCnts = Mem(entriesNum, UInt((hisWidth + takeCntNum * 2).W))
+    val hAcWOut    = hisAndCnts.read(wPCIdx)
+    val hisWOut    = hAcWOut(hAcWOut.getWidth - 1, hAcWOut.getWidth - hisWidth)
+    val cntWOut    = Wire(Vec(takeCntNum, UInt(2.W)))
+    (0 until takeCntNum).foreach(i => { cntWOut(i) := hAcWOut(i * 2 + 1, i * 2) })
+    val hisWData = WireInit(0.U(hisWidth.W))
+    val cntWData = WireInit(VecInit.fill(takeCntNum)(1.U(2.W)))
+    val hAcWen   = WireInit(false.B)
+    val hAcWDate = Cat(hisWData, cntWData.asUInt)
+    when(hAcWen) { hisAndCnts.write(wPCIdx, hAcWDate) }
+
+    val (resetState, resetSet)   = (WireInit(false.B), WireInit(0.U))
+    val _resetState              = RegInit(true.B)
+    val (_resetSet, resetFinish) = Counter(_resetState, entriesNum)
+    when(resetFinish) { _resetState := false.B }
+    when(resetState) {
+      hAcWen     := true.B
+      fastCntWen := true.B
+      tagsWen    := true.B
+      clrWen     := true.B
+      wPCIdx     := resetSet
+    }
+    resetState := _resetState
+    resetSet   := _resetSet
 
     // Read ==============================================================
-    val readIdx = RegEnable(getIdx(readAddr(i).bits), readAddr(i).valid)
-    readRes(i) := fastCnt(readIdx) > 1.U
-
-    // Write =============================================================
-    val takeReg = RegNext(update.bits.realTake)
-    val hisReg  = RegNext(history(getIdx(update.bits.pc)))
-    val fastReg = RegNext(fastCnt(getIdx(update.bits.pc)))
-    when(update.valid) {
-      val tagMatch = allTags(wenIdx) === getTag(update.bits.pc)
-      val cntZero  = clearCnt(wenIdx) === 0.U
-      when(tagMatch) {
-        asg(writeStage2, true.B)
-        asg(clearCnt(wenIdx), calNextCnt(clearCnt(wenIdx), true.B))
-      }.elsewhen(cntZero) {
-        asg(writeStage2, true.B)
-      }.otherwise {
-        asg(clearCnt(wenIdx), calNextCnt(clearCnt(wenIdx), false.B))
-      }
+    asg(readRes(i).take, false.B)
+    asg(readRes(i).cnt, 0.U(clrWidth.W))
+    when(tagsROut === getTag(readPC)) {
+      asg(readRes(i).take, fastCntROut > 1.U)
+      asg(readRes(i).cnt, clrROut)
     }
-    when(writeStage2) {
-      val nextHis = Cat(hisReg(hisWidth - 2, 0), takeReg)
-      require(nextHis.getWidth == hisWidth)
-      asg(history(wenIdxReg), nextHis)
-      asg(allTags(wenIdxReg), getTag(pcReg))
-      val wCnt = calNextCnt(fastReg, takeReg)
-      asg(takeCnts(wenIdxReg)(hisReg), wCnt)
-      asg(fastCnt(wenIdxReg), takeCnts(wenIdxReg)(nextHis))
+    // Write =============================================================
+    val realTake = update.data(i).bits
+    when(update.data(i).valid && update.instrOff(i)(1, 0) === i.U) {
+      val tagMatch = tagsWOut === getTag(writePC)
+      val cntZero  = clrWOut === 0.U
+      when(tagMatch) {
+        asg(clrWData, calNextCnt(clrWOut, true.B))
+        clrWen := true.B
+
+        val nextHis = Cat(hisWOut(hisWidth - 2, 0), realTake)
+        require(nextHis.getWidth == hisWidth)
+        asg(tagsWData, getTag(writePC))
+        tagsWen := true.B
+
+        asg(hisWData, nextHis)
+        asg(
+          cntWData, {
+            val foo = WireInit(cntWOut)
+            foo(hisWOut) := calNextCnt(fastCntWOut, realTake)
+            foo
+          }
+        )
+        hAcWen := true.B
+
+        asg(fastCntWData, cntWOut(nextHis))
+        fastCntWen := true.B
+      }.elsewhen(cntZero) {
+        asg(tagsWData, getTag(writePC))
+        tagsWen := true.B
+
+        asg(fastCntWData, 1.U(2.W))
+        fastCntWen := true.B
+
+        asg(cntWData, VecInit.fill(takeCntNum)(1.U(2.W)))
+        asg(hisWData, 0.U(hisWidth.W) | realTake)
+        hAcWen := true.B
+      }.otherwise {
+        asg(clrWData, calNextCnt(clrWOut, false.B))
+        clrWen := true.B
+      }
     }
   })
 }
@@ -270,5 +350,5 @@ object PatternHistoryTable {
 class BpuUpdateIO extends MycpuBundle {
   val pc  = Output(UWord)
   val btb = Valid(new BtbOutIO)
-  val pht = Valid(UInt(2.W))
+  val pht = Valid(new PhtOutIO)
 }

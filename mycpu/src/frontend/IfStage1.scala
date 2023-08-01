@@ -87,6 +87,7 @@ class IfStage1 extends MycpuModule {
   // >> >> module ============================================
   val btb = Module(new BranchTargetBuffer())
   val pht = Module(new PatternHistoryTable())
+  val lht = Module(new LocHisTab())
   val ras = Module(new RetAddrStack(true, retAddrStackSize))
   // >> >> >> write =======================================
   asg(btb.update.tagIdx, io.btbUpdate.tagIdx)
@@ -94,7 +95,14 @@ class IfStage1 extends MycpuModule {
   asg(btb.update.data, io.btbUpdate.data)
   asg(pht.update.tagIdx, io.phtUpdate.tagIdx)
   asg(pht.update.instrOff, io.phtUpdate.instrOff)
-  asg(pht.update.data, io.phtUpdate.data)
+  asg(lht.update.tagIdx, io.phtUpdate.tagIdx)
+  asg(lht.update.instrOff, io.phtUpdate.instrOff)
+  (0 until fetchNum).map(i => {
+    asg(pht.update.data(i).valid, io.phtUpdate.data(i).valid)
+    asg(pht.update.data(i).bits, io.phtUpdate.data(i).bits.cnt)
+    asg(lht.update.data(i).valid, io.phtUpdate.data(i).valid)
+    asg(lht.update.data(i).bits, io.phtUpdate.data(i).bits.take)
+  })
   if (verilator) {
     val btbDiff = Module(new DifftestBTBWrite)
     asg(btbDiff.io.clock, clock)
@@ -111,12 +119,15 @@ class IfStage1 extends MycpuModule {
     asg(phtDiff.io.tagIdx, io.phtUpdate.tagIdx)
     asg(phtDiff.io.instrOff, io.phtUpdate.instrOff)
     asg(phtDiff.io.wen, VecInit(io.phtUpdate.data.map(_.valid)))
-    asg(phtDiff.io.count, VecInit(io.phtUpdate.data.map(_.bits)))
+    asg(phtDiff.io.count, VecInit(io.phtUpdate.data.map(_.bits.cnt)))
+    asg(phtDiff.io.take, VecInit(io.phtUpdate.data.map(_.bits.take)))
   }
   // >> >> >> read =========================================
   val bpuout = Wire(Vec(fetchNum, new PredictResultBundle))
+  val lhtout = Wire(Vec(fetchNum, new LocHisTab.LhtOutIO))
   val btbRes = Wire(Vec(fetchNum, new BtbOutIO))
   val phtRes = Wire(Vec(fetchNum, UInt(2.W)))
+  val lhtRes = Wire(Vec(fetchNum, new LocHisTab.LhtOutIO))
   (0 until fetchNum).foreach(i => {
     val offMsb = log2Ceil(IcachLineBytes / 4) + 2
     val mid    = Wire(UInt((offMsb - 2).W))
@@ -124,15 +135,19 @@ class IfStage1 extends MycpuModule {
     val searchAddr = Cat(npc(31, offMsb), mid, 0.U(2.W))
     asg(btb.readAddr(i).bits, searchAddr)
     asg(pht.readAddr(i).bits, searchAddr)
+    asg(lht.readAddr(i).bits, searchAddr)
     asg(btb.readAddr(i).valid, update)
     asg(pht.readAddr(i).valid, update)
+    asg(lht.readAddr(i).valid, update)
     asg(btbRes(i), btb.readRes(i))
     asg(phtRes(i), pht.readRes(i))
+    asg(lhtRes(i), lht.readRes(i))
   })
   (0 until fetchNum).foreach(i => {
     bpuout(i).btbType := btbRes(bpuSel(i)).instType
     bpuout(i).target  := Mux(bpuout(i).btbType =/= BtbType.jret, btbRes(bpuSel(i)).target, ras.io.topData)
     bpuout(i).counter := phtRes(bpuSel(i))
+    lhtout(i)         := lhtRes(bpuSel(i))
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================
@@ -158,7 +173,15 @@ class IfStage1 extends MycpuModule {
   val takeMask    = Wire(Vec(fetchNum, Bool()))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid
   (0 until fetchNum).foreach(i => {
-    val isTakeBr = bpuout(i).counter > 1.U && bpuout(i).btbType === BtbType.b
+    val brIsTake =
+      Mux(
+        lhtout(i).cnt < 14.U,
+        bpuout(i).counter > 1.U,
+        lhtout(i).take
+      )
+    // lhtRes(bpuSel(i)).take
+    // bpuout(i).counter > 1.U
+    val isTakeBr = brIsTake && bpuout(i).btbType === BtbType.b
     val isTakeJp = BtbType.isJump(bpuout(i).btbType)
     takeMask(i)     := isTakeJp || isTakeBr
     validBranch(i)  := takeMask(i) && alignMask(i)

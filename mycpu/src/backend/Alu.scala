@@ -273,7 +273,8 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     // PHT update =====================================================
     val cat = Cat(preCnt, genTaken)
     asg(pht.valid, brValid && BranchType.isB(brType))
-    asg(pht.bits, PatternHistoryTable.calNextCnt(preCnt, genTaken))
+    asg(pht.bits.cnt, PatternHistoryTable.calNextCnt(preCnt, genTaken))
+    asg(pht.bits.take, genTaken)
     // RAS update =====================================================
     val ras = Module(new RetAddrStack(false, retAddrStackSize))
     ras.io.push.valid := inBrInfo.realBtbType === BtbType.jcall && brValid

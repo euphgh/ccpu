@@ -13,24 +13,34 @@ import utils._
 //io.out.wprf can use as bypass
 class FuncUnit(kind: FuType.t) extends MycpuModule {
   val io = IO(new Bundle {
-    val in        = Flipped(Decoupled(new RsOutIO(kind)))
+    val in        = Flipped(Decoupled(new RsRealOutIO(kind)))
     val out       = Decoupled(new FunctionUnitOutIO)
     val roOutFire = Output(Bool())
     val flush     = Input(Bool())
 
     val datasFromPrf = Vec(srcDataNum, Input(UInt(dataWidth.W)))
-    //valid is pipex_valid
     val bypassIn =
-      if (FuType.needByPassIn(kind)) Some(Flipped(Valid(new WPrfBundle))) else None
+      if (FuType.needOBpIn(kind)) Some(Flipped(Vec(FuType.oBpNum(kind), Valid(new WPrfBundle)))) else None
   })
   val roStage = Module(new RoStage(fuKind = kind))
   roStage.io.in <> io.in
+  roStage.io.flush := io.flush
   asg(io.roOutFire, roStage.io.out.fire)
   asg(roStage.io.datasFromPrf, io.datasFromPrf)
 
-  if (FuType.needByPassIn(kind)) {
-    asg(roStage.io.datasFromBypass.get(0), io.bypassIn.get) //来自brother fu
-    asg(roStage.io.datasFromBypass.get(1).bits, io.out.bits.wPrf) //来自本条流水线
-    asg(roStage.io.datasFromBypass.get(1).valid, io.out.valid) //来自本条流水线
+  //ByPass
+  if (FuType.needBpIn(kind)) {
+    val roBpIn = roStage.io.datasFromBypass.get
+    //leading channels from other fu
+    if (FuType.needOBpIn(kind)) {
+      val outFuBp = io.bypassIn.get
+      (0 until FuType.oBpNum(kind)).map(i => asg(roBpIn(i), outFuBp(i)))
+    }
+    //last channel from self fu
+    if (FuType.needSBpIn(kind)) {
+      val channel = FuType.bpNum(kind) - 1
+      asg(roBpIn(channel).bits, io.out.bits.wPrf)
+      asg(roBpIn(channel).valid, io.out.valid)
+    }
   }
 }

@@ -154,6 +154,23 @@ class IfStage1 extends MycpuModule {
       )
     )
   )
+  // val pc5to2 = pc(5, 2)
+  // val alignMask16 = Mux(
+  //   isDelaySlot,
+  //   "b0001".U,
+  //   decoder(
+  //     inst4to2,
+  //     TruthTable(
+  //       Seq(
+  //         BitPat("b1101") -> BitPat("b0111"),
+  //         BitPat("b1110") -> BitPat("b0011"),
+  //         BitPat("b1111") -> BitPat("b0001")
+  //       ),
+  //       BitPat("b1111")
+  //     )
+  //   )
+  // )
+
   val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
   val takeMask    = Wire(Vec(fetchNum, Bool()))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid

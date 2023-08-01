@@ -7,6 +7,7 @@ import utils._
 import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestSpecRAS
 import difftest.DifftestArchRAS
+import difftest.DifftestLHTRead
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -138,9 +139,19 @@ class LocHisTab extends MycpuModule {
 
   val writePC = Wire(UWord)
   asg(writePC, Cat(update.tagIdx, update.instrOff(0), 0.U(2.W)))
+
+  val diffLht = Module(new DifftestLHTRead)
+  diffLht.io.clock := clock
+  diffLht.io.en    := readAddr(0).valid
+  asg(diffLht.io.outOK, RegNext(readAddr(0).valid))
+  assert(readAddr(1).valid === readAddr(0).valid)
+  assert(readAddr(2).valid === readAddr(0).valid)
+  assert(readAddr(3).valid === readAddr(0).valid)
   (0 until fetchNum).foreach(i => {
-    val readPC = Reg(UWord)
-    asg(readPC, readAddr(i).bits)
+    val readPC = RegEnable(readAddr(i).bits, readAddr(i).valid)
+    asg(diffLht.io.readAddr(i), readAddr(i).bits)
+    asg(diffLht.io.readCnt(i), readRes(i).cnt)
+    asg(diffLht.io.readTake(i), readRes(i).take)
     val rPCIdx = getIdx(readPC)
     val wPCIdx = WireInit(getIdx(writePC))
     // write when valid
@@ -211,17 +222,17 @@ class LocHisTab extends MycpuModule {
         asg(tagsWData, getTag(writePC))
         tagsWen := true.B
 
+        val wCnt = calNextCnt(fastCntWOut, realTake)
         asg(hisWData, nextHis)
         asg(
           cntWData, {
             val foo = WireInit(cntWOut)
-            foo(hisWOut) := calNextCnt(fastCntWOut, realTake)
+            foo(hisWOut) := wCnt
             foo
           }
         )
         hAcWen := true.B
-
-        asg(fastCntWData, cntWOut(nextHis))
+        asg(fastCntWData, Mux(nextHis === hisWOut, wCnt, cntWOut(nextHis)))
         fastCntWen := true.B
       }.elsewhen(cntZero) {
         asg(tagsWData, getTag(writePC))
@@ -231,6 +242,7 @@ class LocHisTab extends MycpuModule {
         fastCntWen := true.B
 
         asg(cntWData, VecInit.fill(takeCntNum)(1.U(2.W)))
+        asg(cntWData(0), Mux(realTake, 2.U(2.W), 0.U(2.W)))
         asg(hisWData, 0.U(hisWidth.W) | realTake)
         hAcWen := true.B
       }.otherwise {

@@ -176,6 +176,10 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
     })
     else None
 }
+class RsRealOutIO(kind: FuType.t) extends MycpuBundle {
+  val origin    = new RsOutIO(kind: FuType.t)
+  val mayNeedBp = Output(Vec(srcDataNum, Bool()))
+}
 
 class RobSavedUop extends MycpuBundle {
   val prevPDest   = PRegIdx // free when retire

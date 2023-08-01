@@ -71,6 +71,11 @@ trait MycpuParam {
     require(rd.getWidth == 5)
     Cat(rd, sel)
   }
+
+  val maOBpNum  = FuType.oBpNum(FuType.MainAlu)
+  val saOBpNum  = FuType.oBpNum(FuType.SubAlu)
+  val lsuOBpNum = FuType.oBpNum(FuType.Lsu)
+  val mduOBpNum = FuType.oBpNum(FuType.Mdu)
 }
 
 abstract class MycpuBundle extends Bundle with MycpuProperties

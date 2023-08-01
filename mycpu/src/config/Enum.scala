@@ -149,8 +149,18 @@ object FuType extends Enumeration {
   type t = Value
   // 自动赋值枚举成员
   val MainAlu, SubAlu, Lsu, Mdu = Value
-  def needByPassIn(input:  Value) = input == MainAlu || input == SubAlu
-  def needByPassOut(input: Value) = input == MainAlu || input == SubAlu
+  def needOBpIn(input: Value) = input == MainAlu || input == SubAlu //|| input == Lsu
+  def needSBpIn(input: Value) = input == MainAlu || input == SubAlu || input == Lsu
+  def needBpIn(input:  Value) = needOBpIn(input) || needSBpIn(input)
+
+  def oBpNum(input: Value): Int = input match {
+    case MainAlu => 2
+    case SubAlu  => 2
+    case Lsu     => 0
+    case Mdu     => 0
+  }
+  def bpNum(input: Value): Int =
+    if (needSBpIn(input)) (oBpNum(input) + 1) else oBpNum(input)
 }
 
 object BtbType extends ChiselEnum {

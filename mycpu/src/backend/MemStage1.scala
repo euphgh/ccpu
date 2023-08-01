@@ -6,6 +6,7 @@ import chisel3.util._
 import cache._
 import utils._
 import chisel3.util.experimental.BoringUtils._
+import chisel3.util.experimental.BoringUtils
 
 /**
   * for now,no load inst wake up
@@ -448,4 +449,11 @@ class MemStage1 extends MycpuModule {
   scFailMark.bits  := DontCare
   scFailMark.valid := toStoreQ.fire && toSQbits.scFail && !io.flush
   addSource(scFailMark, "scFail")
+
+  // WakeUp LSU =================================================
+  val wakeUpSource = Wire(Valid(PRegIdx))
+  asg(wakeUpSource.bits, toM2Bits.wbInfo.destPregAddr)
+  asg(wakeUpSource.valid, toMem2.fire && !toMem2.bits.toCache2.dCacheReq.get.isWrite)
+
+  BoringUtils.addSource(wakeUpSource, "LsuM1WakeUp")
 }

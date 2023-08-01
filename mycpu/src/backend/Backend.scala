@@ -90,19 +90,6 @@ class Backend extends MycpuModule {
     })
   }
 
-  // val notWenVec = WireInit(VecInit((0 until wBNum).map(i => !fuWb(i).valid))) //malu salu lsu
-  // when(notWenVec.asUInt.orR) {
-  //   val mduWbSlot = PriorityEncoder(notWenVec)
-  //   val wBits     = mduWb.bits
-  //   val wSource   = List(wBits.wPrf, wBits.wbRob, fuWSrat(3))
-  //   val wDest     = List(wPrf(mduWbSlot), wRob(mduWbSlot), wSrat(mduWbSlot))
-  //   List.tabulate(wDest.length)(j => {
-  //     asg(wDest(j).bits, wSource(j))
-  //     asg(wDest(j).valid, mduWb.valid)
-  //   })
-  //   mduWb.ready := true.B
-  // }
-
   //dispatcher
   dperIn.fromInstBuffer <> io.in
   asg(dispatcher.io.dsAllow, robOut.dsAllow)
@@ -134,7 +121,7 @@ class Backend extends MycpuModule {
 
   //FU read prf
   //0->malu  1->salu 2->lsu 3->mdu
-  val fuSrcPIdx = (0 until issueNum).map(i => fuIn(i).bits.basic.srcPregs)
+  val fuSrcPIdx = (0 until issueNum).map(i => fuIn(i).bits.origin.basic.srcPregs)
   val fuRdata   = (0 until issueNum).map(i => fuIO(i).datasFromPrf)
   val raddrs    = Wire(Vec(issueNum, Vec(srcDataNum, PRegIdx)))
   (0 until issueNum).map(i => {
@@ -147,34 +134,47 @@ class Backend extends MycpuModule {
 
   //special movzn  lwl|lwr
   val mAluIn     = mAluFU.io.in
-  val mAluInType = mAluIn.bits.uOp.aluType.get
+  val mAluInType = mAluIn.bits.origin.uOp.aluType.get
   val validMovzn = (mAluInType === AluType.MOVN || mAluInType === AluType.MOVZ) && mAluIn.valid
   val blkMaluRo  = Wire(Bool())
   val movznReg   = RegNext(blkMaluRo)
   blkMaluRo := Mux(movznReg || flushBackend, false.B, validMovzn)
   when(movznReg) {
-    raddrs(0)(0) := mAluIn.bits.basic.prevPDest //malu use readport 0,read prev data as src0
+    raddrs(0)(0) := mAluIn.bits.origin.basic.prevPDest //malu use readport 0,read prev data as src0
   }
   BoringUtils.addSource(blkMaluRo, "blockMaluRo") //to rostage,block
 
   val lsuIn     = lsuFU.io.in
-  val lsuInType = lsuIn.bits.uOp.memType.get
+  val lsuInType = lsuIn.bits.origin.uOp.memType.get
   val validLwlr = lsuInType.isOneOf(LWL, LWR) && lsuIn.valid
   val blkLwlr   = Wire(Bool())
   val lwlrReg   = RegNext(blkLwlr)
   blkLwlr := Mux(lwlrReg || flushBackend, false.B, validLwlr)
   when(lwlrReg) {
-    raddrs(2)(0) := lsuIn.bits.basic.prevPDest //lsu use readport 2,read prev data as src0
+    raddrs(2)(0) := lsuIn.bits.origin.basic.prevPDest //lsu use readport 2,read prev data as src0
   }
   BoringUtils.addSource(blkLwlr, "blockLsuRo") //to rostage,block
 
-  //FU bypass
+  /**
+    * OBP:bypass from other fu
+    *   change obpnum in enum
+    *   assign bp source to required FU here
+    */
+  val bpSource = Wire(Vec(4, Valid(new WPrfBundle))) //malu salu lsu mdu
+  (0 until 4).map(i => {
+    bpSource(i).valid := fuWb(i).fire
+    bpSource(i).bits  := fuWb(i).bits.wPrf
+  })
+
   val maBpIn = mAluFU.io.bypassIn.get
-  asg(maBpIn.valid, sAluFU.io.out.valid)
-  asg(maBpIn.bits, sAluFU.io.out.bits.wPrf)
+  (0 until maOBpNum).map(i => maBpIn(i) := bpSource(i + 1)) //salu lsu
   val saBpIn = sAluFU.io.bypassIn.get
-  asg(saBpIn.valid, mAluFU.io.out.valid)
-  asg(saBpIn.bits, mAluFU.io.out.bits.wPrf)
+  asg(saBpIn(0), bpSource(0)) //malu
+  asg(saBpIn(1), bpSource(2)) //lsu
+  if (lsuOBpNum > 0) {
+    val lsuBpIn = lsuFU.io.bypassIn.get
+    (0 until lsuOBpNum).map(i => lsuBpIn(i) := bpSource(i)) //malu salu
+  }
 
   //ROB
   robIn.fromDispatcher <> dperOut.toRob
@@ -207,7 +207,6 @@ class Backend extends MycpuModule {
   //tlb
   io.fronTlbSearch <> tlb.search(0)
   lsuFU.tlb <> tlb.search(1)
-  //TODO:
 
   //cp0
   val cp0In = cp0.io.in

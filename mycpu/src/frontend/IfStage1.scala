@@ -182,7 +182,7 @@ class IfStage1 extends MycpuModule {
         bpuout(i).counter > 1.U,
         lhtout(i).take
       )
-    val isTakeBr = brIsTake // && bpuout(i).btbType === BtbType.b
+    val isTakeBr = brIsTake && bpuout(i).btbType === BtbType.b
     val isTakeJp = BtbType.isJump(bpuout(i).btbType)
     takeMask(i)     := isTakeJp || isTakeBr
     validBranch(i)  := takeMask(i) && alignMask(i)

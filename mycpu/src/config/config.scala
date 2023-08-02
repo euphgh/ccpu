@@ -4,26 +4,32 @@ import chisel3.util._
 
 trait MycpuParam {
   // configurable:
-  val cacheIndexWidth  = 6
+  val IcachLineBytes   = 32
+  val DcachLineBytes   = 64
   val IcachRoads       = 4
   val DcachRoads       = 4
   val retAddrStackSize = 8
   val storeQSize       = 4
   val tlbEntriesNum    = 4
   // General Parameter for mycpu
-  val excCodeWidth     = 5
-  val PaddrWidth       = 32
-  val tagWidth         = 20
-  val cacheOffsetWidth = 12 - cacheIndexWidth
-  val vaddrWidth       = 32
-  val instrWidth       = 32
-  val dataWidth        = 32
-  val IcachLineBytes   = math.pow(2, cacheOffsetWidth).toInt
-  val DcachLineBytes   = math.pow(2, cacheOffsetWidth).toInt
-  val enableCacheInst  = true
-  val immWidth         = 16
-  def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
-  def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
+  val excCodeWidth = 5
+  val PaddrWidth   = 32
+  val tagWidth     = 20
+  require(IcachLineBytes == 64 || IcachLineBytes == 32)
+  require(DcachLineBytes == 64 || DcachLineBytes == 32)
+  val IcacheOffsetWidth = log2Ceil(IcachLineBytes)
+  val DcacheOffsetWidth = log2Ceil(DcachLineBytes)
+  val IcacheIndexWidth  = 12 - IcacheOffsetWidth
+  val DcacheIndexWidth  = 12 - DcacheOffsetWidth
+  val vaddrWidth        = 32
+  val instrWidth        = 32
+  val dataWidth         = 32
+  val enableCacheInst   = true
+  val immWidth          = 16
+  def getAddrIdxI(word: UInt) = word(IcacheIndexWidth + IcacheOffsetWidth - 1, IcacheOffsetWidth)
+  def getAddrIdxD(word: UInt) = word(DcacheIndexWidth + DcacheOffsetWidth - 1, DcacheOffsetWidth)
+  def getOffsetI(word:  UInt) = word(IcacheOffsetWidth - 1, 0)
+  def getOffsetD(word:  UInt) = word(DcacheOffsetWidth - 1, 0)
   val instrOffLsb   = 2
   val instrOffMsb   = log2Ceil(IcachLineBytes) - 1
   val instrOffWidth = instrOffMsb - instrOffLsb + 1

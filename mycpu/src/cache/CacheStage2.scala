@@ -36,12 +36,14 @@ import difftest.DifftestCacheRun
   */
 class CacheStage2[T <: Data](
   val roads:     Int         = 4,
-  val lineBytes: Int         = 8,
+  val lineBytes: Int         = 32,
   val isDcache:  Boolean     = false,
   val userGen:   T           = UInt(0.W)
 )(val trans:     (UInt => T) = (x: UInt) => { 0.U })
     extends MycpuModule {
-  val lineNum = math.pow(2, cacheIndexWidth).toInt
+  val cIdxWid = 12 - log2Ceil(lineBytes)
+  val cOffWid = log2Ceil(lineBytes)
+  val lineNum = math.pow(2, cIdxWid).toInt
   val wordNum = lineBytes / 4
   val io = IO(new Bundle {
     val in = Flipped(Decoupled(new Bundle {
@@ -74,12 +76,12 @@ class CacheStage2[T <: Data](
   val aw          = io.dram.aw
   val w           = io.dram.w
   val b           = io.dram.b
-  val dreq        = stage1.dCacheReq.getOrElse(0.U.asTypeOf(new CacheRWReq))
+  val dreq        = stage1.dCacheReq.getOrElse(0.U.asTypeOf(new CacheRWReq(lineBytes)))
   val id          = if (isDcache) "b0001".U(4.W) else "b0010".U(4.W)
   val isCacheInst = stage1.cacheInst.fold(false.B)(_.valid)
   val imask       = io.in.bits.imask.fold(0.U)(_.asUInt)
   val ivalidNum   = PriorityCount(imask) //count how much instr is valid
-  val tagWay      = inBits.ptag(cacheIndexWidth + log2Ceil(roads) - 1, cacheIndexWidth)
+  val tagWay      = inBits.ptag(log2Ceil(roads) - 1, 0)
   def dirtyMeta(meta: CacheMeta) = {
     val newMeta = WireInit(meta)
     newMeta.dirty.get := true.B
@@ -205,7 +207,7 @@ class CacheStage2[T <: Data](
   })
   // Default Bus Assign ========================================================
   // >> AR channel =============================================================
-  asg(ar.bits.addr, Cat(inBits.ptag, lowAddr.index, 0.U(cacheOffsetWidth.W)))
+  asg(ar.bits.addr, Cat(inBits.ptag, lowAddr.index, 0.U(cOffWid.W)))
   asg(ar.bits.burst, BurstType.INCR) //TODO: key word first
   asg(ar.bits.size, SizeType.Word.asUInt)
   asg(ar.bits.len, (wordNum - 1).U(4.W))
@@ -354,7 +356,7 @@ class CacheStage2[T <: Data](
           Cat(
             LookupUInt(victimWay, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
             lowAddr.index,
-            0.U(cacheOffsetWidth.W)
+            0.U(cOffWid.W)
           )
         )
       }
@@ -560,7 +562,7 @@ class CacheStage2[T <: Data](
           Cat(
             LookupUInt(way, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
             lowAddr.index,
-            0.U(cacheOffsetWidth.W)
+            0.U(cOffWid.W)
           )
         )
         // start write back automation conditionally

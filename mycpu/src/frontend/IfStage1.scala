@@ -14,7 +14,7 @@ import difftest._
 class ICacheInstIO extends MycpuBundle {
   val op    = CacheOp()
   val taglo = UWord
-  val index = UInt(cacheIndexWidth.W)
+  val index = UInt(IcacheIndexWidth.W)
 }
 
 /**
@@ -78,8 +78,8 @@ class IfStage1 extends MycpuModule {
   // >> cache =============================================
   val icache1 = Module(new CacheStage1(IcachRoads, IcachLineBytes, false))
   icache1.io.in.valid                         := update
-  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(npc))
-  icache1.io.in.bits.ifReq.get.offset         := getOffset(npc)
+  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdxI(npc))
+  icache1.io.in.bits.ifReq.get.offset         := getOffsetI(npc)
   icache1.io.in.bits.cacheInst.get.valid      := isCacheInst
   icache1.io.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
   icache1.io.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo

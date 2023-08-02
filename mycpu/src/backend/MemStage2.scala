@@ -57,7 +57,7 @@ class MemStage2 extends MycpuModule {
   val cacheMask  = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
   val ldHitSQ    = !cacheMask.orR // not write and mem mask==0.U
   val inIndex    = inBits.toCache2.dCacheReq.get.lowAddr.index
-  val cancelUart = inBits.pTag === "h1fe40".U && inIndex === 0.U(cacheIndexWidth.W) && inBits.isUncache === false.B
+  val cancelUart = inBits.pTag === "h1fe40".U && inIndex === 0.U(DcacheIndexWidth.W) && inBits.isUncache === false.B
   asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ || cancelUart) && isld || isNone)
   asg(outBits.cacheMask, cacheMask)
   // store req from rostage should not enter cache

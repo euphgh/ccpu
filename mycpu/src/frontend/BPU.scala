@@ -274,13 +274,14 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean =
 
   def missFunc(entry: T, addr: UInt): T = entry
   def getTag(address: UInt) = {
+    require(address.getWidth == 32)
     val res = address(31, idxWidth + lowWidth)
     require(res.getWidth == bpuTagWidth)
     res
   }
   (0 until fetchNum).foreach(i => {
 
-    val ramWidth = gen.getWidth + bpuTagWidth + 1
+    val ramWidth = gen.getWidth + bpuTagWidth
     val ram = Module(
       DualPortsSRAM(
         gen         = UInt(ramWidth.W),
@@ -296,21 +297,17 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean =
     val updatePC = Cat(update.tagIdx, update.instrOff(i), 0.U(2.W))
     val wen      = update.data(i).valid
     when(wen) { assert(updatePC(lowWidth - 1, 2) === i.U) }
-    ram.io.w(wen, Cat(update.data(i).bits.asUInt, getTag(updatePC), true.B), hash(updatePC))
+    ram.io.w(wen, Cat(update.data(i).bits.asUInt, getTag(updatePC)), hash(updatePC))
     // read ========================================
-    // keep input search index stable
-    val bpuIdx = HoldUnless(hash(readAddr(i).bits), readAddr(i).valid)
-
-    val readOut   = ram.io.r(true.B, bpuIdx).resp.data
-    val entry     = readOut(ramWidth - 1, bpuTagWidth + 1).asTypeOf(gen)
-    val tag       = readOut(bpuTagWidth, 1)
-    val validBits = readOut(0)
+    val readOut = ram.io.r(readAddr(i).valid, hash(readAddr(i).bits)).resp.data
+    val entry   = readOut(ramWidth - 1, bpuTagWidth).asTypeOf(gen)
+    val tag     = readOut(bpuTagWidth - 1, 0)
 
     require(entry.getWidth == gen.getWidth)
     require(tag.getWidth == bpuTagWidth)
 
-    val lastAddr = RegEnable(readAddr(i).bits, 0.U, readAddr(i).valid)
-    when(validBits && (tag === getTag(lastAddr))) {
+    val lastAddr = RegEnable(readAddr(i).bits, readAddr(i).valid)
+    when(tag === getTag(lastAddr)) {
       readRes(i) := entry
     }.otherwise {
       readRes(i) := missFunc(entry, lastAddr)

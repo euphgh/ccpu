@@ -157,4 +157,5 @@ class InstFetch extends MycpuModule {
   (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
   asg(isBd(0), dsReg)
   when(io.redirect.flush || ifStage2.io.noBrMispreRedirect.flush) { dsReg := false.B }
+  (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), false.B))
 }

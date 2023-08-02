@@ -104,4 +104,28 @@ class InstBuffer extends MycpuModule {
       Seq(DSTType.toRT -> rt, DSTType.toRD -> rd, DSTType.to31 -> 31.U, DSTType.noDST -> 0.U)
     )
   })
+
+  /**
+    * isBd:
+    *   handle in Instfetch
+    *   need flush signal
+    */
+  (1 until decodeNum).foreach(i => {
+    val lstOutBits = io.out(i - 1).bits
+    val outBits    = io.out(i).bits
+    outBits.isBd := lstOutBits.realBrType =/= BranchType.NON
+  })
+
+  val dsReg      = RegInit(false.B)
+  val outFireNum = PriorityCount(WireInit(VecInit((0 until decodeNum).map(i => io.out(i).fire))))
+  when(io.out(0).fire) { dsReg := false.B }
+  when(outFireNum > 0.U) {
+    (0 until decodeNum).map(i => {
+      when(i.U === (outFireNum - 1.U) && io.out(i).bits.realBrType =/= BranchType.NON) {
+        dsReg := true.B
+      }
+    })
+  }
+  asg(io.out(0).bits.isBd, dsReg)
+  when(io.flush) { dsReg := false.B }
 }

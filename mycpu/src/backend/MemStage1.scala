@@ -432,7 +432,7 @@ class MemStage1 extends MycpuModule {
     val toICache1 = Wire(Valid(new ICacheInstIO))
     addSource(toICache1, "ICacheInstrReq")
     toICache1.bits.index := cache1.io.out.dCacheReq.get.lowAddr.index
-    toICache1.bits.taglo := cio.taglo
+    toICache1.bits.taglo := roDecp.bits.vaddr
     toICache1.bits.op    := cio.op
     toICache1.valid      := (state === cInstrGo) && CacheOp.isIop(cio.op) && !cInstrExc
   }

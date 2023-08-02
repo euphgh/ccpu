@@ -70,6 +70,7 @@ class IfStage1 extends MycpuModule {
   val isCacheInst     = usableCacheInst.valid
   val update          = WireInit(io.in.flush || isCacheInst || io.out.ready)
   val pc              = RegEnable(npc, PCReset, update)
+  val iciTag          = RegEnable(usableCacheInst.bits.taglo, usableCacheInst.valid)
   val bpuSel          = VecInit.tabulate(fetchNum)(i => RegEnable(npc(3, 2) + i.U, PCReset(3, 2), update))
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
   asg(io.isDelaySlot, isDelaySlot)
@@ -240,6 +241,9 @@ class IfStage1 extends MycpuModule {
     }
     when(ci.valid && !io.out.fire) {
       update := false.B
+    }
+    when(ci.valid) {
+      io.tlb.req.bits := iciTag
     }
   }
   io.out.valid := true.B

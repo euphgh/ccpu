@@ -69,10 +69,14 @@ class IfStage2 extends MycpuModule {
   asg(icache2.io.in.bits.isUncached, io.in.bits.isUncached)
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
   asg(icache2.io.in.bits.imask.get, VecInit(inValidMask.asBools))
+  val iCacheInst = Wire(Flipped(Valid(new ICacheInstIO)))
+  iCacheInst.valid := false.B
+  iCacheInst.bits  := DontCare
   if (enableCacheInst) {
     val robFlushAll = Wire(Bool())
     addSink(robFlushAll, "ROB_FLUSH_ALL")
     icache2.io.cacheInst.redirect.get := robFlushAll
+    addSink(iCacheInst, "ICacheInstrReq")
   }
   io.imem.ar <> icache2.dram.ar
   io.imem.r <> icache2.dram.r
@@ -160,4 +164,7 @@ class IfStage2 extends MycpuModule {
     }
   }
   when(io.backFlush) { predState := normal }
+  if (enableCacheInst) {
+    when(iCacheInst.valid) { predState := normal }
+  }
 }

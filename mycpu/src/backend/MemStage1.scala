@@ -453,7 +453,7 @@ class MemStage1 extends MycpuModule {
   // WakeUp LSU =================================================
   val wakeUpSource = Wire(Valid(PRegIdx))
   asg(wakeUpSource.bits, toM2Bits.wbInfo.destPregAddr)
-  asg(wakeUpSource.valid, toMem2.fire && !toMem2.bits.toCache2.dCacheReq.get.isWrite)
+  asg(wakeUpSource.valid, toMem2.valid && !toMem2.bits.toCache2.dCacheReq.get.isWrite)
 
   BoringUtils.addSource(wakeUpSource, "LsuM1WakeUp")
 }

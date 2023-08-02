@@ -160,8 +160,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val outMem    = outBits.mem.get
     val addrL12sb = inOrigin.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
     val vaddr     = SignExt(inOrigin.immOffset.get, 32) + outSrcs(0)
-    outMem.cache.rwReq.get.lowAddr.offset := vaddr(cacheOffsetWidth - 1, 0)
-    outMem.cache.rwReq.get.lowAddr.index  := vaddr(11, cacheOffsetWidth)
+    outMem.cache.rwReq.get.lowAddr.offset := vaddr(DcacheOffsetWidth - 1, 0)
+    outMem.cache.rwReq.get.lowAddr.index  := vaddr(11, DcacheOffsetWidth)
     outMem.cache.rwReq.get.isWrite        := inOrigin.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR, SC)
     outMem.cache.rwReq.get.wWord          := outSrcs(1)
     outMem.cache.rwReq.get.size           := DontCare

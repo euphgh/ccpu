@@ -38,9 +38,7 @@ class PreIf extends MycpuModule {
     }
     val out = new PreIfOutIO
   })
-  val if1InPc = io.in.fromIf1.pcVal
-  val pc314   = if1InPc(31, 4)
-  val alignPC = Mux(if1InPc(4, 2) > 4.U(3.W), Cat(pc314 + 1.U, 0.U(4.W)), Cat(pc314 + 1.U, if1InPc(3, 0)))
+  val alignPC = getAlignPC(io.in.fromIf1.pcVal)
   asg(
     io.out.npc,
     MuxCase(

@@ -33,7 +33,7 @@ import chisel3.util.experimental.BoringUtils
 class StoreQInIO extends MycpuBundle {
   val pTag     = UInt(tagWidth.W) //get in mem1
   val cAttr    = CCAttr()
-  val rwReq    = new CacheRWReq
+  val rwReq    = new CacheRWReq(DcachLineBytes)
   val wbInfo   = new WriteBackIO
   val exDetect = new DetectExInfoBundle
 }

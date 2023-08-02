@@ -4,13 +4,14 @@ import chisel3.util._
 import cache._
 import config._
 import bundle._
+import config.MycpuObject.DcachLineBytes
 
 //this bundle is used when store inst get into mem1
 //cache basic req contain index/offset
 class StoreQIO extends MycpuBundle {
   val pTag    = UInt(tagWidth.W) //get in mem1
   val cAttr   = CCAttr()
-  val rwReq   = new CacheRWReq
+  val rwReq   = new CacheRWReq(DcachLineBytes)
   val debugPC = if (debug) Some(Output(UWord)) else None
 }
 
@@ -35,7 +36,7 @@ class MemStage1InIO extends MycpuBundle {
   val memType   = MemType()
   val srcData   = Vec(2, Output(UInt(dataWidth.W)))
   val preDstSrc = UWord
-  val rwReq     = new CacheRWReq
+  val rwReq     = new CacheRWReq(DcachLineBytes)
   val cacheInst = if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None
   val vaddr     = UWord
   val debugPC   = if (debug) Some(UWord) else None
@@ -46,7 +47,7 @@ class MemStage1OutIO extends MycpuBundle {
   val wbInfo     = new WriteBackIO
   val prevDstSrc = UWord
   val exDetect   = new DetectExInfoBundle
-  val toCache2   = new CacheStage1OutIO(DcachRoads, 8, true)
+  val toCache2   = new CacheStage1OutIO(DcachRoads, DcachLineBytes / 4, true)
   val pTag       = UInt(tagWidth.W)
   val isUncache  = Bool()
   val memType    = MemType()

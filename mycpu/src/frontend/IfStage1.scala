@@ -14,7 +14,7 @@ import difftest._
 class ICacheInstIO extends MycpuBundle {
   val op    = CacheOp()
   val taglo = UWord
-  val index = UInt(cacheIndexWidth.W)
+  val index = UInt(IcacheIndexWidth.W)
 }
 
 /**
@@ -76,10 +76,10 @@ class IfStage1 extends MycpuModule {
   asg(io.isDelaySlot, isDelaySlot)
   // use wire io.in direct ================================
   // >> cache =============================================
-  val icache1 = Module(new CacheStage1())
+  val icache1 = Module(new CacheStage1(IcachRoads, IcachLineBytes, false))
   icache1.io.in.valid                         := update
-  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdx(npc))
-  icache1.io.in.bits.ifReq.get.offset         := getOffset(npc)
+  icache1.io.in.bits.ifReq.get.index          := Mux(isCacheInst, usableCacheInst.bits.index, getAddrIdxI(npc))
+  icache1.io.in.bits.ifReq.get.offset         := getOffsetI(npc)
   icache1.io.in.bits.cacheInst.get.valid      := isCacheInst
   icache1.io.in.bits.cacheInst.get.bits.op    := usableCacheInst.bits.op
   icache1.io.in.bits.cacheInst.get.bits.taglo := usableCacheInst.bits.taglo
@@ -154,41 +154,21 @@ class IfStage1 extends MycpuModule {
   })
   io.out.bits.predictResult := bpuout
   // >> >> >> Mask and Dest ===============================
-  val inst4to2 = pc(4, 2)
   val alignMask = Mux(
     isDelaySlot,
     "b0001".U,
     decoder(
-      inst4to2,
+      pc(instrOffMsb, 2),
       TruthTable(
         Seq(
-          BitPat("b0??") -> BitPat("b1111"),
-          BitPat("b100") -> BitPat("b1111"),
-          BitPat("b101") -> BitPat("b0111"),
-          BitPat("b110") -> BitPat("b0011"),
-          BitPat("b111") -> BitPat("b0001")
+          BitPat("b" + "1" * (instrOffWidth - 2) + "0" + "1") -> BitPat("b0111"),
+          BitPat("b" + "1" * (instrOffWidth - 2) + "1" + "0") -> BitPat("b0011"),
+          BitPat("b" + "1" * (instrOffWidth - 2) + "1" + "1") -> BitPat("b0001")
         ),
         BitPat("b1111")
       )
     )
   )
-  // val pc5to2 = pc(5, 2)
-  // val alignMask16 = Mux(
-  //   isDelaySlot,
-  //   "b0001".U,
-  //   decoder(
-  //     inst4to2,
-  //     TruthTable(
-  //       Seq(
-  //         BitPat("b1101") -> BitPat("b0111"),
-  //         BitPat("b1110") -> BitPat("b0011"),
-  //         BitPat("b1111") -> BitPat("b0001")
-  //       ),
-  //       BitPat("b1111")
-  //     )
-  //   )
-  // )
-
   val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
   val takeMask    = Wire(Vec(fetchNum, Bool()))
   val dsMask      = Wire(UInt(fetchNum.W)) // the validMask when branch and it's ds are valid

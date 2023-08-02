@@ -43,21 +43,23 @@ class CacheStage1(
   lineBytes: Int     = 32,
   isDcache:  Boolean = false)
     extends MycpuModule {
-  val lineNum = math.pow(2, cacheIndexWidth).toInt
+  val cIdxWid = 12 - log2Ceil(lineBytes)
+  val cOffWid = log2Ceil(lineBytes)
+  val lineNum = math.pow(2, cIdxWid).toInt
   val wordNum = lineBytes / 4
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new CacheStage1In(isDcache)))
+    val in  = Flipped(Decoupled(new CacheStage1In(isDcache, lineBytes)))
     val out = new CacheStage1OutIO(roads, wordNum, isDcache)
   })
   // Reg stage
   io.in.ready := true.B // ifstage1 and mem1 should keep
-  val searchIndex = Wire(UInt(cacheIndexWidth.W)) // becasue bram should take one cycle
+  val searchIndex = Wire(UInt(cIdxWid.W)) // becasue bram should take one cycle
   val stageReg = RegEnable(
     io.in.bits, {
-      val init = WireInit(0.U.asTypeOf(new CacheStage1In(isDcache)))
+      val init = WireInit(0.U.asTypeOf(new CacheStage1In(isDcache, lineBytes)))
       if (!isDcache) {
-        asg(init.ifReq.get.index, PCReset(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth))
-        asg(init.ifReq.get.offset, PCReset(cacheOffsetWidth - 1, 0))
+        asg(init.ifReq.get.index, PCReset(cIdxWid + cOffWid - 1, cOffWid))
+        asg(init.ifReq.get.offset, PCReset(cOffWid - 1, 0))
       }
       init
     },

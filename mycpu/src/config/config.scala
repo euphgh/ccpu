@@ -3,30 +3,49 @@ import chisel3._
 import chisel3.util._
 
 trait MycpuParam {
-  // General Parameter for mycpu
-
+  // configurable:
+  val IcachLineBytes   = 32
+  val DcachLineBytes   = 64
   val basicBpuIdxWidth = 6
-  val excCodeWidth     = 5
-  val PaddrWidth       = 32
-  val tagWidth         = 20
-  val cacheIndexWidth  = 7
-  val cacheOffsetWidth = 12 - cacheIndexWidth
-  val vaddrWidth       = 32
-  val instrWidth       = 32
-  val dataWidth        = 32
+
   val IcachRoads       = 4
   val DcachRoads       = 4
-  val IcachLineBytes   = 32
-  val DcachLineBytes   = 32
-  val enableCacheInst  = true
-  val immWidth         = 16
   val retAddrStackSize = 8
   val storeQSize       = 4
-  def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
-  def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
+  val tlbEntriesNum    = 4
+  // General Parameter for mycpu
+  val excCodeWidth = 5
+  val PaddrWidth   = 32
+  val tagWidth     = 20
+  require(IcachLineBytes == 64 || IcachLineBytes == 32)
+  require(DcachLineBytes == 64 || DcachLineBytes == 32)
+  val IcacheOffsetWidth = log2Ceil(IcachLineBytes)
+  val DcacheOffsetWidth = log2Ceil(DcachLineBytes)
+  val IcacheIndexWidth  = 12 - IcacheOffsetWidth
+  val DcacheIndexWidth  = 12 - DcacheOffsetWidth
+  val vaddrWidth        = 32
+  val instrWidth        = 32
+  val dataWidth         = 32
+  val enableCacheInst   = true
+  val immWidth          = 16
+  def getAddrIdxI(word: UInt) = word(IcacheIndexWidth + IcacheOffsetWidth - 1, IcacheOffsetWidth)
+  def getAddrIdxD(word: UInt) = word(DcacheIndexWidth + DcacheOffsetWidth - 1, DcacheOffsetWidth)
+  def getOffsetI(word:  UInt) = word(IcacheOffsetWidth - 1, 0)
+  def getOffsetD(word:  UInt) = word(DcacheOffsetWidth - 1, 0)
   val instrOffLsb   = 2
   val instrOffMsb   = log2Ceil(IcachLineBytes) - 1
   val instrOffWidth = instrOffMsb - instrOffLsb + 1
+  def getAlignPC(pc: UInt) = {
+    require(pc.getWidth == 32)
+    val ifTag = pc(31, 4)
+    val alignPC =
+      Mux(
+        pc(instrOffMsb, instrOffLsb) > ((IcachLineBytes / 4) - 4).U(instrOffWidth.W),
+        Cat(ifTag + 1.U, 0.U(4.W)),
+        Cat(ifTag + 1.U, pc(3, 0))
+      )
+    alignPC
+  }
 
   val predictNum  = 4
   val fetchNum    = 4
@@ -50,7 +69,6 @@ trait MycpuParam {
   def PRegIdx = UInt(pRegAddrWidth.W)
   def ROBIdx  = UInt(robIndexWidth.W)
 
-  val tlbEntriesNum = 4
   val tlbIndexWidth = log2Ceil(tlbEntriesNum)
   def TLBIdx        = UInt(tlbIndexWidth.W)
 

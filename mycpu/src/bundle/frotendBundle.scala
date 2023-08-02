@@ -94,7 +94,7 @@ class IfStage1OutIO extends MycpuBundle {
   val tagOfInstGroup = Output(UInt(tagWidth.W))
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
-  val iCache         = new CacheStage1OutIO(IcachRoads, 8, false)
+  val iCache         = new CacheStage1OutIO(IcachRoads, IcachLineBytes / 4, false)
   val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
   val dsFetch        = Output(Bool())
   val firstPredTake  = Output(Vec(fetchNum, Bool()))
@@ -275,7 +275,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     else None
   val mem =
     if (kind == FuType.Lsu) Some(Output(new Bundle {
-      val cache = Output(new CacheStage1In(true)) //cache.rwReq.wWord is just src2?
+      val cache = Output(new CacheStage1In(true, DcachLineBytes)) //cache.rwReq.wWord is just src2?
       val vaddr = Output(UWord)
     }))
     else None

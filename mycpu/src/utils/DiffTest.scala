@@ -65,7 +65,7 @@ class DiffArchCopIO extends DifftestBundle {
   val config1  = Input(UInt(32.W))
 }
 
-class DiffDCacheIO extends DifftestBundle {
+class DiffDCacheIO extends DifftestBundle with MycpuParam {
   val mainState = Input(UInt(4.W))
   val hasValid  = Input(Bool())
 
@@ -79,10 +79,10 @@ class DiffDCacheIO extends DifftestBundle {
   val hitWays    = Input(UInt(2.W))
   val isHit      = Input(Bool())
   val victimWay  = Input(UInt(2.W))
-  val tagFrom1   = Input(Vec(4, UInt(32.W)))
-  val dirtyFrom1 = Input(Vec(4, Bool()))
-  val validFrom1 = Input(Vec(4, Bool()))
-  val wbBuffer   = Input(Input(Vec(8, UInt(32.W))))
+  val tagFrom1   = Input(Vec(DcachRoads, UInt(32.W)))
+  val dirtyFrom1 = Input(Vec(DcachRoads, Bool()))
+  val validFrom1 = Input(Vec(DcachRoads, Bool()))
+  val wbBuffer   = Input(Input(Vec(DcachLineBytes / 4, UInt(32.W))))
   val wbAddr     = Input(UInt(32.W))
   val writeState = Input(UInt(4.W))
 

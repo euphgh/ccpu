@@ -159,6 +159,13 @@ class DiffPHTWirteIO extends DifftestBundle with MycpuParam {
   val take     = Input(Vec(4, Bool()))
 }
 
+class DiffLHTReadIO extends DifftestBundle with MycpuParam {
+  val readAddr = Input(Vec(4, UWord))
+  val readTake = Input(Vec(4, Bool()))
+  val readCnt  = Input(Vec(4, UInt(4.W)))
+  val outOK    = Input(Bool())
+}
+
 abstract class DifftestModule[T <: DifftestBundle] extends ExtModule with HasExtModuleInline {
   val io: T
 
@@ -279,3 +286,4 @@ class DifftestBTBWrite extends DifftestBaseModule(new DiffBTBWriteIO)
 class DifftestPHTWrite extends DifftestBaseModule(new DiffPHTWirteIO)
 class DifftestSpecRAS extends DifftestBaseModule(new DiffSpecRASIO)
 class DifftestArchRAS extends DifftestBaseModule(new DiffArchRASIO)
+class DifftestLHTRead extends DifftestBaseModule(new DiffLHTReadIO)

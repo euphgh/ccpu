@@ -457,11 +457,8 @@ class ROB extends MycpuModule {
     })
   }
 
-  class FLRQueueEntry extends MycpuBundle {
-    val pDestIdx = PRegIdx
-    val valid    = Bool()
-  }
   // pDest collect Queue
+  val mRe        = io.out.multiRetire
   val flrQueue   = RegInit(VecInit(Seq.fill(robNum)(0.U(pRegAddrWidth.W)))) //Reg(Vec(robNum, PRegIdx))
   val flrHeadPtr = RegInit(0.U((robIndexWidth + 1).W))
   val flrTailPtr = RegInit(0.U((robIndexWidth + 1).W))
@@ -470,70 +467,107 @@ class ROB extends MycpuModule {
   }
   import FreeListRecover._
   val flrState = RegInit(FreeListRecover.idle)
-  when(robEntries.io.flush) {
-    (0 until robNum).foreach(i => {
-      flrQueue(i) := robEntries.allPDest(i)
-      flrHeadPtr  := robEntries.headIdx
-      flrTailPtr  := robEntries.tailIdx
-    })
-    flrState := recover
-  }
-  when(flrState === recover) {
-    val remainNum = flrHeadPtr - flrTailPtr
-    val validPDestVec =
-      WireInit(VecInit((0 until retireNum).map(i => flrQueue(dontTouch(flrTailPtr + i.U)).orR && (i.U < remainNum))))
-    flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
-    val pushFlNum = PopCount(validPDestVec)
-    val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
-    val tempValidVec =
-      WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
-    selVec(0) := PriorityEncoder(validPDestVec)
-
-    (1 until retireNum).map(i => {
-      val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
-      temp(selVec(i - 1)) := false.B
-      tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
-      selVec(i)           := PriorityEncoder(tempValidVec(i))
-    })
-    //dontTouch()
-    // FreeList Push Valid ==========================================================
-    (0 until retireNum).map { i =>
-      io.out.flRecover(i).valid := i.U < pushFlNum
-      io.out.flRecover(i).bits  := DontCare
-      when(io.out.flRecover(i).valid) {
-        io.out.flRecover(i).bits := flrQueue(dontTouch(flrTailPtr + selVec(i)))
-      }
+  //new Version
+  //if needed 1-cycle delay recover fl:
+  val remainNum = flrHeadPtr - flrTailPtr
+  val validPDestVec =
+    WireInit(VecInit((0 until retireNum).map(i => flrQueue(dontTouch(flrTailPtr + i.U)).orR && (i.U < remainNum))))
+  val pushFlNum = PopCount(validPDestVec)
+  val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
+  val tempValidVec =
+    WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
+  selVec(0) := PriorityEncoder(validPDestVec)
+  (1 until retireNum).map(i => {
+    val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+    temp(selVec(i - 1)) := false.B
+    tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+    selVec(i)           := PriorityEncoder(tempValidVec(i))
+  })
+  (0 until retireNum).map { i =>
+    io.out.flRecover(i).valid := i.U < pushFlNum
+    io.out.flRecover(i).bits  := DontCare
+    when(io.out.flRecover(i).valid) {
+      io.out.flRecover(i).bits := flrQueue(dontTouch(flrTailPtr + selVec(i)))
     }
-    // ROB push ready ===============================================================
+  }
+  //flrstate: recover/normal
+  when(flrState === recover) {
+    flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
+    when(flrHeadPtr === flrTailPtr) { flrState := idle }
     (0 until dispatchNum).foreach(i => {
       io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr < (3 * retireNum).U
     })
-    // back to normal state
-    when(flrHeadPtr === flrTailPtr) { flrState := idle }
   }.otherwise {
-    // FreeList Push Valid ==========================================================
-    val validPDestVec =
-      WireInit(VecInit((0 until retireNum).map(i => io.out.multiRetire(i).valid && retireInst(i).uOp.prevPDest.orR)))
-    val pushFlNum = PopCount(validPDestVec)
-    val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
-    val tempValidVec =
-      WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
-    selVec(0) := PriorityEncoder(validPDestVec)
-
-    (1 until retireNum).map(i => {
-      val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
-      temp(selVec(i - 1)) := false.B
-      tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
-      selVec(i)           := PriorityEncoder(tempValidVec(i))
-    })
-    (0 until retireNum).map { i =>
-      io.out.flRecover(i).valid := i.U < pushFlNum
-      io.out.flRecover(i).bits  := DontCare
-      when(io.out.flRecover(i).valid) {
-        io.out.flRecover(i).bits := retireInst(selVec(i)).uOp.prevPDest
-      }
+    flrTailPtr := 0.U
+    flrHeadPtr := 3.U
+    (0 until retireNum).map(i => flrQueue(i) := Mux(mRe(i).valid, retireInst(i).uOp.prevPDest, 0.U(pRegAddrWidth.W)))
+    when(robEntries.io.flush) {
+      flrTailPtr := robEntries.tailIdx
+      flrHeadPtr := robEntries.headIdx
+      (0 until robNum).foreach(i => { flrQueue(i) := robEntries.allPDest(i) })
+      flrState := recover
     }
   }
+
+  /**
+    * Old Version
+    * recover fl at current cycle when normal state:
+    */
+  // when(flrState === recover) {
+  //   val remainNum = flrHeadPtr - flrTailPtr
+  //   val validPDestVec =
+  //     WireInit(VecInit((0 until retireNum).map(i => flrQueue(dontTouch(flrTailPtr + i.U)).orR && (i.U < remainNum))))
+  //   flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
+  //   val pushFlNum = PopCount(validPDestVec)
+  //   val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
+  //   val tempValidVec =
+  //     WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
+  //   selVec(0) := PriorityEncoder(validPDestVec)
+
+  //   (1 until retireNum).map(i => {
+  //     val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+  //     temp(selVec(i - 1)) := false.B
+  //     tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+  //     selVec(i)           := PriorityEncoder(tempValidVec(i))
+  //   })
+  //   // FreeList Push Valid ==========================================================
+  //   (0 until retireNum).map { i =>
+  //     io.out.flRecover(i).valid := i.U < pushFlNum
+  //     io.out.flRecover(i).bits  := DontCare
+  //     when(io.out.flRecover(i).valid) {
+  //       io.out.flRecover(i).bits := flrQueue(dontTouch(flrTailPtr + selVec(i)))
+  //     }
+  //   }
+  //   // ROB push ready ===============================================================
+  //   (0 until dispatchNum).foreach(i => {
+  //     io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr < (3 * retireNum).U
+  //   })
+  //   // back to normal state
+  //   when(flrHeadPtr === flrTailPtr) { flrState := idle }
+  // }.otherwise {
+  //   // FreeList Push Valid ==========================================================
+  //   val validPDestVec =
+  //     WireInit(VecInit((0 until retireNum).map(i => io.out.multiRetire(i).valid && retireInst(i).uOp.prevPDest.orR)))
+  //   val pushFlNum = PopCount(validPDestVec)
+  //   val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
+  //   val tempValidVec =
+  //     WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
+  //   selVec(0) := PriorityEncoder(validPDestVec)
+  //   (1 until retireNum).map(i => {
+  //     val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+  //     temp(selVec(i - 1)) := false.B
+  //     tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+  //     selVec(i)           := PriorityEncoder(tempValidVec(i))
+  //   })
+  //   (0 until retireNum).map { i =>
+  //     io.out.flRecover(i).valid := i.U < pushFlNum
+  //     io.out.flRecover(i).bits  := DontCare
+  //     when(io.out.flRecover(i).valid) {
+  //       io.out.flRecover(i).bits := retireInst(selVec(i)).uOp.prevPDest
+  //     }
+  //   }
+  // }
+
   //DiffTest ===================================================
   import difftest.DifftestInstrCommit
   if (verilator) {

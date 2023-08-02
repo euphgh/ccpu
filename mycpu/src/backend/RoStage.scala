@@ -6,6 +6,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import utils._
+import utils.BytesWordUtils._
 
 /**
   * prfData is read in "Backend",connect to io.in
@@ -19,32 +20,44 @@ import utils._
 
 class RoStage(fuKind: FuType.t) extends MycpuModule {
   val io = IO(new Bundle {
-    val in  = Flipped(Decoupled(new RsOutIO(fuKind)))
-    val out = Decoupled(new ReadOpStageOutIO(fuKind))
+    val in    = Flipped(Decoupled(new RsRealOutIO(fuKind)))
+    val out   = Decoupled(new ReadOpStageOutIO(fuKind))
+    val flush = Input(Bool())
 
     val datasFromPrf = Vec(srcDataNum, Input(UInt(dataWidth.W)))
-    //valid is pipex_valid
     val datasFromBypass =
-      if (FuType.needByPassIn(fuKind)) Some(Vec(aluBypassNum, Flipped(Valid(new WPrfBundle)))) else None
+      if (FuType.needBpIn(fuKind)) Some(Flipped(Vec(FuType.bpNum(fuKind), Valid(new WPrfBundle)))) else None
   })
 
-  //注意，这里的io.in.valid已经代表着pipex_valid
-  val readyGo = WireInit(true.B)
-  io.out.valid := io.in.valid && readyGo
-  io.in.ready  := !io.in.valid || io.out.ready && readyGo
-
   //simple connect
-  val outBits = io.out.bits
-  val inBits  = io.in.bits
-  val inBasic = inBits.basic
-  val inUop   = inBits.uOp
-  asg(outBits.uOp, inBits.uOp)
+  val outBits  = io.out.bits
+  val inBits   = io.in.bits
+  val inOrigin = inBits.origin
+  val inBasic  = inOrigin.basic
+  val inUop    = inOrigin.uOp
+  asg(outBits.uOp, inOrigin.uOp)
   asg(outBits.destPregAddr, inBasic.destPregAddr)
   asg(outBits.destAregAddr, inBasic.destAregAddr)
   asg(outBits.exDetect, inBasic.exDetect)
   asg(outBits.robIndex, inBasic.robIndex)
-  //asg(outBits.prevPDest, inBasic.prevPDest)
   if (debug) asg(outBits.debugPC.get, inBasic.debugPC.get)
+
+  //处理readyGo
+  val pSrcs       = inBasic.srcPregs
+  val inMayNeedBp = inBits.mayNeedBp
+  val byPassV     = WireInit(VecInit.fill(srcDataNum)(false.B))
+  val byPassVReg  = RegInit(VecInit.fill(srcDataNum)(false.B))
+  (0 until srcDataNum).map(i => {
+    when(io.in.valid && !io.out.fire) { byPassVReg(i) := byPassV(i) | byPassVReg(i) }
+    when(io.flush || io.out.fire) { byPassVReg(i) := false.B }
+  })
+  val dataRdy = WireInit(
+    VecInit((0 until srcDataNum).map(i => (!inMayNeedBp(i) | byPassV(i) | byPassVReg(i) | pSrcs(i).inPrf)))
+  ).asUInt.andR
+  val notDelayRead = WireInit(true.B) //MALU和LSU会对它赋值
+  val readyGo      = dataRdy && notDelayRead
+  io.out.valid := io.in.valid && readyGo
+  io.in.ready  := !io.in.valid || io.out.ready && readyGo
 
   /**
     * select srcs:
@@ -52,6 +65,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     *   mdu:
     *     mfc0/mtc0：c0Addr -> src1(7,0)
     *   lsu:
+    *     bypass
     *     default
     *   mAlu/sAlu:
     *     bypass
@@ -68,22 +82,25 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   (0 until srcDataNum).map(i => asg(outSrcs(i), io.datasFromPrf(i))) //default
   asg(outBits.prevData, io.datasFromPrf(0)) //read prevdata as src0
 
+  //Bypass
+  if (FuType.needBpIn(fuKind)) {
+    val bypass = io.datasFromBypass.get
+    bypass.foreach(bp =>
+      List.tabulate(srcDataNum)(i => {
+        when(bp.valid && bp.bits.pDest === pSrcs(i).pIdx && pSrcs(i).pIdx.orR) {
+          asg(outSrcs(i), bp.bits.result)
+          asg(byPassV(i), true.B)
+        }
+      })
+    )
+  }
+
   //alu special
   if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
     val aluType = inUop.aluType.get
-    //bypass
-    val bypass = io.datasFromBypass.get
-    val pSrcs  = inBasic.srcPregs
-    List.tabulate(srcDataNum)(i =>
-      List.tabulate(aluBypassNum)(j =>
-        when(bypass(j).valid && bypass(j).bits.pDest === pSrcs(i).pIdx && pSrcs(i).pIdx =/= 0.U) {
-          asg(outSrcs(i), bypass(j).bits.result)
-        }
-      )
-    )
     //subAlu：(imm as src2)|(sa as src1)
     if (fuKind == FuType.SubAlu) {
-      val imm = inBits.immOffset.get
+      val imm = inOrigin.immOffset.get
       when(AluType.useImm(aluType)) {
         asg(outSrcs(1), Mux(AluType.zeroExt(aluType), ZeroExt(imm, 32), SignExt(imm, 32)))
       }
@@ -91,7 +108,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     }
     //mainAlu：(imm as src2)|(sa as src1)|(linkAddr as src2)|(extra take)
     if (fuKind == FuType.MainAlu) {
-      val maExtraIn = inBits.mAluExtra.get
+      val maExtraIn = inOrigin.mAluExtra.get
       val low26     = maExtraIn.low26
       val imm       = low26(15, 0)
       //count target
@@ -118,7 +135,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
       //movzn
       val blkMaluRo = Wire(Bool())
       BoringUtils.addSink(blkMaluRo, "blockMaluRo")
-      asg(readyGo, !blkMaluRo)
+      asg(notDelayRead, !blkMaluRo)
       val src0Reg  = RegNext(outSrcs(0))
       val src1Reg  = RegNext(outSrcs(1))
       val movznReg = RegNext(blkMaluRo)
@@ -133,7 +150,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   if (fuKind == FuType.Mdu) {
     val op = inUop.mduType.get
     when(MduType.isC0Inst(op)) {
-      asg(outSrcs(1), ZeroExt(inBits.c0Addr.get, 32))
+      asg(outSrcs(1), ZeroExt(inOrigin.c0Addr.get, 32))
     }
   }
 
@@ -141,24 +158,24 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   if (fuKind == FuType.Lsu) {
     import MemType._
     val outMem    = outBits.mem.get
-    val addrL12sb = inBits.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
-    val vaddr     = SignExt(inBits.immOffset.get, 32) + outSrcs(0)
+    val addrL12sb = inOrigin.immOffset.get(11, 0) +& outSrcs(0)(11, 0)
+    val vaddr     = SignExt(inOrigin.immOffset.get, 32) + outSrcs(0)
     outMem.cache.rwReq.get.lowAddr.offset := vaddr(cacheOffsetWidth - 1, 0)
     outMem.cache.rwReq.get.lowAddr.index  := vaddr(11, cacheOffsetWidth)
-    outMem.cache.rwReq.get.isWrite        := inBits.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR, SC)
+    outMem.cache.rwReq.get.isWrite        := inOrigin.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR, SC)
     outMem.cache.rwReq.get.wWord          := outSrcs(1)
     outMem.cache.rwReq.get.size           := DontCare
     outMem.cache.rwReq.get.wStrb          := DontCare
     if (enableCacheInst) {
-      outMem.cache.cacheInst.get.valid      := inBits.uOp.memType.get.isOneOf(CACHEINST)
-      outMem.cache.cacheInst.get.bits.op    := inBits.cacheOp.get
+      outMem.cache.cacheInst.get.valid      := inOrigin.uOp.memType.get.isOneOf(CACHEINST)
+      outMem.cache.cacheInst.get.bits.op    := inOrigin.cacheOp.get
       outMem.cache.cacheInst.get.bits.taglo := 0.U
     }
     asg(outMem.vaddr, vaddr)
     //lwl lwr
     val blkLsuRo = Wire(Bool())
     BoringUtils.addSink(blkLsuRo, "blockLsuRo")
-    asg(readyGo, !blkLsuRo)
+    asg(notDelayRead, !blkLsuRo)
     val src0Reg = RegNext(outSrcs(0))
     val src1Reg = RegNext(outSrcs(1))
     val lwlrReg = RegNext(blkLsuRo)
@@ -171,7 +188,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   //wake up others
   val wakeUpSource = Wire(Valid(PRegIdx))
   asg(wakeUpSource.bits, outBits.destPregAddr)
-  asg(wakeUpSource.valid, io.out.fire)
+  asg(wakeUpSource.valid, io.out.fire && outBits.destPregAddr.orR)
   if (fuKind == FuType.MainAlu) {
     BoringUtils.addSource(wakeUpSource, "mAluRoWakeUp")
   }

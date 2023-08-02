@@ -39,13 +39,13 @@ class BtbWIO extends MycpuBundle {
   */
 class IfStage2 extends MycpuModule {
   val io = IO(new Bundle {
-    val in   = Flipped(Decoupled(new IfStage1OutIO))
-    val out  = Decoupled(new IfStage2OutIO)
-    val imem = new DramReadIO
-
-    val noBrMispreRedirect = new FrontRedirctIO
-
-    val btbDeq = Decoupled(new BtbWIO)
+    val in        = Flipped(Decoupled(new IfStage1OutIO))
+    val out       = Decoupled(new IfStage2OutIO)
+    val imem      = new DramReadIO
+    val btbDeq    = Decoupled(new BtbWIO)
+    val selfFlush = Output(Bool())
+    val dsGoIf2   = Input(Bool())
+    val backFlush = Input(Bool())
   })
   def getIntrBrType(instr: UInt): BranchType.Type = {
     @MacroDecode
@@ -58,14 +58,17 @@ class IfStage2 extends MycpuModule {
     foo.decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
     foo.brType
   }
-  val icache2 = Module(new CacheStage2(IcachRoads, IcachLineBytes, false, BranchType())(getIntrBrType))
+  val inBits      = io.in.bits
+  val outBits     = io.out.bits
+  val inValidMask = Mux(inBits.hasBr, inBits.dsMask & inBits.alMask, inBits.alMask)
+  val icache2     = Module(new CacheStage2(IcachRoads, IcachLineBytes, false, BranchType())(getIntrBrType))
   icache2.io.in.valid := io.in.valid
   io.in.ready         := icache2.io.in.ready
   asg(icache2.io.in.bits.fromStage1, io.in.bits.iCache)
   asg(icache2.io.in.bits.cancel, io.in.bits.exception =/= FrontExcCode.NONE)
   asg(icache2.io.in.bits.isUncached, io.in.bits.isUncached)
   asg(icache2.io.in.bits.ptag, io.in.bits.tagOfInstGroup)
-  asg(icache2.io.in.bits.imask.get, io.in.bits.validMask)
+  asg(icache2.io.in.bits.imask.get, VecInit(inValidMask.asBools))
   if (enableCacheInst) {
     val robFlushAll = Wire(Bool())
     addSink(robFlushAll, "ROB_FLUSH_ALL")
@@ -76,9 +79,6 @@ class IfStage2 extends MycpuModule {
   icache2.dram.aw <> DontCare
   icache2.dram.w <> DontCare
   icache2.dram.b <> DontCare
-  val inBits      = io.in.bits
-  val outBits     = io.out.bits
-  val inValidMask = inBits.validMask
   (0 until fetchNum).foreach(i => {
     val outBasic = outBits.basicInstInfo(i)
     val inPcVal  = inBits.pcVal
@@ -88,40 +88,23 @@ class IfStage2 extends MycpuModule {
       Cat(inPcVal(31, instrOffMsb + 1), inPcVal(instrOffMsb, instrOffLsb) + i.U, inPcVal(1, 0))
     )
     asg(outBasic.instr, icache2.io.out.bits.idata.get(i)) //要求cache根据自动机状态返回全0
-    outBits.validMask(i) := inBits.validMask(i) //default noBrMispre May change it
+    outBits.validMask(i) := inValidMask(i)
   })
   asg(outBits.exception, inBits.exception)
   asg(io.out.valid, icache2.io.out.valid)
   asg(icache2.io.out.ready, io.out.ready || !io.in.valid)
 
-  //default
-  asg(io.noBrMispreRedirect.flush, false.B)
-  asg(io.noBrMispreRedirect.target, 0.U(vaddrWidth.W))
-
   //predecode
   (0 until fetchNum).foreach(i => {
     val instr = io.out.bits.basicInstInfo(i).instr
 
-    val instValid  = inValidMask(i) && io.in.valid //inValid
     val realBrType = icache2.io.out.bits.toUser(i)
     when(icache2.io.out.valid) {
       assert(realBrType === getIntrBrType(instr))
     }
     asg(outBits.realBrType(i), realBrType)
   })
-
-  //fir preTake
-  val preTakeVec = WireInit(
-    VecInit((0 until fetchNum).map(i => io.out.bits.predictResult(i).taken && inValidMask(i) && io.in.valid))
-  )
-  val firPreTake = PriorityEncoder(preTakeVec)
-  (0 until fetchNum).map(i => outBits.isFirPreTake(i) := false.B) //default
-  when(preTakeVec.asUInt.orR) {
-    outBits.isFirPreTake(firPreTake) := true.B
-  }
-
-  //isBd
-  (0 until fetchNum).map(i => outBits.isBd(i) := false.B)
+  asg(outBits.isFirPreTake, inBits.firstPredTake)
   if (verilator) {
     val frontPreDiff = Module(new DifftestFrontPred)
     frontPreDiff.io.clock := clock
@@ -139,4 +122,42 @@ class IfStage2 extends MycpuModule {
   asg(bpuWQ.io.enq.bits.valid, outBits.validMask)
   asg(bpuWQ.io.enq.bits.instr, VecInit(outBits.basicInstInfo.map(_.instr)))
   io.btbDeq <> bpuWQ.io.deq
+
+  val normal :: waitDS :: comeDS :: Nil = Enum(3)
+
+  val predState   = RegInit(normal)
+  val savedPreDst = Reg(UWord)
+  io.selfFlush := false.B
+  val redirSet = io.out.bits.dsDstRedir.flush
+  val redirDst = io.out.bits.dsDstRedir.target
+  val pc314    = inBits.pcVal(31, 4)
+  val alignPC  = Mux(inBits.pcVal(4, 2) > 4.U(3.W), Cat(pc314 + 1.U, 0.U(4.W)), Cat(pc314 + 1.U, inBits.pcVal(3, 0)))
+  redirDst := DontCare
+  asg(redirSet, false.B)
+  asg(outBits.isDSredir, false.B)
+  val realFirstBr = PriorityEncoderOH((0 until fetchNum).map(i => outBits.realBrType(i) =/= BranchType.NON))
+  asg(io.out.bits.isBd, VecInit.fill(fetchNum)(false.B))
+  switch(predState) {
+    is(normal) {
+      when(inBits.dsFetch && io.in.valid) {
+        predState := waitDS
+        asg(redirDst, alignPC)
+        asg(outBits.isDSredir, true.B)
+        asg(redirSet, true.B)
+        asg(savedPreDst, inBits.toPreIfDst)
+        when(io.out.fire) { io.selfFlush := true.B }
+      }
+    }
+    is(waitDS) {
+      asg(redirDst, savedPreDst)
+      when(io.dsGoIf2) { predState := comeDS }
+    }
+    is(comeDS) {
+      io.out.bits.predictResult(0).btbType := BtbType.non
+      io.out.bits.predictResult(0).counter := 0.U
+      io.out.bits.predictResult(0).taken   := false.B
+      when(io.out.fire) { predState := normal }
+    }
+  }
+  when(io.backFlush) { predState := normal }
 }

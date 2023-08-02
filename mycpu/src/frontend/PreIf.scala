@@ -9,12 +9,8 @@ import utils.asg
   * flush:
   *      exception/eret-----<retire>
   *      mispredict occur-----<exe>
-  *      no-branch mispredict-----<if2>
+  *      delayslot/target-----<ifStage2>
   */
-class FrontRedirctIO extends MycpuBundle {
-  val target = Output(UInt(vaddrWidth.W))
-  val flush  = Output(Bool())
-}
 
 /**
   * out.bits is calculated by alignMask, fromBpu and redirect
@@ -36,47 +32,25 @@ class FrontRedirctIO extends MycpuBundle {
 class PreIf extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val redirect = Flipped(new FrontRedirctIO)
-      val fromIf1  = Flipped(new IfStage1ToPreIf)
+      val redirect  = Flipped(new FrontRedirctIO)
+      val fromIf1   = Flipped(new IfStage1ToPreIf)
+      val isDSredir = Input(Bool())
     }
     val out = new PreIfOutIO
   })
   val if1InPc = io.in.fromIf1.pcVal
   val pc314   = if1InPc(31, 4)
   val alignPC = Mux(if1InPc(4, 2) > 4.U(3.W), Cat(pc314 + 1.U, 0.U(4.W)), Cat(pc314 + 1.U, if1InPc(3, 0)))
-  object PreIfState extends ChiselEnum {
-    val normal, keepDest = Value
-  }
-  import PreIfState._
-  val state       = RegInit(normal)
-  val brDestSaved = RegInit(0.U(vaddrWidth.W))
-  asg(io.out.npc, 0.U(32.W)) //init
-  asg(io.out.isDelaySlot, false.B) //init
-  switch(state) {
-    is(normal) {
-      when(io.in.fromIf1.hasBranch && !io.in.fromIf1.dsFetched) {
-        state              := Mux(io.in.fromIf1.stage1Rdy, keepDest, normal)
-        io.out.isDelaySlot := true.B
-        io.out.npc         := alignPC
-        brDestSaved        := io.in.fromIf1.predictDst
-      }.otherwise {
-        io.out.isDelaySlot := false.B
-        io.out.npc         := Mux(io.in.fromIf1.hasBranch, io.in.fromIf1.predictDst, alignPC)
-      }
-    }
-    is(keepDest) {
-      io.out.isDelaySlot := false.B
-      io.out.npc         := brDestSaved
-      when(io.in.fromIf1.stage1Rdy) {
-        state := normal
-      }
-    }
-  }
-  // flush has highest priority
-  io.out.flush := io.in.redirect.flush
-  when(io.in.redirect.flush) {
-    io.out.isDelaySlot := false.B
-    io.out.npc         := io.in.redirect.target
-    state              := normal
-  }
+  asg(
+    io.out.npc,
+    MuxCase(
+      alignPC,
+      Seq(
+        io.in.redirect.flush    -> io.in.redirect.target,
+        io.in.fromIf1.hasBranch -> io.in.fromIf1.predictDst
+      )
+    )
+  )
+  io.out.flush       := io.in.redirect.flush
+  io.out.isDelaySlot := io.in.isDSredir
 }

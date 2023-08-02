@@ -86,15 +86,6 @@ object DualPortsSRAM {
     val rReqIndexReg = RegNext(io.r.req.bits.setIdx)
     val rdata        = array.read(rReqIndexReg).asTypeOf(gen)
 
-    val rReqValidReg = RegNext(io.r.req.valid)
-    val wReqIndexReg = RegNext(io.w.req.bits.setIdx)
-    val wReqValidReg = RegNext(io.w.req.valid)
-    val wReqDataReg  = RegNext(io.w.req.bits.data)
-    val reqConf      = (rReqValidReg && wReqValidReg) && (rReqIndexReg === wReqIndexReg)
-    val confData     = wReqDataReg
-    require(io.w.req.bits.data.getWidth == rdata.getWidth)
-    when(reqConf) { rdata := confData }
-
     io.r.resp.data := rdata
     io.r.req.ready := true.B
     io.w.req.ready := true.B

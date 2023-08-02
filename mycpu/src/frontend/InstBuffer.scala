@@ -48,8 +48,8 @@ class InstBuffer extends MycpuModule {
     pushBits.basicInstInfo := inBits.basicInstInfo(i)
     pushBits.predictResult := inBits.predictResult(i)
     pushBits.exception     := inBits.exception
+    pushBits.isBd          := false.B
     pushBits.realBrType    := inBits.realBrType(i)
-    pushBits.isBd          := inBits.isBd(i)
     pushBits.isFirPreTake  := inBits.isFirPreTake(i)
   })
   io.in.ready := ib.io.push(0).ready // any number is ok

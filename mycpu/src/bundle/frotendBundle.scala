@@ -75,22 +75,30 @@ class PreIfOutIO extends MycpuBundle {
 
 //should be fast, because in one cycle
 class IfStage1ToPreIf extends MycpuBundle {
-  val stage1Rdy  = Output(Bool())
   val pcVal      = Output(UInt(vaddrWidth.W))
-  val dsFetched  = Output(Bool())
   val hasBranch  = Output(Bool())
   val predictDst = Output(UWord)
 }
 
+class FrontRedirctIO extends MycpuBundle {
+  val target = Output(UInt(vaddrWidth.W))
+  val flush  = Output(Bool())
+}
+
 //can be slow, register will stage them
 class IfStage1OutIO extends MycpuBundle {
-  val validMask      = Output(Vec(fetchNum, Bool()))
+  val alMask         = Output(UInt(fetchNum.W))
+  val dsMask         = Output(UInt(fetchNum.W))
+  val hasBr          = Output(Bool())
   val pcVal          = Output(UInt(vaddrWidth.W))
   val tagOfInstGroup = Output(UInt(tagWidth.W))
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
   val iCache         = new CacheStage1OutIO(IcachRoads, 8, false)
   val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
+  val dsFetch        = Output(Bool())
+  val firstPredTake  = Output(Vec(fetchNum, Bool()))
+  val toPreIfDst     = Output(UWord)
 }
 
 class IfStage2OutIO extends MycpuBundle {
@@ -101,6 +109,8 @@ class IfStage2OutIO extends MycpuBundle {
   val basicInstInfo = Vec(fetchNum, new BasicInstInfoBundle)
   val validMask     = Vec(fetchNum, Bool())
   val exception     = FrontExcCode()
+  val dsDstRedir    = new FrontRedirctIO
+  val isDSredir     = Bool()
 }
 
 class InstARegsIdxBundle extends MycpuBundle {

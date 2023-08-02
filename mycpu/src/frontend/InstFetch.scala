@@ -40,9 +40,18 @@ class InstFetch extends MycpuModule {
   val preIfStage = Module(new PreIf)
   val ifStage1   = Module(new IfStage1)
   val ifStage2   = Module(new IfStage2)
+  val dsGoIf2    = WireInit(ifStage1.io.isDelaySlot && ifStage1.io.out.fire)
 
-  asg(preIfStage.io.in.redirect, Mux(io.redirect.flush, io.redirect, ifStage2.io.noBrMispreRedirect))
+  asg(
+    preIfStage.io.in.redirect.target,
+    Mux(io.redirect.flush, io.redirect.target, ifStage2.io.out.bits.dsDstRedir.target)
+  )
+  asg(
+    preIfStage.io.in.redirect.flush,
+    io.redirect.flush || ifStage2.io.out.bits.dsDstRedir.flush || dsGoIf2
+  )
   asg(preIfStage.io.in.fromIf1, ifStage1.io.toPreIf)
+  asg(preIfStage.io.in.isDSredir, ifStage2.io.out.bits.isDSredir && !io.redirect.flush)
 
   //If1 in
   asg(ifStage1.io.in, preIfStage.io.out)
@@ -61,9 +70,10 @@ class InstFetch extends MycpuModule {
     ifStage1.io.out,
     ifStage2.io.in,
     ifStage2.io.out.fire,
-    // noBrMissFlush only set when if2 out fire
-    !stage1IsCacheInstr && (io.redirect.flush || ifStage2.io.noBrMispreRedirect.flush || iCacheInst.valid)
+    !stage1IsCacheInstr && (io.redirect.flush || iCacheInst.valid || ifStage2.io.selfFlush)
   )
+  ifStage2.io.backFlush := io.redirect.flush
+  ifStage2.io.dsGoIf2   := dsGoIf2
   ifStage2.io.imem <> io.imem
   io.out <> ifStage2.io.out
 
@@ -131,31 +141,5 @@ class InstFetch extends MycpuModule {
   })
   if2AssignBtb.passToUpdateIO(ifStage1.io.btbUpdate)
   when(backWbtb) { backAssignBtb.passToUpdateIO(ifStage1.io.btbUpdate) }
-
-  /**
-    * isBd:
-    *   handle in Instfetch
-    *   need flush signal
-    */
-  val outBits = io.out.bits
-  val validBr = WireInit(
-    VecInit(
-      (0 until fetchNum).map(i => BranchType.isBr(outBits.realBrType(i)) && outBits.validMask(i) && io.out.valid)
-    )
-  )
-  val dsReg       = RegInit(false.B)
-  val lastDs      = WireInit(0.U((1 + log2Up(fetchNum)).W))
-  val outValidNum = PriorityCount(outBits.validMask.asUInt & SignExt(io.out.valid, fetchNum))
-  when(outBits.validMask(0) && io.out.fire) { dsReg := false.B }
-  when(validBr.asUInt.orR) {
-    asg(lastDs, fetchNum.U - PriorityEncoder(validBr.reverse)) //最后一个延迟槽对应取过来的四条指令的哪一个
-    when(lastDs >= outValidNum && io.out.fire) {
-      dsReg := true.B
-    }
-  }
-  val isBd = outBits.isBd
-  (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), validBr(i)))
-  asg(isBd(0), dsReg)
-  when(io.redirect.flush || ifStage2.io.noBrMispreRedirect.flush) { dsReg := false.B }
-  (0 until (fetchNum - 1)).map(i => asg(isBd(i + 1), false.B))
+  (0 until (fetchNum)).map(i => asg(io.out.bits.isBd(i), false.B))
 }

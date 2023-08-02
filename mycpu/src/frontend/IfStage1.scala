@@ -47,6 +47,8 @@ class IfStage1 extends MycpuModule {
     val toPreIf = new IfStage1ToPreIf
     val tlb     = new TLBSearchIO
 
+    val isDelaySlot = Output(Bool())
+
     val btbUpdate = new BtbUpdateIO
     val phtUpdate = new PhtUpdateIO
   })
@@ -70,7 +72,7 @@ class IfStage1 extends MycpuModule {
   val pc              = RegEnable(npc, PCReset, update)
   val bpuSel          = VecInit.tabulate(fetchNum)(i => RegEnable(npc(3, 2) + i.U, PCReset(3, 2), update))
   val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
-
+  asg(io.isDelaySlot, isDelaySlot)
   // use wire io.in direct ================================
   // >> cache =============================================
   val icache1 = Module(new CacheStage1())
@@ -179,9 +181,7 @@ class IfStage1 extends MycpuModule {
         bpuout(i).counter > 1.U,
         lhtout(i).take
       )
-    // lhtRes(bpuSel(i)).take
-    // bpuout(i).counter > 1.U
-    val isTakeBr = brIsTake && bpuout(i).btbType === BtbType.b
+    val isTakeBr = brIsTake // && bpuout(i).btbType === BtbType.b
     val isTakeJp = BtbType.isJump(bpuout(i).btbType)
     takeMask(i)     := isTakeJp || isTakeBr
     validBranch(i)  := takeMask(i) && alignMask(i)
@@ -192,17 +192,16 @@ class IfStage1 extends MycpuModule {
     val res = PriorityMux(validBranch.zip(a))
     res
   }
-  io.toPreIf.predictDst := getByVB(bpuout.map(_.target))
-  io.toPreIf.dsFetched  := getByVB(Seq(alignMask(1), alignMask(2), alignMask(3), false.B))
-  dsMask                := getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
-  val dsMaskVec    = Wire(Vec(fetchNum, Bool()))
-  val alignMaskVec = Wire(Vec(fetchNum, Bool()))
-  (0 until fetchNum).map(i => {
-    dsMaskVec(i)    := dsMask(i)
-    alignMaskVec(i) := alignMask(i)
-  })
-  io.toPreIf.hasBranch  := validBranch.asUInt.orR
-  io.out.bits.validMask := Mux(io.toPreIf.hasBranch && io.toPreIf.dsFetched, dsMaskVec, alignMaskVec)
+  val predDst = getByVB(bpuout.map(_.target))
+  asg(io.toPreIf.predictDst, predDst)
+  asg(io.out.bits.toPreIfDst, predDst)
+  io.out.bits.dsFetch := !getByVB((1 until fetchNum).map(alignMask(_)) :+ false.B) && io.toPreIf.hasBranch
+  dsMask              := getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
+  asg(io.out.bits.firstPredTake, VecInit(PriorityEncoderOH(validBranch)))
+  asg(io.toPreIf.hasBranch, validBranch.asUInt.orR) // make sure Priority can not be zero
+  asg(io.out.bits.dsMask, dsMask)
+  asg(io.out.bits.alMask, alignMask)
+  asg(io.out.bits.hasBr, io.toPreIf.hasBranch)
   // >> >> >> Update RAS ==================================
   val firValidBtbType = getByVB(bpuout.map(_.btbType))
   ras.io.push.valid := firValidBtbType === BtbType.jcall && io.out.fire && io.toPreIf.hasBranch
@@ -244,7 +243,6 @@ class IfStage1 extends MycpuModule {
     }
   }
   io.out.valid := true.B
-  asg(io.toPreIf.stage1Rdy, io.out.fire)
 
   // Reset for 512
   val resetWidth = log2Ceil(1024)

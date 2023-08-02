@@ -9,6 +9,8 @@ import chisel3.util.experimental.BoringUtils._
 import utils.PriorityCount
 import utils.SignExt
 import config.MycpuInit.PCReset
+import difftest._
+import utils._
 
 /**
   * preif.in.redirect:
@@ -123,7 +125,8 @@ class InstFetch extends MycpuModule {
 
   // backend update
   val backAssignBtb = Wire(new BtbAssignBundle)
-  val if2PhtIO      = ifStage1.io.phtUpdate
+  val if2PhtIO      = Wire(new PhtUpdateIO)
+  val if2BtbIO      = Wire(new BtbUpdateIO)
   val tagIdx        = io.bpuUpdateIn.pc(31, instrOffMsb + 1)
   val instrOff      = io.bpuUpdateIn.pc(instrOffMsb, instrOffLsb)
   val selValid      = VecInit.tabulate(fetchNum)(i => instrOff(1, 0) === i.U)
@@ -139,7 +142,70 @@ class InstFetch extends MycpuModule {
     if2PhtIO.data(i).valid := selValid(i) && io.bpuUpdateIn.pht.valid
     if2PhtIO.data(i).bits  := io.bpuUpdateIn.pht.bits
   })
-  if2AssignBtb.passToUpdateIO(ifStage1.io.btbUpdate)
-  when(backWbtb) { backAssignBtb.passToUpdateIO(ifStage1.io.btbUpdate) }
+  if2AssignBtb.passToUpdateIO(if2BtbIO)
+  when(backWbtb) { backAssignBtb.passToUpdateIO(if2BtbIO) }
   (0 until (fetchNum)).map(i => asg(io.out.bits.isBd(i), false.B))
+
+  // >> bpu ===============================================
+  val ras = Module(new RetAddrStack(true, retAddrStackSize))
+  val btb = Module(new BranchTargetBuffer())
+  val pht = Module(new PatternHistoryTable())
+  val lht = Module(new LocHisTab())
+
+  val bpuGoNext = ifStage1.io.out.fire
+  btb.goNext := bpuGoNext
+  pht.goNext := bpuGoNext
+  lht.goNext := bpuGoNext
+  asg(btb.update.tagIdx, if2BtbIO.tagIdx)
+  asg(btb.update.instrOff, if2BtbIO.instrOff)
+  asg(btb.update.data, if2BtbIO.data)
+  asg(pht.update.tagIdx, if2PhtIO.tagIdx)
+  asg(pht.update.instrOff, if2PhtIO.instrOff)
+  asg(lht.update.tagIdx, if2PhtIO.tagIdx)
+  asg(lht.update.instrOff, if2PhtIO.instrOff)
+  ras.io.push <> ifStage2.io.rasPush
+  ras.io.pop := ifStage2.io.rasPop
+  (0 until fetchNum).map(i => {
+    asg(pht.update.data(i).valid, if2PhtIO.data(i).valid)
+    asg(pht.update.data(i).bits, if2PhtIO.data(i).bits.cnt)
+    asg(lht.update.data(i).valid, if2PhtIO.data(i).valid)
+    asg(lht.update.data(i).bits, if2PhtIO.data(i).bits.take)
+  })
+  if (verilator) {
+    val btbDiff = Module(new DifftestBTBWrite)
+    asg(btbDiff.io.clock, clock)
+    asg(btbDiff.io.en, btbDiff.io.wen.asUInt.orR)
+    asg(btbDiff.io.tagIdx, if2BtbIO.tagIdx)
+    asg(btbDiff.io.instrOff, if2BtbIO.instrOff)
+    asg(btbDiff.io.wen, VecInit(if2BtbIO.data.map(_.valid)))
+    asg(btbDiff.io.target, VecInit(if2BtbIO.data.map(_.bits.target)))
+    asg(btbDiff.io.btbType, VecInit(if2BtbIO.data.map(_.bits.instType.asUInt)))
+
+    val phtDiff = Module(new DifftestPHTWrite)
+    asg(phtDiff.io.clock, clock)
+    asg(phtDiff.io.en, phtDiff.io.wen.asUInt.orR)
+    asg(phtDiff.io.tagIdx, if2PhtIO.tagIdx)
+    asg(phtDiff.io.instrOff, if2PhtIO.instrOff)
+    asg(phtDiff.io.wen, VecInit(if2PhtIO.data.map(_.valid)))
+    asg(phtDiff.io.count, VecInit(if2PhtIO.data.map(_.bits.cnt)))
+    asg(phtDiff.io.take, VecInit(if2PhtIO.data.map(_.bits.take)))
+  }
+  val npc     = preIfStage.io.out.npc
+  val bpuRreq = ifStage1.io.bpuRreq
+  (0 until fetchNum).foreach(i => {
+    val offMsb = log2Ceil(IcachLineBytes / 4) + 2
+    val mid    = Wire(UInt((offMsb - 2).W))
+    asg(mid, RingBits(npc(offMsb - 1, 2), fetchNum, i))
+    val searchAddr = Cat(npc(31, offMsb), mid, 0.U(2.W))
+    asg(btb.readAddr(i).bits, searchAddr)
+    asg(pht.readAddr(i).bits, searchAddr)
+    asg(lht.readAddr(i).bits, searchAddr)
+    asg(btb.readAddr(i).valid, bpuRreq)
+    asg(pht.readAddr(i).valid, bpuRreq)
+    asg(lht.readAddr(i).valid, bpuRreq)
+    asg(ifStage2.io.btbRes(i), btb.readRes(i))
+    asg(ifStage2.io.phtRes(i), pht.readRes(i))
+    asg(ifStage2.io.lhtRes(i), lht.readRes(i))
+  })
+  asg(ifStage2.io.rasTop, RegEnable(ras.io.topData, bpuRreq))
 }

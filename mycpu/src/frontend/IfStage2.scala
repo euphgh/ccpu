@@ -46,7 +46,57 @@ class IfStage2 extends MycpuModule {
     val selfFlush = Output(Bool())
     val dsGoIf2   = Input(Bool())
     val backFlush = Input(Bool())
+    val btbRes    = Input(Vec(fetchNum, new BtbOutIO))
+    val phtRes    = Input(Vec(fetchNum, UInt(2.W)))
+    val lhtRes    = Input(Vec(fetchNum, new LocHisTab.LhtOutIO))
+    val rasTop    = Input(UWord)
+    val rasPush   = Valid(UWord)
+    val rasPop    = Output(Bool())
   })
+  val inBits    = io.in.bits
+  val outBits   = io.out.bits
+  val alignMask = inBits.alMask
+  val pc        = inBits.pcVal
+  val bpuout    = Wire(Vec(fetchNum, new PredictResultBundle))
+  val lhtout    = Wire(Vec(fetchNum, new LocHisTab.LhtOutIO))
+  val bpuSel    = inBits.bpuSel
+  (0 until fetchNum).foreach(i => {
+    bpuout(i).btbType := io.btbRes(bpuSel(i)).instType
+    bpuout(i).target  := Mux(bpuout(i).btbType =/= BtbType.jret, io.btbRes(bpuSel(i)).target, io.rasTop)
+    bpuout(i).counter := io.phtRes(bpuSel(i))
+    lhtout(i)         := io.lhtRes(bpuSel(i))
+  })
+  io.out.bits.predictResult := bpuout
+  val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
+  val takeMask    = Wire(Vec(fetchNum, Bool()))
+  (0 until fetchNum).foreach(i => {
+    val brIsTake =
+      Mux(
+        lhtout(i).cnt < 14.U,
+        bpuout(i).counter > 1.U,
+        lhtout(i).take
+      )
+    val isTakeBr = brIsTake && bpuout(i).btbType === BtbType.b
+    val isTakeJp = BtbType.isJump(bpuout(i).btbType)
+    takeMask(i)     := isTakeJp || isTakeBr
+    validBranch(i)  := takeMask(i) && inBits.alMask(i)
+    bpuout(i).taken := takeMask(i)
+  })
+  def getByVB[T <: Data](a: Seq[T]) = {
+    val res = PriorityMux(validBranch.zip(a))
+    res
+  }
+  val predDst       = getByVB(bpuout.map(_.target))
+  val hasBranch     = validBranch.asUInt.orR // make sure Priority can not be zero
+  val dsFetch       = !getByVB((1 until fetchNum).map(alignMask(_)) :+ false.B) && hasBranch
+  val dsMask        = getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
+  val firstPredTake = VecInit(PriorityEncoderOH(validBranch))
+  // >> >> >> Update RAS ==================================
+  val firValidBtbType = getByVB(bpuout.map(_.btbType))
+  io.rasPush.valid := firValidBtbType === BtbType.jcall && io.out.fire && hasBranch
+  io.rasPop        := firValidBtbType === BtbType.jret && io.out.fire && hasBranch
+  asg(io.rasPush.bits, getByVB((0 until fetchNum).map(i => Cat((pc(31, 2) + i.U + 2.U), pc(1, 0)))))
+
   def getIntrBrType(instr: UInt): BranchType.Type = {
     @MacroDecode
     class IF2PreDecodeOut extends MycpuBundle {
@@ -58,9 +108,8 @@ class IfStage2 extends MycpuModule {
     foo.decode(instr, AllInsts(), AllInsts.default(), QMCMinimizer)
     foo.brType
   }
-  val inBits      = io.in.bits
-  val outBits     = io.out.bits
-  val inValidMask = Mux(inBits.hasBr, inBits.dsMask & inBits.alMask, inBits.alMask)
+
+  val inValidMask = Mux(hasBranch, dsMask & alignMask, alignMask)
   val icache2     = Module(new CacheStage2(IcachRoads, IcachLineBytes, false, BranchType())(getIntrBrType))
   icache2.io.in.valid := io.in.valid
   io.in.ready         := icache2.io.in.ready
@@ -86,7 +135,7 @@ class IfStage2 extends MycpuModule {
   (0 until fetchNum).foreach(i => {
     val outBasic = outBits.basicInstInfo(i)
     val inPcVal  = inBits.pcVal
-    outBits.predictResult(i) := inBits.predictResult(i)
+    outBits.predictResult(i) := bpuout(i)
     asg(
       outBasic.pcVal,
       Cat(inPcVal(31, instrOffMsb + 1), inPcVal(instrOffMsb, instrOffLsb) + i.U, inPcVal(1, 0))
@@ -108,12 +157,12 @@ class IfStage2 extends MycpuModule {
     }
     asg(outBits.realBrType(i), realBrType)
   })
-  asg(outBits.isFirPreTake, inBits.firstPredTake)
+  asg(outBits.isFirPreTake, firstPredTake)
   if (verilator) {
     val frontPreDiff = Module(new DifftestFrontPred)
     frontPreDiff.io.clock := clock
     asg(frontPreDiff.io.debugPC, VecInit(io.out.bits.basicInstInfo.map(_.pcVal)))
-    asg(frontPreDiff.io.predType, VecInit(io.in.bits.predictResult.map(_.btbType.asUInt)))
+    asg(frontPreDiff.io.predType, VecInit(bpuout.map(_.btbType.asUInt)))
     asg(frontPreDiff.io.realType, VecInit(io.out.bits.realBrType.map(_.asUInt)))
     asg(frontPreDiff.io.en, io.out.fire)
   }
@@ -142,12 +191,12 @@ class IfStage2 extends MycpuModule {
   asg(io.out.bits.isBd, VecInit.fill(fetchNum)(false.B))
   switch(predState) {
     is(normal) {
-      when(inBits.dsFetch && io.in.valid) {
-        predState := waitDS
-        asg(redirDst, alignPC)
-        asg(outBits.isDSredir, true.B)
+      when(hasBranch && io.in.valid) {
+        predState := Mux(dsFetch, waitDS, normal)
+        asg(redirDst, Mux(dsFetch, alignPC, predDst))
+        asg(outBits.isDSredir, dsFetch)
         asg(redirSet, true.B)
-        asg(savedPreDst, inBits.toPreIfDst)
+        asg(savedPreDst, predDst)
         when(io.out.fire) { io.selfFlush := true.B }
       }
     }

@@ -75,9 +75,7 @@ class PreIfOutIO extends MycpuBundle {
 
 //should be fast, because in one cycle
 class IfStage1ToPreIf extends MycpuBundle {
-  val pcVal      = Output(UInt(vaddrWidth.W))
-  val hasBranch  = Output(Bool())
-  val predictDst = Output(UWord)
+  val pcVal = Output(UInt(vaddrWidth.W))
 }
 
 class FrontRedirctIO extends MycpuBundle {
@@ -88,17 +86,12 @@ class FrontRedirctIO extends MycpuBundle {
 //can be slow, register will stage them
 class IfStage1OutIO extends MycpuBundle {
   val alMask         = Output(UInt(fetchNum.W))
-  val dsMask         = Output(UInt(fetchNum.W))
-  val hasBr          = Output(Bool())
+  val bpuSel         = Vec(fetchNum, Output(UInt(2.W)))
   val pcVal          = Output(UInt(vaddrWidth.W))
   val tagOfInstGroup = Output(UInt(tagWidth.W))
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
   val iCache         = new CacheStage1OutIO(IcachRoads, IcachLineBytes / 4, false)
-  val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
-  val dsFetch        = Output(Bool())
-  val firstPredTake  = Output(Vec(fetchNum, Bool()))
-  val toPreIfDst     = Output(UWord)
 }
 
 class IfStage2OutIO extends MycpuBundle {

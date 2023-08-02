@@ -133,6 +133,8 @@ class LocHisTab extends MycpuModule {
     val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
     val data     = Flipped(Vec(fetchNum, Valid(Bool())))
   })
+  val goNext = IO(Input(Bool()))
+  def pipe[T <: Data](gen: T) = { RegEnable(gen, goNext) }
 
   val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
   val readRes  = List.fill(fetchNum)(IO(Output(new LhtOutIO)))
@@ -143,7 +145,7 @@ class LocHisTab extends MycpuModule {
   val diffLht = Module(new DifftestLHTRead)
   diffLht.io.clock := clock
   diffLht.io.en    := readAddr(0).valid
-  asg(diffLht.io.outOK, RegNext(readAddr(0).valid))
+  asg(diffLht.io.outOK, pipe(RegNext(readAddr(0).valid)))
   assert(readAddr(1).valid === readAddr(0).valid)
   assert(readAddr(2).valid === readAddr(0).valid)
   assert(readAddr(3).valid === readAddr(0).valid)
@@ -204,10 +206,21 @@ class LocHisTab extends MycpuModule {
     // Read ==============================================================
     asg(readRes(i).take, false.B)
     asg(readRes(i).cnt, 0.U(clrWidth.W))
-    when(tagsROut === getTag(readPC)) {
-      asg(readRes(i).take, fastCntROut > 1.U)
-      asg(readRes(i).cnt, clrROut)
+    when(pipe(tagsROut) === getTag(pipe(readPC))) {
+      asg(readRes(i).take, pipe(fastCntROut) > 1.U)
+      asg(readRes(i).cnt, pipe(clrROut))
     }
+    val fastRes = Wire(new LhtOutIO)
+    dontTouch(fastRes)
+    asg(fastRes.take, false.B)
+    asg(fastRes.cnt, 0.U(clrWidth.W))
+    when(tagsROut === getTag(readPC)) {
+      asg(fastRes.take, fastCntROut > 1.U)
+      asg(fastRes.cnt, clrROut)
+    }
+    // when(pipe(RegNext(readAddr(i).valid)) && resetFinish) {
+    //   assert(pipe(fastRes) === readRes(i))
+    // }
     // Write =============================================================
     val realTake = update.data(i).bits
     when(update.data(i).valid && update.instrOff(i)(1, 0) === i.U) {
@@ -259,6 +272,8 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean =
     val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
     val data     = Flipped(Vec(fetchNum, Valid(gen)))
   })
+  val goNext = IO(Input(Bool()))
+  def pipe[T <: Data](gen: T) = { RegEnable(gen, goNext) }
   val readAddr = List.fill(fetchNum)(IO(Flipped(Valid(UWord))))
   val readRes  = List.fill(fetchNum)(IO(Output(gen)))
   def access(address: UInt, ports: Int) = {
@@ -299,18 +314,38 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean =
     when(wen) { assert(updatePC(lowWidth - 1, 2) === i.U) }
     ram.io.w(wen, Cat(update.data(i).bits.asUInt, getTag(updatePC)), hash(updatePC))
     // read ========================================
-    val readOut = ram.io.r(readAddr(i).valid, hash(readAddr(i).bits)).resp.data
+    val fastRam = ram.io.r(readAddr(i).valid, hash(readAddr(i).bits)).resp.data
+    val readOut = pipe(fastRam)
     val entry   = readOut(ramWidth - 1, bpuTagWidth).asTypeOf(gen)
     val tag     = readOut(bpuTagWidth - 1, 0)
 
     require(entry.getWidth == gen.getWidth)
     require(tag.getWidth == bpuTagWidth)
 
-    val lastAddr = RegEnable(readAddr(i).bits, readAddr(i).valid)
+    val lastAddr = pipe(RegEnable(readAddr(i).bits, readAddr(i).valid))
     when(tag === getTag(lastAddr)) {
       readRes(i) := entry
     }.otherwise {
       readRes(i) := missFunc(entry, lastAddr)
+    }
+    if (verilator) {
+      val entry = fastRam(ramWidth - 1, bpuTagWidth).asTypeOf(gen)
+      val tag   = fastRam(bpuTagWidth - 1, 0)
+
+      require(entry.getWidth == gen.getWidth)
+      require(tag.getWidth == bpuTagWidth)
+
+      val lastAddr = RegEnable(readAddr(i).bits, readAddr(i).valid)
+      val fastRes  = Wire(gen)
+      dontTouch(fastRes)
+      when(tag === getTag(lastAddr)) {
+        fastRes := entry
+      }.otherwise {
+        fastRes := missFunc(entry, lastAddr)
+      }
+      // when(pipe(RegNext(readAddr(i).valid)) && RegNext(reset.asBool === false.B)) {
+      //   assert(pipe(fastRes) === readRes(i))
+      // }
     }
   })
 }

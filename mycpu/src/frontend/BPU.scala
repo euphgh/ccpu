@@ -8,6 +8,7 @@ import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestSpecRAS
 import difftest.DifftestArchRAS
 import difftest.DifftestLHTRead
+import config.MycpuObject.basicBpuIdxWidth
 
 class BtbOutIO extends MycpuBundle {
   val instType = BtbType()
@@ -266,7 +267,8 @@ class LocHisTab extends MycpuModule {
   })
 }
 
-class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean = true) extends MycpuModule {
+class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = basicBpuIdxWidth, useRegs: Boolean = true)
+    extends MycpuModule {
   val update = IO(new Bundle {
     val tagIdx   = Input(UInt((32 - log2Ceil(IcachLineBytes)).W))
     val instrOff = Input(Vec(4, UInt(instrOffWidth.W)))
@@ -358,7 +360,7 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = 10, useRegs: Boolean =
   * back  update: JR(jret and jr), JALR(jcall)
   * out should keep out until posedge that in.search.valid is true
   */
-class BranchTargetBuffer extends BasicBPU(new BtbOutIO(), 10) {
+class BranchTargetBuffer extends BasicBPU(new BtbOutIO(), basicBpuIdxWidth) {
   override def missFunc(entry: BtbOutIO, addr: UInt): BtbOutIO = {
     val out = Wire(new BtbOutIO)
     out.target   := addr + 8.U
@@ -370,7 +372,7 @@ class BranchTargetBuffer extends BasicBPU(new BtbOutIO(), 10) {
 /**
   * only back update Branch
   */
-class PatternHistoryTable extends BasicBPU(UInt(2.W), 10) {
+class PatternHistoryTable extends BasicBPU(UInt(2.W), basicBpuIdxWidth) {
   override def missFunc(entry: UInt, addr: UInt): UInt = {
     1.U(2.W)
   }

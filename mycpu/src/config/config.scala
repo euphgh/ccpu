@@ -6,6 +6,8 @@ trait MycpuParam {
   // configurable:
   val IcachLineBytes   = 32
   val DcachLineBytes   = 64
+  val basicBpuIdxWidth = 6
+
   val IcachRoads       = 4
   val DcachRoads       = 4
   val retAddrStackSize = 8

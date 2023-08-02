@@ -5,6 +5,7 @@ import chisel3.util._
 trait MycpuParam {
   // General Parameter for mycpu
 
+  val basicBpuIdxWidth = 6
   val excCodeWidth     = 5
   val PaddrWidth       = 32
   val tagWidth         = 20

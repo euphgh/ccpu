@@ -134,8 +134,7 @@ class IfStage2 extends MycpuModule {
   io.selfFlush := false.B
   val redirSet = io.out.bits.dsDstRedir.flush
   val redirDst = io.out.bits.dsDstRedir.target
-  val pc314    = inBits.pcVal(31, 4)
-  val alignPC  = Mux(inBits.pcVal(4, 2) > 4.U(3.W), Cat(pc314 + 1.U, 0.U(4.W)), Cat(pc314 + 1.U, inBits.pcVal(3, 0)))
+  val alignPC  = getAlignPC(inBits.pcVal)
   redirDst := DontCare
   asg(redirSet, false.B)
   asg(outBits.isDSredir, false.B)

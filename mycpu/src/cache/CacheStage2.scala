@@ -159,21 +159,18 @@ class CacheStage2[T <: Data](
     val newWord = maskWord(dreq.wWord, dreq.wStrb).asUInt | maskWord(oldWord, ~dreq.wStrb).asUInt
     asg(
       newLine,
-      MuxCase(
-        Cat(newWord, VecInit((0 until wordNum - 1).map(oldLine(_))).asUInt), //111->(newword,6..0)
-        Seq(
-          (wordSel === 0.U) -> Cat(VecInit((1 until wordNum).map(oldLine(_))).asUInt, newWord), ///000->(7..1,newword)
-          (wordSel =/= (wordNum - 1).U) -> LookupUInt(
-            wordSel,
-            (1 until wordNum - 1).map(i => {
+      LookupUInt(
+        wordSel,
+        (0.U -> Cat(VecInit((1 until wordNum).map(oldLine(_))).asUInt, newWord)) +:
+          (1 until wordNum - 1)
+            .map(i =>
               i.U -> Cat(
                 VecInit((i + 1 until wordNum).map(oldLine(_))).asUInt,
                 newWord,
                 VecInit((0 until i).map(oldLine(_))).asUInt
               )
-            })
-          )
-        )
+            ) :+
+          ((wordNum - 1).U -> Cat(newWord, VecInit((0 until wordNum - 1).map(oldLine(_))).asUInt))
       )
     )
   }

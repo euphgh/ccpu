@@ -94,7 +94,7 @@ class IfStage1OutIO extends MycpuBundle {
   val tagOfInstGroup = Output(UInt(tagWidth.W))
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
-  val iCache         = new CacheStage1OutIO(IcachRoads, 8, false)
+  val iCache         = new CacheStage1OutIO(IcachRoads, IcachLineBytes / 4, false)
   val predictResult  = Output(Vec(fetchNum, new PredictResultBundle))
   val dsFetch        = Output(Bool())
   val firstPredTake  = Output(Vec(fetchNum, Bool()))

@@ -46,7 +46,7 @@ class MemStage1OutIO extends MycpuBundle {
   val wbInfo     = new WriteBackIO
   val prevDstSrc = UWord
   val exDetect   = new DetectExInfoBundle
-  val toCache2   = new CacheStage1OutIO(DcachRoads, 8, true)
+  val toCache2   = new CacheStage1OutIO(DcachRoads, DcachLineBytes / 4, true)
   val pTag       = UInt(tagWidth.W)
   val isUncache  = Bool()
   val memType    = MemType()

@@ -3,29 +3,41 @@ import chisel3._
 import chisel3.util._
 
 trait MycpuParam {
+  // configurable:
+  val cacheIndexWidth  = 6
+  val IcachRoads       = 4
+  val DcachRoads       = 4
+  val retAddrStackSize = 8
+  val storeQSize       = 4
+  val tlbEntriesNum    = 4
   // General Parameter for mycpu
-
   val excCodeWidth     = 5
   val PaddrWidth       = 32
   val tagWidth         = 20
-  val cacheIndexWidth  = 7
   val cacheOffsetWidth = 12 - cacheIndexWidth
   val vaddrWidth       = 32
   val instrWidth       = 32
   val dataWidth        = 32
-  val IcachRoads       = 4
-  val DcachRoads       = 4
-  val IcachLineBytes   = 32
-  val DcachLineBytes   = 32
+  val IcachLineBytes   = math.pow(2, cacheOffsetWidth).toInt
+  val DcachLineBytes   = math.pow(2, cacheOffsetWidth).toInt
   val enableCacheInst  = true
   val immWidth         = 16
-  val retAddrStackSize = 8
-  val storeQSize       = 4
   def getAddrIdx(word: UInt) = word(cacheIndexWidth + cacheOffsetWidth - 1, cacheOffsetWidth)
   def getOffset(word:  UInt) = word(cacheOffsetWidth - 1, 0)
   val instrOffLsb   = 2
   val instrOffMsb   = log2Ceil(IcachLineBytes) - 1
   val instrOffWidth = instrOffMsb - instrOffLsb + 1
+  def getAlignPC(pc: UInt) = {
+    require(pc.getWidth == 32)
+    val ifTag = pc(31, 4)
+    val alignPC =
+      Mux(
+        pc(instrOffMsb, instrOffLsb) > ((IcachLineBytes / 4) - 4).U(instrOffWidth.W),
+        Cat(ifTag + 1.U, 0.U(4.W)),
+        Cat(ifTag + 1.U, pc(3, 0))
+      )
+    alignPC
+  }
 
   val predictNum  = 4
   val fetchNum    = 4
@@ -49,7 +61,6 @@ trait MycpuParam {
   def PRegIdx = UInt(pRegAddrWidth.W)
   def ROBIdx  = UInt(robIndexWidth.W)
 
-  val tlbEntriesNum = 4
   val tlbIndexWidth = log2Ceil(tlbEntriesNum)
   def TLBIdx        = UInt(tlbIndexWidth.W)
 

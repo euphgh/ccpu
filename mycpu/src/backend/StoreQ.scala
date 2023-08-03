@@ -126,7 +126,7 @@ class StoreQueue(entries: Int) extends MycpuModule {
   val getMemMask = WireInit(VecInit.fill(4)(false.B))
   (0 until 4).map(i => {
     val matchWen = addrMatch.asUInt & strbMatch(i).asUInt
-    val oneHots  = getOHIndexDecode(queryHead, deq_ptr, matchWen, entries)
+    val oneHots  = getOHIndex(queryHead, deq_ptr, matchWen, entries)
     asg(getStqData(i), Mux1H(oneHots, (0 until entries).map(ram(_).rwReq.wWord((i + 1) * 8 - 1, i * 8))))
     asg(getSqMask(i), oneHots.orR)
 

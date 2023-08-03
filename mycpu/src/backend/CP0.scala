@@ -69,8 +69,10 @@ class CP0 extends BasicCOP(CP0Reset) with MycpuProperties {
   //redirect Target
   val trapBase =
     Mux(statusReg.bev === 1.U, "hbfc0_0200".U(32.W), (ebaseReg.eptbase << 12 | "h8000_0000".U(32.W)))
-  val trapOffs = WireInit(0x180.U(32.W))
-  asg(io.redirectTarget, Mux(io.in.eretFlush, epcReg.all, trapBase + trapOffs))
+  val trapOffs       = WireInit(0x180.U(32.W))
+  val redirectTarget = Mux(io.in.eretFlush, epcReg.all, trapBase + trapOffs)
+  val rediTargetReg  = RegNext(redirectTarget)
+  io.redirectTarget := rediTargetReg
 
   //exception
   when(io.in.exCommit.valid) {

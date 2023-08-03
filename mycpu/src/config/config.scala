@@ -4,7 +4,7 @@ import chisel3.util._
 
 trait MycpuParam {
   // configurable:
-  val IcachLineBytes   = 32
+  val IcachLineBytes   = 64
   val DcachLineBytes   = 64
   val basicBpuIdxWidth = 6
 

@@ -51,17 +51,16 @@ class MemStage2 extends MycpuModule {
   asg(cinBit.ptag, inBits.pTag)
   asg(cinBit.isUncached, inBits.isUncache)
   import MemType._
-  val isCi       = if (enableCacheInst) io.in.bits.toCache2.cacheInst.get.valid else false.B
-  val isld       = !inBits.isSQ && isLoad(inBits.memType)
-  val isNone     = inBits.memType === MemType.NON
-  val cacheMask  = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
-  val ldHitSQ    = !cacheMask.orR // not write and mem mask==0.U
-  val inIndex    = inBits.toCache2.dCacheReq.get.lowAddr.index
-  val cancelUart = inBits.pTag === "h1fe40".U && inIndex === 0.U(DcacheIndexWidth.W) && inBits.isUncache === false.B
-  asg(cinBit.cancel, inBits.exDetect.happen || (ldHitSQ || cancelUart) && isld || isNone)
+  val isCi      = if (enableCacheInst) io.in.bits.toCache2.cacheInst.get.valid else false.B
+  val isld      = !inBits.isSQ && isLoad(inBits.memType)
+  val isNone    = inBits.memType === MemType.NON
+  val cacheMask = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
+  val ldHitSQ   = !cacheMask.orR // not write and mem mask==0.U
+  val inIndex   = inBits.toCache2.dCacheReq.get.lowAddr.index
+  asg(cinBit.cancel, inBits.exDetect.happen)
   asg(outBits.cacheMask, cacheMask)
   // store req from rostage should not enter cache
-  cache2.io.in.valid := io.in.valid
+  cache2.io.in.valid := io.in.valid && !isNone
   io.dmem <> cache2.io.dram
   io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = cache2.io.out.valid
@@ -87,7 +86,6 @@ class MemStage2 extends MycpuModule {
     outBits.isCIntr := false.B
     when(inci.valid) {
       io.out.valid    := cache2.io.cacheInst.finish.get
-      cinBit.cancel   := false.B
       outBits.isCIntr := true.B
     }
     asg(cache2.io.cacheInst.redirect.get, io.flush)

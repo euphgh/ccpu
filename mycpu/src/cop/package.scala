@@ -156,12 +156,12 @@ package object cop extends MycpuParam {
       val m  = (31, 31, 0) //值为0，表示不存在config2寄存器
       val ms = (30, 25, tlbEntriesNum - 1) //TLB大小,7对应8
 
-      val is = (24, 22, cacheSetMap(math.pow(2, IcacheIndexWidth).toInt)) //组数目：128
-      val il = (21, 19, cacheBytesMap(IcachLineBytes)) //行大小：32B
+      val is = (24, 22, cacheSetMap(math.pow(2, IcacheIndexWidth).toInt)) //组数目
+      val il = (21, 19, cacheBytesMap(IcachLineBytes)) //行大小
       val ia = (18, 16, (IcachRoads - 1)) //相联度
 
-      val ds = (15, 13, cacheSetMap(math.pow(2, DcacheIndexWidth).toInt)) //128
-      val dl = (12, 10, cacheBytesMap(DcachLineBytes)) //32B
+      val ds = (15, 13, cacheSetMap(math.pow(2, DcacheIndexWidth).toInt))
+      val dl = (12, 10, cacheBytesMap(DcachLineBytes))
       val da = (9, 7, (DcachRoads - 1))
 
       val c2 = (6, 6, 0)

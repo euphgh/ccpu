@@ -457,8 +457,6 @@ class BCache extends MycpuModule {
   val res  = ram.io.r(io.readAddr.valid, hash(io.readAddr.bits))
   val rTag = res.resp.data(32 + bCacheTagWidth - 1, 32)
   val rDst = res.resp.data(31, 0)
-  dontTouch(rTag)
-  dontTouch(rDst)
   asg(io.readRes.valid, rTag === getTag(RegEnable(io.readAddr.bits, io.readAddr.valid)))
   asg(io.readRes.bits, rDst)
 

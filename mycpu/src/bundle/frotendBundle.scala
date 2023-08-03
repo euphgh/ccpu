@@ -75,7 +75,8 @@ class PreIfOutIO extends MycpuBundle {
 
 //should be fast, because in one cycle
 class IfStage1ToPreIf extends MycpuBundle {
-  val pcVal = Output(UInt(vaddrWidth.W))
+  val pcVal      = Output(UInt(vaddrWidth.W))
+  val predictRes = Output(Valid(UWord))
 }
 
 class FrontRedirctIO extends MycpuBundle {
@@ -92,6 +93,7 @@ class IfStage1OutIO extends MycpuBundle {
   val isUncached     = Output(Bool())
   val exception      = Output(FrontExcCode())
   val iCache         = new CacheStage1OutIO(IcachRoads, IcachLineBytes / 4, false)
+  val bCacheDst      = Output(Valid(UWord))
 }
 
 class IfStage2OutIO extends MycpuBundle {

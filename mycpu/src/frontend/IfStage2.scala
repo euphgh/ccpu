@@ -8,6 +8,7 @@ import cache._
 import decodemacro.MacroDecode
 import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestFrontPred
+import difftest.DifftestBCache
 
 class BtbWIO extends MycpuBundle {
   val valid    = Vec(4, Bool())
@@ -52,6 +53,9 @@ class IfStage2 extends MycpuModule {
     val rasTop    = Input(UWord)
     val rasPush   = Valid(UWord)
     val rasPop    = Output(Bool())
+    val bcHitbtb  = Input(Vec(fetchNum, Bool()))
+    val bcHitras  = Input(Bool())
+    val bCacheW   = Valid(new BCache.BCacheWIO)
   })
   val inBits    = io.in.bits
   val outBits   = io.out.bits
@@ -60,11 +64,13 @@ class IfStage2 extends MycpuModule {
   val bpuout    = Wire(Vec(fetchNum, new PredictResultBundle))
   val lhtout    = Wire(Vec(fetchNum, new LocHisTab.LhtOutIO))
   val bpuSel    = inBits.bpuSel
+  val bCMask    = Wire(Vec(fetchNum, Bool()))
   (0 until fetchNum).foreach(i => {
     bpuout(i).btbType := io.btbRes(bpuSel(i)).instType
     bpuout(i).target  := Mux(bpuout(i).btbType =/= BtbType.jret, io.btbRes(bpuSel(i)).target, io.rasTop)
     bpuout(i).counter := io.phtRes(bpuSel(i))
     lhtout(i)         := io.lhtRes(bpuSel(i))
+    bCMask(i)         := Mux(bpuout(i).btbType =/= BtbType.jret, io.bcHitbtb(bpuSel(i)), io.bcHitras)
   })
   io.out.bits.predictResult := bpuout
   val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
@@ -90,6 +96,7 @@ class IfStage2 extends MycpuModule {
   val hasBranch     = validBranch.asUInt.orR // make sure Priority can not be zero
   val dsFetch       = !getByVB((1 until fetchNum).map(alignMask(_)) :+ false.B) && hasBranch
   val dsMask        = getByVB(Seq("b0011".U(4.W), "b0111".U(4.W), "b1111".U(4.W), "b1111".U(4.W)))
+  val bCacheHit     = getByVB(bCMask)
   val firstPredTake = VecInit(PriorityEncoderOH(validBranch))
   // >> >> >> Update RAS ==================================
   val firValidBtbType = getByVB(bpuout.map(_.btbType))
@@ -189,15 +196,49 @@ class IfStage2 extends MycpuModule {
   asg(outBits.isDSredir, false.B)
   val realFirstBr = PriorityEncoderOH((0 until fetchNum).map(i => outBits.realBrType(i) =/= BranchType.NON))
   asg(io.out.bits.isBd, VecInit.fill(fetchNum)(false.B))
+  asg(io.bCacheW.valid, false.B)
+  io.bCacheW.bits.pc  := 0.U
+  io.bCacheW.bits.dst := 0.U
   switch(predState) {
     is(normal) {
       when(hasBranch && io.in.valid) {
-        predState := Mux(dsFetch, waitDS, normal)
-        asg(redirDst, Mux(dsFetch, alignPC, predDst))
-        asg(outBits.isDSredir, dsFetch)
-        asg(redirSet, true.B)
+        when(dsFetch) {
+          when(inBits.bCacheDst.valid) {
+            predState := waitDS
+            asg(redirDst, alignPC)
+            asg(outBits.isDSredir, true.B)
+            asg(redirSet, true.B)
+            when(io.out.fire) { io.selfFlush := true.B }
+            // Write BCache
+            asg(io.bCacheW.valid, true.B)
+            asg(io.bCacheW.bits.pc, BCache.cleanMask & inBits.pcVal)
+          }.otherwise {
+            // when ds come if2 in next cycle, should redirect target
+            // waitDS state use instfetch signal, there use fire
+            asg(redirDst, predDst)
+            when(io.out.fire) {
+              predState := comeDS
+              redirSet  := true.B
+            }
+          }
+        }.otherwise {
+          when(!bCacheHit) {
+            asg(redirDst, predDst)
+            asg(redirSet, true.B)
+            when(io.out.fire) { io.selfFlush := true.B }
+            // Write BCache
+            asg(io.bCacheW.valid, true.B)
+            asg(io.bCacheW.bits.pc, inBits.pcVal)
+            asg(io.bCacheW.bits.dst, predDst)
+          }
+        }
         asg(savedPreDst, predDst)
-        when(io.out.fire) { io.selfFlush := true.B }
+      }.elsewhen(io.in.valid) {
+        when(inBits.bCacheDst.valid) {
+          asg(redirDst, alignPC)
+          asg(redirSet, true.B)
+          when(io.out.fire) { io.selfFlush := true.B }
+        }
       }
     }
     is(waitDS) {
@@ -208,11 +249,34 @@ class IfStage2 extends MycpuModule {
       io.out.bits.predictResult(0).btbType := BtbType.non
       io.out.bits.predictResult(0).counter := 0.U
       io.out.bits.predictResult(0).taken   := false.B
+      asg(io.out.bits.validMask, VecInit(Cat(Fill(fetchNum - 1, false.B), true.B).asBools))
       when(io.out.fire) { predState := normal }
     }
   }
   when(io.backFlush) { predState := normal }
   if (enableCacheInst) {
     when(iCacheInst.valid) { predState := normal }
+  }
+  if (verilator) {
+    val diffBCache = Module(new DifftestBCache)
+    asg(diffBCache.io.clock, clock)
+    asg(diffBCache.io.en, true.B)
+    val if2FireIn = Wire(Bool())
+    addSink(if2FireIn, "If2FireIn")
+    asg(diffBCache.io.fireIn, RegNext(if2FireIn))
+    when(diffBCache.io.fireIn) {
+      assert(io.in.valid)
+    }
+    asg(diffBCache.io.state, predState)
+    asg(diffBCache.io.bCacheDst, inBits.bCacheDst.bits)
+    asg(diffBCache.io.predictDst, predDst)
+    asg(diffBCache.io.bCacheHit, bCacheHit)
+    asg(diffBCache.io.wDst, io.bCacheW.bits.dst)
+    asg(diffBCache.io.wPC, io.bCacheW.bits.pc)
+    asg(diffBCache.io.wen, io.bCacheW.valid)
+    asg(diffBCache.io.pcVal, inBits.pcVal)
+    asg(diffBCache.io.bCacheUse, inBits.bCacheDst.valid)
+    asg(diffBCache.io.dsFetch, dsFetch)
+    asg(diffBCache.io.hasBranch, hasBranch)
   }
 }

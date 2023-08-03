@@ -38,7 +38,16 @@ class PreIf extends MycpuModule {
     }
     val out = new PreIfOutIO
   })
-  asg(io.out.npc, Mux(io.in.redirect.flush, io.in.redirect.target, getAlignPC(io.in.fromIf1.pcVal)))
+  asg(
+    io.out.npc,
+    MuxCase(
+      getAlignPC(io.in.fromIf1.pcVal),
+      Seq(
+        io.in.redirect.flush           -> io.in.redirect.target,
+        io.in.fromIf1.predictRes.valid -> io.in.fromIf1.predictRes.bits
+      )
+    )
+  )
   io.out.flush       := io.in.redirect.flush
   io.out.isDelaySlot := io.in.isDSredir
 }

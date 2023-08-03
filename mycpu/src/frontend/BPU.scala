@@ -218,17 +218,6 @@ class LocHisTab extends MycpuModule {
       asg(readRes(i).take, pipe(fastCntROut) > 1.U)
       asg(readRes(i).cnt, pipe(clrROut))
     }
-    val fastRes = Wire(new LhtOutIO)
-    dontTouch(fastRes)
-    asg(fastRes.take, false.B)
-    asg(fastRes.cnt, 0.U(clrWidth.W))
-    when(tagsROut === getTag(readPC)) {
-      asg(fastRes.take, fastCntROut > 1.U)
-      asg(fastRes.cnt, clrROut)
-    }
-    // when(pipe(RegNext(readAddr(i).valid)) && resetFinish) {
-    //   assert(pipe(fastRes) === readRes(i))
-    // }
     // Write =============================================================
     val realTake = update.data(i).bits
     when(update.data(i).valid && update.instrOff(i)(1, 0) === i.U) {
@@ -303,6 +292,8 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = basicBpuIdxWidth, useR
     require(res.getWidth == bpuTagWidth)
     res
   }
+  val matchTagSecond = false
+  val midOut         = Wire(Vec(fetchNum, gen))
   (0 until fetchNum).foreach(i => {
 
     val ramWidth = gen.getWidth + bpuTagWidth
@@ -326,10 +317,10 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = basicBpuIdxWidth, useR
     val fastRam = ram.io.r(readAddr(i).valid, hash(readAddr(i).bits)).resp.data
     val readOut = pipe(fastRam)
     val entry   = readOut(ramWidth - 1, bpuTagWidth).asTypeOf(gen)
+    asg(midOut(i), fastRam(ramWidth - 1, bpuTagWidth).asTypeOf(gen))
 
-    val matchTagSecond = false
-    val tagHit         = Wire(Bool())
-    val tag            = Wire(UInt(bpuTagWidth.W))
+    val tagHit = Wire(Bool())
+    val tag    = Wire(UInt(bpuTagWidth.W))
 
     require(entry.getWidth == gen.getWidth)
     require(tag.getWidth == bpuTagWidth)
@@ -378,12 +369,17 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = basicBpuIdxWidth, useR
   * out should keep out until posedge that in.search.valid is true
   */
 class BranchTargetBuffer extends BasicBPU(new BtbOutIO(), basicBpuIdxWidth) {
+  val bCacheRes = IO(Flipped(Valid(UWord)))
+  val bCacheHit = IO(Output(Vec(fetchNum, Bool())))
   override def missFunc(entry: BtbOutIO, addr: UInt): BtbOutIO = {
     val out = Wire(new BtbOutIO)
     out.target   := addr + 8.U
     out.instType := BtbType.non
     out
   }
+  (0 until fetchNum).foreach(i => {
+    bCacheHit(i) := pipe(bCacheRes.valid && (bCacheRes.bits === midOut(i).target))
+  })
 }
 
 /**
@@ -414,4 +410,61 @@ class BpuUpdateIO extends MycpuBundle {
   val pc  = Output(UWord)
   val btb = Valid(new BtbOutIO)
   val pht = Valid(new PhtOutIO)
+}
+
+object BCache {
+  // configurable:
+  val idxWidth   = 7
+  val memUseSRAM = false
+  import MycpuObject.fetchNum
+  class BCacheWIO extends MycpuBundle {
+    val pc  = UWord
+    val dst = UWord
+  }
+  val lowWidth       = log2Ceil(fetchNum)
+  val bCacheTagWidth = 32 - idxWidth - lowWidth
+  val entriesyNum    = math.pow(2, idxWidth).toInt
+  def cleanMask      = Cat(Fill(bCacheTagWidth, false.B), Fill(lowWidth + idxWidth, true.B))
+  // can be change for better design
+  def hash(address: UInt) = address(idxWidth + lowWidth - 1, lowWidth)
+  def getTag(address: UInt) = {
+    require(address.getWidth == 32)
+    val res = address(31, idxWidth + lowWidth)
+    require(res.getWidth == bCacheTagWidth)
+    res
+  }
+}
+
+class BCache extends MycpuModule {
+  val io = IO(new Bundle {
+    val readAddr = Flipped(Valid(UWord))
+    val readRes  = Valid(UWord)
+    val write    = Flipped(Valid(new BCache.BCacheWIO))
+  })
+  import BCache._
+  val ramWidth = bCacheTagWidth + 32
+  val ram = Module(
+    DualPortsSRAM(
+      gen         = UInt(ramWidth.W),
+      set         = entriesyNum,
+      useSRAM     = memUseSRAM,
+      shouldReset = true,
+      holdRead    = false,
+      singlePort  = false,
+      writefirst  = true
+    )
+  )
+  val res  = ram.io.r(io.readAddr.valid, hash(io.readAddr.bits))
+  val rTag = res.resp.data(32 + bCacheTagWidth - 1, 32)
+  val rDst = res.resp.data(31, 0)
+  dontTouch(rTag)
+  dontTouch(rDst)
+  asg(io.readRes.valid, rTag === getTag(RegEnable(io.readAddr.bits, io.readAddr.valid)))
+  asg(io.readRes.bits, rDst)
+
+  val wPC   = io.write.bits.pc
+  val wDst  = io.write.bits.dst
+  val wData = Wire(UInt(ramWidth.W))
+  asg(wData, Cat(getTag(wPC), wDst))
+  ram.io.w(io.write.valid, wData, hash(wPC))
 }

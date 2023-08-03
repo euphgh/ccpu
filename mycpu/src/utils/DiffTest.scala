@@ -39,6 +39,21 @@ class DiffPhyRegInFreeListIO extends DifftestBundle with MycpuParam {
   val fl     = Input(Vec(freeListSize, PRegIdx))
 }
 
+class DiffBCacheIO extends DifftestBundle with MycpuParam {
+  val hasBranch  = Input(Bool())
+  val dsFetch    = Input(Bool())
+  val bCacheHit  = Input(Bool())
+  val bCacheUse  = Input(Bool())
+  val bCacheDst  = Input(UWord)
+  val predictDst = Input(UWord)
+  val wen        = Input(Bool())
+  val wPC        = Input(UWord)
+  val wDst       = Input(UWord)
+  val state      = Input(UInt(2.W))
+  val fireIn     = Input(Bool())
+  val pcVal      = Input(UWord)
+}
+
 class DiffArchHiloIO extends DifftestBundle {
   val hi = Input(UInt(32.W))
   val lo = Input(UInt(32.W))
@@ -287,3 +302,4 @@ class DifftestPHTWrite extends DifftestBaseModule(new DiffPHTWirteIO)
 class DifftestSpecRAS extends DifftestBaseModule(new DiffSpecRASIO)
 class DifftestArchRAS extends DifftestBaseModule(new DiffArchRASIO)
 class DifftestLHTRead extends DifftestBaseModule(new DiffLHTReadIO)
+class DifftestBCache extends DifftestBaseModule(new DiffBCacheIO)

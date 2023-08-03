@@ -68,11 +68,12 @@ class InstFetch extends MycpuModule {
     iCacheInst.valid := false.B
   }
   //IF2 in
+  val if2Flush = !stage1IsCacheInstr && (io.redirect.flush || iCacheInst.valid || ifStage2.io.selfFlush)
   PipelineConnect(
     ifStage1.io.out,
     ifStage2.io.in,
     ifStage2.io.out.fire,
-    !stage1IsCacheInstr && (io.redirect.flush || iCacheInst.valid || ifStage2.io.selfFlush)
+    if2Flush
   )
   ifStage2.io.backFlush := io.redirect.flush
   ifStage2.io.dsGoIf2   := dsGoIf2
@@ -152,10 +153,13 @@ class InstFetch extends MycpuModule {
   val pht = Module(new PatternHistoryTable())
   val lht = Module(new LocHisTab())
 
+  val bCacheRes = ifStage1.io.out.bits.bCacheDst
+
   val bpuGoNext = ifStage1.io.out.fire
   btb.goNext := bpuGoNext
   pht.goNext := bpuGoNext
   lht.goNext := bpuGoNext
+  btb.bCacheRes <> bCacheRes
   asg(btb.update.tagIdx, if2BtbIO.tagIdx)
   asg(btb.update.instrOff, if2BtbIO.instrOff)
   asg(btb.update.data, if2BtbIO.data)
@@ -208,4 +212,9 @@ class InstFetch extends MycpuModule {
     asg(ifStage2.io.lhtRes(i), lht.readRes(i))
   })
   asg(ifStage2.io.rasTop, RegEnable(ras.io.topData, bpuRreq))
+  asg(ifStage2.io.bcHitras, RegEnable((ras.io.topData === bCacheRes.bits && bCacheRes.valid), bpuRreq))
+  asg(ifStage2.io.bcHitbtb, btb.bCacheHit)
+  ifStage2.io.bCacheW <> ifStage1.io.bCacheW
+  val if2FireIn = WireInit(ifStage1.io.out.fire && !if2Flush)
+  addSource(if2FireIn, "If2FireIn")
 }

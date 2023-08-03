@@ -47,6 +47,7 @@ class IfStage1 extends MycpuModule {
     val toPreIf     = new IfStage1ToPreIf
     val tlb         = new TLBSearchIO
     val isDelaySlot = Output(Bool())
+    val bCacheW     = Flipped(Valid(new BCache.BCacheWIO))
   })
 
   val icacheInst =
@@ -71,6 +72,13 @@ class IfStage1 extends MycpuModule {
   io.out.bits.bpuSel := VecInit.tabulate(fetchNum)(i => RegEnable(npc(3, 2) + i.U, PCReset(3, 2), update))
   val isDelaySlot = RegEnable(io.in.isDelaySlot, false.B, update)
   asg(io.isDelaySlot, isDelaySlot)
+  // BPU Cache ===========================================
+  val bCache = Module(new BCache)
+  bCache.io.write <> io.bCacheW
+  asg(bCache.io.readAddr.bits, npc)
+  asg(bCache.io.readAddr.valid, io.bpuRreq)
+  asg(io.toPreIf.predictRes, bCache.io.readRes)
+  asg(io.out.bits.bCacheDst, bCache.io.readRes)
   // use wire io.in direct ================================
   // >> cache =============================================
   val icache1 = Module(new CacheStage1(IcachRoads, IcachLineBytes, false))

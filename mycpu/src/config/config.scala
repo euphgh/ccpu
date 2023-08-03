@@ -11,7 +11,7 @@ trait MycpuParam {
   val IcachRoads       = 4
   val DcachRoads       = 4
   val retAddrStackSize = 8
-  val storeQSize       = 4
+  val storeQSize       = 8
   val tlbEntriesNum    = 4
   // General Parameter for mycpu
   val excCodeWidth = 5

@@ -215,6 +215,8 @@ class InstFetch extends MycpuModule {
   asg(ifStage2.io.bcHitras, RegEnable((ras.io.topData === bCacheRes.bits && bCacheRes.valid), bpuRreq))
   asg(ifStage2.io.bcHitbtb, btb.bCacheHit)
   ifStage2.io.bCacheW <> ifStage1.io.bCacheW
-  val if2FireIn = WireInit(ifStage1.io.out.fire && !if2Flush)
-  addSource(if2FireIn, "If2FireIn")
+  if (verilator) {
+    val if2FireIn = WireInit(ifStage1.io.out.fire && !if2Flush)
+    addSource(if2FireIn, "If2FireIn")
+  }
 }

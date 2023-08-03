@@ -150,6 +150,7 @@ class LocHisTab extends MycpuModule {
   assert(readAddr(1).valid === readAddr(0).valid)
   assert(readAddr(2).valid === readAddr(0).valid)
   assert(readAddr(3).valid === readAddr(0).valid)
+  val matchTagSecond = false
   (0 until fetchNum).foreach(i => {
     val readPC = RegEnable(readAddr(i).bits, readAddr(i).valid)
     asg(diffLht.io.readAddr(i), readAddr(i).bits)
@@ -207,7 +208,13 @@ class LocHisTab extends MycpuModule {
     // Read ==============================================================
     asg(readRes(i).take, false.B)
     asg(readRes(i).cnt, 0.U(clrWidth.W))
-    when(pipe(tagsROut) === getTag(pipe(readPC))) {
+    val tagHit = Wire(Bool())
+    if (matchTagSecond) {
+      asg(tagHit, pipe(tagsROut) === pipe(getTag(readPC)))
+    } else {
+      asg(tagHit, pipe(tagsROut === getTag(readPC)))
+    }
+    when(tagHit) {
       asg(readRes(i).take, pipe(fastCntROut) > 1.U)
       asg(readRes(i).cnt, pipe(clrROut))
     }

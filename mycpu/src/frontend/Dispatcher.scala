@@ -350,35 +350,58 @@ class Dispatcher extends MycpuModule {
   asg(io.fronRedirect.target, realTargetReg) //default
 
   object DispatcherState extends ChiselEnum {
-    val normal, waitDs, block = Value
+    val normal, waitDs, redirect, block = Value
   }
   import DispatcherState._
   val state  = RegInit(normal)
   val mispre = io.fromAluMispre
+
   switch(state) {
     is(normal) {
       when(mispre.happen) {
-        when(!io.dsAllow) {
-          asg(state, waitDs)
-          asg(realTargetReg, mispre.realTarget)
-        }.otherwise {
-          asg(state, block)
-          asg(io.fronRedirect.flush, true.B)
-          asg(io.fronRedirect.target, mispre.realTarget)
-        }
+        asg(realTargetReg, mispre.realTarget)
+        asg(state, Mux(io.dsAllow, redirect, waitDs))
       }
     }
     is(waitDs) {
       when(io.dsAllow) {
-        asg(state, block)
-        asg(io.fronRedirect.flush, true.B)
-        asg(io.fronRedirect.target, realTargetReg)
+        asg(state, redirect)
       }
+    }
+    is(redirect) {
+      asg(state, Mux(io.recoverSrat.valid, normal, block))
+      asg(io.fronRedirect.flush, true.B)
+      asg(io.fronRedirect.target, realTargetReg)
     }
     is(block) {
       when(io.recoverSrat.valid) { asg(state, normal) }
     }
   }
+
+  // switch(state) {
+  //   is(normal) {
+  //     when(mispre.happen) {
+  //       when(!io.dsAllow) {
+  //         asg(state, waitDs)
+  //         asg(realTargetReg, mispre.realTarget)
+  //       }.otherwise {
+  //         asg(state, block)
+  //         asg(io.fronRedirect.flush, true.B)
+  //         asg(io.fronRedirect.target, mispre.realTarget)
+  //       }
+  //     }
+  //   }
+  //   is(waitDs) {
+  //     when(io.dsAllow) {
+  //       asg(state, block)
+  //       asg(io.fronRedirect.flush, true.B)
+  //       asg(io.fronRedirect.target, realTargetReg)
+  //     }
+  //   }
+  //   is(block) {
+  //     when(io.recoverSrat.valid) { asg(state, normal) }
+  //   }
+  // }
   when(io.in.flushBackend) { asg(state, normal) }
 
   //deal with readyGo

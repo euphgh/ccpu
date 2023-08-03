@@ -308,7 +308,6 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
       asg(backBrDiff.io.predDest, predict.target)
       asg(backBrDiff.io.predTake, predict.taken)
       asg(backBrDiff.io.realDest, inBrInfo.realTarget)
-      asg(backBrDiff.io.predTake, predict.taken)
       asg(backBrDiff.io.realTake, genTaken)
       asg(backBrDiff.io.btbType, bpuUpdate.get.btb.bits.instType.asUInt)
     }

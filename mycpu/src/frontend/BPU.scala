@@ -319,13 +319,23 @@ class BasicBPU[T <: Data](val gen: T, val idxWidth: Int = basicBpuIdxWidth, useR
     val fastRam = ram.io.r(readAddr(i).valid, hash(readAddr(i).bits)).resp.data
     val readOut = pipe(fastRam)
     val entry   = readOut(ramWidth - 1, bpuTagWidth).asTypeOf(gen)
-    val tag     = readOut(bpuTagWidth - 1, 0)
+
+    val matchTagSecond = false
+    val tagHit         = Wire(Bool())
+    val tag            = Wire(UInt(bpuTagWidth.W))
 
     require(entry.getWidth == gen.getWidth)
     require(tag.getWidth == bpuTagWidth)
 
     val lastAddr = pipe(RegEnable(readAddr(i).bits, readAddr(i).valid))
-    when(tag === getTag(lastAddr)) {
+    if (matchTagSecond) {
+      asg(tag, readOut(bpuTagWidth - 1, 0))
+      asg(tagHit, tag === getTag(lastAddr))
+    } else {
+      asg(tag, fastRam(bpuTagWidth - 1, 0))
+      asg(tagHit, pipe(tag === getTag(RegEnable(readAddr(i).bits, readAddr(i).valid))))
+    }
+    when(tagHit) {
       readRes(i) := entry
     }.otherwise {
       readRes(i) := missFunc(entry, lastAddr)

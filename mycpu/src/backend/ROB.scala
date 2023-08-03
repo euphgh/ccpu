@@ -293,7 +293,7 @@ class ROB extends MycpuModule {
 
   //automachine
   object RetireState extends ChiselEnum {
-    val normal, mpNext, misFlush, exerFlush, ciNext = Value
+    val normal, mpNext, misFlush, exerFlush, ciNext, exerRealFlush = Value
   }
   import RetireState._
   val hasExer     = exerVec.asUInt.orR
@@ -331,6 +331,8 @@ class ROB extends MycpuModule {
   io.out.flushAll           := false.B
   addSource(io.out.flushAll, "ROB_FLUSH_ALL")
   io.out.robRedirect.flush := false.B
+  // val exerFlushReg = RegInit(false.B)
+  // val eretFlushReg = RegInit(false.B)
   asg(io.out.robRedirect.target, dstHB.value.bits)
   switch(state) {
     is(normal) {
@@ -386,9 +388,9 @@ class ROB extends MycpuModule {
       }
     }
     is(exerFlush) {
-      asg(state, normal)
+      asg(state, exerRealFlush)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
-      io.out.flushAll := true.B
+      //io.out.flushAll := true.B
       when(retireInst(0).exception.detect.happen || hasInt) { //exception
         io.out.exCommit.valid := true.B
         val exceptType = retireInst(0).exception.detect.excCode
@@ -399,6 +401,11 @@ class ROB extends MycpuModule {
         io.out.eretFlush := true.B
         allowRobPop(0)   := true.B
       }
+    }
+    is(exerRealFlush) {
+      asg(state, normal)
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
+      io.out.flushAll := true.B
     }
   }
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.flushAll)
@@ -491,12 +498,19 @@ class ROB extends MycpuModule {
     }
   }
   //flrstate: recover/normal
+
   when(flrState === recover) {
     flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
-    when(flrHeadPtr === flrTailPtr) { flrState := idle }
+    val dperRdy    = flrHeadPtr - flrTailPtr < (4 * retireNum).U
+    val dperRdyReg = RegInit(false.B)
+    dperRdyReg := dperRdy
     (0 until dispatchNum).foreach(i => {
-      io.in.fromDispatcher(i).ready := flrHeadPtr - flrTailPtr < (3 * retireNum).U
+      io.in.fromDispatcher(i).ready := dperRdyReg
     })
+    when(flrHeadPtr === flrTailPtr) {
+      flrState   := idle
+      dperRdyReg := true.B
+    }
   }.otherwise {
     flrTailPtr := 0.U
     flrHeadPtr := 3.U

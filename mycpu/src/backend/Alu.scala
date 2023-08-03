@@ -262,10 +262,15 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
       )
     val preCnt = predict.counter
     /*==================== Update BPU ====================*/
-    val bpUp = bpuUpdate.get
-    val btb  = bpUp.btb
-    val pht  = bpUp.pht
-    asg(bpUp.pc, inBrInfo.pcVal)
+    val bpUp    = bpuUpdate.get
+    val bpUpReg = RegInit(0.U.asTypeOf(new BpuUpdateIO))
+    bpUp := bpUpReg
+    val btb = bpUpReg.btb
+    val pht = bpUpReg.pht
+    asg(bpUpReg.pc, inBrInfo.pcVal)
+    // val btb = bpUp.btb
+    // val pht = bpUp.pht
+    // asg(bpUp.pc, inBrInfo.pcVal)
     // BTB update ====================================================
     asg(btb.bits.instType, inBrInfo.realBtbType)
     asg(btb.bits.target, inBrInfo.realTarget)
@@ -312,11 +317,7 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
       asg(backBrDiff.io.btbType, bpuUpdate.get.btb.bits.instType.asUInt)
     }
     when(BranchType.isAL(brType)) { asg(exeOut.wPrf.result, srcs(1)) }
-    //movz movn
-    // val prevPDest = exeIn.prevPDest
-    // val prevData  = Wire(UWord)
-    // BoringUtils.addSource(prevPDest, "MOVZNPREVIDX")
-    // BoringUtils.addSink(prevData, "MOVZNPREVDATA")
+
     val isMovzn = aluType === AluType.MOVN || aluType === AluType.MOVZ
     val wprf    = exeOut.wPrf
     val movWen =
@@ -324,7 +325,6 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
     when(isMovzn) {
       asg(wprf.result, Mux(movWen, srcs(0), exeIn.prevData))
     }
-
     when(aluType.isOneOf(AluType.TRAPEQ, AluType.TRAPNE)) {
       asg(outExDetect.happen, genTaken)
     }

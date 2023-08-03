@@ -54,6 +54,11 @@ class DramReadIO extends MycpuBundle {
   val ar = Decoupled(new ARChannel)
   val r  = Flipped(Decoupled(new RChannel))
 }
+class DramWriteIO extends MycpuBundle {
+  val aw = Decoupled(new AWChannel)
+  val w  = Decoupled(new WChannel)
+  val b  = Flipped(Decoupled(new BChannel))
+}
 
 class DramIO extends MycpuBundle {
   val ar = Decoupled(new ARChannel)

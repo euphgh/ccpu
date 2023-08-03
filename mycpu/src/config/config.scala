@@ -32,6 +32,10 @@ trait MycpuParam {
   def getAddrIdxD(word: UInt) = word(DcacheIndexWidth + DcacheOffsetWidth - 1, DcacheOffsetWidth)
   def getOffsetI(word:  UInt) = word(IcacheOffsetWidth - 1, 0)
   def getOffsetD(word:  UInt) = word(DcacheOffsetWidth - 1, 0)
+  def isDataId(id:      UInt) = id(0)
+  def isInstrId(id:     UInt) = id(0) =/= false.B
+  def isDCacheId(id:    UInt) = id === 1.U
+  def isUartBufId(id:   UInt) = id === 3.U
   val instrOffLsb   = 2
   val instrOffMsb   = log2Ceil(IcachLineBytes) - 1
   val instrOffWidth = instrOffMsb - instrOffLsb + 1

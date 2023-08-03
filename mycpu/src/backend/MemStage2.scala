@@ -55,12 +55,11 @@ class MemStage2 extends MycpuModule {
   val isld      = !inBits.isSQ && isLoad(inBits.memType)
   val isNone    = inBits.memType === MemType.NON
   val cacheMask = Mux(inBits.isUncache, io.querySQ.req.needMask, io.querySQ.res.memMask)
-  val ldHitSQ   = !cacheMask.orR // not write and mem mask==0.U
   val inIndex   = inBits.toCache2.dCacheReq.get.lowAddr.index
   asg(cinBit.cancel, inBits.exDetect.happen)
   asg(outBits.cacheMask, cacheMask)
   // store req from rostage should not enter cache
-  cache2.io.in.valid := io.in.valid && !isNone
+  cache2.io.in.valid := io.in.valid && !isNone && !inBits.isWuart
   io.dmem <> cache2.io.dram
   io.in.ready := cache2.io.in.ready && io.out.ready // LSU is always priori to MDU
   val cacheFinish = cache2.io.out.valid
@@ -70,6 +69,40 @@ class MemStage2 extends MycpuModule {
   cache2.io.out.ready := Mux(inBits.isSQ, true.B, io.out.ready)
 
   if (debug) io.donePC.get := inBits.debugPC.get
+  // BASIC================= Uart Buffer =======================
+  val uBuffer = Module(new UartBuffer)
+  uBuffer.io.enq.valid := false.B
+  asg(uBuffer.io.enq.bits, cinBit.fromStage1.dCacheReq.get.wWord(7, 0))
+  when(inBits.isWuart && io.in.valid) {
+    io.in.ready          := uBuffer.io.enq.ready
+    io.doneSQ            := uBuffer.io.enq.ready
+    uBuffer.io.enq.valid := inBits.isWuart
+  }
+  val ubaw = uBuffer.io.dram.aw
+  val ubw  = uBuffer.io.dram.w
+  val ubb  = uBuffer.io.dram.b
+  val dcaw = cache2.io.dram.aw
+  val dcw  = cache2.io.dram.w
+  val dcb  = cache2.io.dram.b
+  import bundle.DramWriteIO
+  io.dmem.ar <> cache2.dram.ar
+  io.dmem.r <> cache2.dram.r
+  // AW =====================================================
+  io.dmem.aw.valid := dcaw.valid || ubaw.valid
+  dcaw.ready       := io.dmem.aw.ready
+  ubaw.ready       := io.dmem.aw.ready && !dcaw.valid
+  io.dmem.aw.bits  := Mux(dcaw.valid, dcaw.bits, ubaw.bits)
+  // W ======================================================
+  io.dmem.w.valid := dcw.valid || ubw.valid
+  dcw.ready       := io.dmem.w.ready
+  ubw.ready       := io.dmem.w.ready && !dcw.valid
+  io.dmem.w.bits  := Mux(dcw.valid, dcw.bits, ubw.bits)
+  // B ======================================================
+  io.dmem.b.ready := Mux(isDCacheId(io.dmem.b.bits.id), dcb.ready, ubb.ready)
+  dcb.valid       := isDCacheId(io.dmem.b.bits.id) && io.dmem.b.valid
+  ubb.valid       := isUartBufId(io.dmem.b.bits.id) && io.dmem.b.valid
+  dcb.bits        := io.dmem.b.bits
+  ubb.bits        := io.dmem.b.bits
   // ===================== select ===============================
   val lowAddr = inBits.toCache2.dCacheReq.get.lowAddr
   asg(io.querySQ.req.addr, Cat(inBits.pTag, lowAddr.index, lowAddr.offset))
@@ -89,5 +122,122 @@ class MemStage2 extends MycpuModule {
       outBits.isCIntr := true.B
     }
     asg(cache2.io.cacheInst.redirect.get, io.flush)
+  }
+}
+
+object UartBuffer {
+  val burstLen = 16
+  val totalNum = 32
+  val idleMax  = 32
+  val ubId     = 3
+  val burstWid = log2Ceil(burstLen)
+  val countWid = burstWid + 1
+  require(totalNum % burstLen == 0)
+  class MyCount(width: Int) extends MycpuModule {
+    val value   = IO(Valid(UInt(width.W)))
+    val inner   = RegInit(0.U(width.W))
+    val notZero = RegInit(false.B)
+    value.valid := notZero
+    value.bits  := inner
+    def inc() = {
+      when(notZero) {
+        inner := inner + 1.U
+      }.otherwise {
+        notZero := true.B
+      }
+      inner.andR && notZero
+    }
+    def set(newValue: UInt) = {}
+  }
+}
+
+class UartBuffer extends MycpuModule {
+  val io = IO(new Bundle {
+    val enq  = Flipped(Decoupled(UByte))
+    val dram = new DramWriteIO
+  })
+  import UartBuffer._
+  val ram = Module(new Queue(UByte, totalNum, false, false, true, false))
+  io.enq <> ram.io.enq
+  ram.io.deq.ready := false.B
+  val groupCnt = RegInit(0.U((log2Ceil(totalNum / burstLen)).W))
+  val fewCnt   = RegInit(0.U((burstWid).W))
+  val idleTime = Counter(idleMax)
+
+  val fCntInc = io.enq.fire
+  val gCntInc = fCntInc && (fewCnt === (burstLen - 1).U)
+  when(fCntInc) { fewCnt := fewCnt + 1.U }
+  when(gCntInc) { groupCnt := groupCnt + 1.U }
+
+  val idle :: wReq :: backWait :: Nil = Enum(3)
+
+  val awOk = RegInit(false.B)
+  val wOk  = RegInit(false.B)
+
+  val state    = RegInit(idle)
+  val burstCnt = Reg(UInt(burstWid.W))
+  val burstReg = Reg(UInt(burstWid.W))
+  val byteBuf  = RegEnable(ram.io.deq.bits, ram.io.deq.fire)
+
+  def wReqInit(burstNum: UInt) = {
+    state            := wReq
+    awOk             := false.B
+    wOk              := false.B
+    ram.io.deq.ready := true.B
+    burstReg         := burstNum
+    burstCnt         := burstNum
+  }
+  val aw = io.dram.aw
+  val w  = io.dram.w
+  val b  = io.dram.b
+  asg(aw.valid, false.B)
+  asg(aw.bits.addr, "h1faf_fff0".U(32.W))
+  asg(aw.bits.burst, BurstType.FIXED)
+  asg(aw.bits.id, ubId.U(4.W))
+  asg(aw.bits.len, burstReg)
+  asg(aw.bits.size, SizeType.Byte.asUInt)
+  asg(w.valid, false.B)
+  asg(w.bits.data, Cat(0.U(24.W), byteBuf))
+  asg(w.bits.id, ubId.U(4.W))
+  asg(w.bits.strb, "b0001".U(4.W))
+  asg(w.bits.last, false.B)
+  asg(b.ready, false.B)
+
+  switch(state) {
+    is(idle) {
+      when(groupCnt =/= 0.U) {
+        wReqInit((burstLen - 1).U)
+        asg(groupCnt, groupCnt - 1.U + gCntInc.asUInt)
+      }
+      when(idleTime.inc() && ram.io.deq.valid) {
+        assert(fewCnt =/= 0.U)
+        wReqInit(fewCnt - 1.U)
+        asg(fewCnt, ZeroExt(fCntInc.asUInt, 4))
+      }
+    }
+    is(wReq) {
+      aw.valid := !awOk
+      w.valid  := !wOk
+      when(aw.fire) { awOk := true.B }
+      when(w.fire) {
+        asg(wOk, burstCnt === 0.U)
+        asg(w.bits.last, burstCnt === 0.U)
+        asg(ram.io.deq.ready, burstCnt =/= 0.U)
+        asg(burstCnt, burstCnt - 1.U)
+      }
+      when(awOk && wOk) { state := backWait }
+    }
+    is(backWait) {
+      b.ready := true.B
+      when(b.fire) {
+        when(groupCnt =/= 0.U) {
+          wReqInit(burstLen.U)
+          asg(groupCnt, groupCnt - 1.U + gCntInc.asUInt)
+        }.otherwise {
+          state := idle
+          idleTime.reset()
+        }
+      }
+    }
   }
 }

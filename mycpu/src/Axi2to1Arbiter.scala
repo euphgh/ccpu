@@ -33,7 +33,7 @@ class Axi2to1Arbiter extends MycpuModule {
   //r channel
   asg(r0, r.used)
   asg(r1, r.used)
-  val isDmem = r.used.id === "b0001".U(4.W)
+  val isDmem = isDataId(r.used.id)
   asg(imem.r.valid, !isDmem && master.r.valid)
   asg(dmem.r.valid, isDmem && master.r.valid)
   asg(master.r.ready, Mux(isDmem, dmem.r.ready, imem.r.ready))
@@ -53,5 +53,4 @@ class Axi2to1Arbiter extends MycpuModule {
   asg(b1, b.used)
   asg(dmem.b.valid, master.b.valid)
   asg(master.b.ready, dmem.b.ready)
-
 }

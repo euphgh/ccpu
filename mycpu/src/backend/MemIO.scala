@@ -44,6 +44,7 @@ class MemStage1InIO extends MycpuBundle {
 
 class MemStage1OutIO extends MycpuBundle {
   val isSQ       = Bool()
+  val isWuart    = Bool()
   val wbInfo     = new WriteBackIO
   val prevDstSrc = UWord
   val exDetect   = new DetectExInfoBundle

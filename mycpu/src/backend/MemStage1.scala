@@ -456,4 +456,8 @@ class MemStage1 extends MycpuModule {
   asg(wakeUpSource.valid, toMem2.valid && !toMem2.bits.toCache2.dCacheReq.get.isWrite)
 
   BoringUtils.addSource(wakeUpSource, "LsuM1WakeUp")
+  // Write UART =================================================
+  val sqLowAddr = sqDecp.bits.rwReq.lowAddr
+  val sqPaddr   = Cat(sqBits.pTag, sqLowAddr.index, sqLowAddr.offset)
+  toM2Bits.isWuart := isSQtoMem2 && sqPaddr === "h1faf_fff0".U(32.W)
 }

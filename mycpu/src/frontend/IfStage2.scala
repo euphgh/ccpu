@@ -47,46 +47,27 @@ class IfStage2 extends MycpuModule {
     val selfFlush = Output(Bool())
     val dsGoIf2   = Input(Bool())
     val backFlush = Input(Bool())
-    val btbRes    = Input(Vec(fetchNum, new BtbOutIO))
-    val phtRes    = Input(Vec(fetchNum, UInt(2.W)))
-    val lhtRes    = Input(Vec(fetchNum, new LocHisTab.LhtOutIO))
-    val rasTop    = Input(UWord)
-    val rasPush   = Valid(UWord)
-    val rasPop    = Output(Bool())
-    val bcHitbtb  = Input(Vec(fetchNum, Bool()))
-    val bcHitras  = Input(Bool())
-    val bCacheW   = Valid(new BCache.BCacheWIO)
+    // must in this stage, becasue it use first valid btbType
+    val rasPush = Valid(UWord)
+    val rasPop  = Output(Bool())
+    val bCacheW = Valid(new BCache.BCacheWIO)
   })
   val inBits    = io.in.bits
   val outBits   = io.out.bits
   val alignMask = inBits.alMask
   val pc        = inBits.pcVal
-  val bpuout    = Wire(Vec(fetchNum, new PredictResultBundle))
-  val lhtout    = Wire(Vec(fetchNum, new LocHisTab.LhtOutIO))
+  val bpuout    = io.out.bits.predictResult
   val bpuSel    = inBits.bpuSel
   val bCMask    = Wire(Vec(fetchNum, Bool()))
   (0 until fetchNum).foreach(i => {
-    bpuout(i).btbType := io.btbRes(bpuSel(i)).instType
-    bpuout(i).target  := Mux(bpuout(i).btbType =/= BtbType.jret, io.btbRes(bpuSel(i)).target, io.rasTop)
-    bpuout(i).counter := io.phtRes(bpuSel(i))
-    lhtout(i)         := io.lhtRes(bpuSel(i))
-    bCMask(i)         := Mux(bpuout(i).btbType =/= BtbType.jret, io.bcHitbtb(bpuSel(i)), io.bcHitras)
+    asg(bpuout(i), inBits.bpuRes(bpuSel(i)))
+    asg(bCMask(i), inBits.bCacheHit(bpuSel(i)))
   })
-  io.out.bits.predictResult := bpuout
   val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
   val takeMask    = Wire(Vec(fetchNum, Bool()))
   (0 until fetchNum).foreach(i => {
-    val brIsTake =
-      Mux(
-        lhtout(i).cnt < 14.U,
-        bpuout(i).counter > 1.U,
-        lhtout(i).take
-      )
-    val isTakeBr = brIsTake && bpuout(i).btbType === BtbType.b
-    val isTakeJp = BtbType.isJump(bpuout(i).btbType)
-    takeMask(i)     := isTakeJp || isTakeBr
-    validBranch(i)  := takeMask(i) && inBits.alMask(i)
-    bpuout(i).taken := takeMask(i)
+    takeMask(i)    := inBits.bpuRes(bpuSel(i)).taken
+    validBranch(i) := takeMask(i) && inBits.alMask(i)
   })
   def getByVB[T <: Data](a: Seq[T]) = {
     val res = PriorityMux(validBranch.zip(a))

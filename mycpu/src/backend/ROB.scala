@@ -296,7 +296,7 @@ class ROB extends MycpuModule {
 
   //automachine
   object RetireState extends ChiselEnum {
-    val normal, mpNext, misFlush, exerFlush, ciNext, exerRealFlush = Value
+    val normal, mpNext, misFlush, exerFlush, ciNext, exerRealFlush, exRealFlush, erRealFlush = Value
   }
   import RetireState._
   val hasExer     = exerVec.asUInt.orR
@@ -342,7 +342,7 @@ class ROB extends MycpuModule {
       when(hasExer && firExEr <= firWaitNext && firExEr <= firSingle) {
         asg(state, exerFlush)
         asg(allowRobPop, VecInit(exerMask.asBools)) //mask itself and the inst behind
-        asg(io.out.preEretFlush, retireSpType(firExEr) === SpecialType.ERET)
+        //asg(io.out.preEretFlush, retireSpType(firExEr) === SpecialType.ERET)
       }.elsewhen(hasWaitNext && firWaitNext <= firSingle) {
         asg(
           state,
@@ -391,10 +391,35 @@ class ROB extends MycpuModule {
         findHBinRob              := false.B
       }
     }
+    // is(exerFlush) {
+    //   (0 until retireNum).map(i => allowRobPop(i) := false.B)
+    //   when(retireInst(0).exception.detect.happen || hasInt) { //exception
+    //     io.out.exCommit.valid := true.B
+    //     val exceptType = retireInst(0).exception.detect.excCode
+    //     when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr)) {
+    //       allowRobPop(0) := true.B
+    //     }
+    //     asg(state, exRealFlush)
+    //   }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
+    //     io.out.preEretFlush := true.B
+    //     allowRobPop(0)      := true.B
+    //     asg(state, erRealFlush)
+    //   }
+    // }
+    // is(exRealFlush) {
+    //   asg(state, normal)
+    //   (0 until retireNum).map(i => allowRobPop(i) := false.B)
+    //   io.out.flushAll := true.B
+    // }
+    // is(erRealFlush) {
+    //   asg(state, normal)
+    //   (0 until retireNum).map(i => allowRobPop(i) := false.B)
+    //   io.out.eretFlush := true.B
+    //   allowRobPop(0)   := true.B
+    // }
     is(exerFlush) {
-      asg(state, normal)
+      asg(state, exerRealFlush)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
-      io.out.flushAll := true.B
       when(retireInst(0).exception.detect.happen || hasInt) { //exception
         io.out.exCommit.valid := true.B
         val exceptType = retireInst(0).exception.detect.excCode
@@ -405,6 +430,11 @@ class ROB extends MycpuModule {
         io.out.eretFlush := true.B
         allowRobPop(0)   := true.B
       }
+    }
+    is(exerRealFlush) {
+      asg(state, normal)
+      (0 until retireNum).map(i => allowRobPop(i) := false.B)
+      io.out.flushAll := true.B
     }
   }
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.flushAll)

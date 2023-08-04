@@ -389,22 +389,20 @@ class CacheStage2[T <: Data](
           )
         )
       } else {
-        asg(
-          outBits.idata.get,
-          LookupUInt(
-            lowAddr.offset >> 2,
-            (0 until wordNum).map(i => {
-              val dataLine = readBuffer
-              i.U -> VecInit(
-                dataLine(i),
-                dataLine((i + 1) % wordNum),
-                dataLine((i + 2) % wordNum),
-                dataLine((i + 3) % wordNum)
-              )
-            })
-          )
+        val refillOut = LookupUInt(
+          lowAddr.offset >> 2,
+          (0 until wordNum).map(i => {
+            val dataLine = readBuffer
+            i.U -> VecInit(
+              dataLine(i),
+              dataLine((i + 1) % wordNum),
+              dataLine((i + 2) % wordNum),
+              dataLine((i + 3) % wordNum)
+            )
+          })
         )
-        (0 until fetchNum).foreach(i => { outBits.toUser(i) := trans(outBits.idata.get(i)) })
+        asg(outBits.idata.get, refillOut)
+        (0 until fetchNum).foreach(i => { outBits.toUser(i) := trans(refillOut(i)) })
       }
       // wait write ok to get next req
       when(writeState === wIdel) {

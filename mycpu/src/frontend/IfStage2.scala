@@ -123,7 +123,6 @@ class IfStage2 extends MycpuModule {
   (0 until fetchNum).foreach(i => {
     val outBasic = outBits.basicInstInfo(i)
     val inPcVal  = inBits.pcVal
-    outBits.predictResult(i) := bpuout(i)
     asg(
       outBasic.pcVal,
       Cat(inPcVal(31, instrOffMsb + 1), inPcVal(instrOffMsb, instrOffLsb) + i.U, inPcVal(1, 0))

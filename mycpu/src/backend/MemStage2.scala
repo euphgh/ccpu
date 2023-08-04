@@ -126,10 +126,10 @@ class MemStage2 extends MycpuModule {
 }
 
 object UartBuffer {
-  val burstLen = 16
-  val totalNum = 32
-  val idleMax  = 32
+  val totalNum = 4096
+  val idleMax  = 1024
   val ubId     = 3
+  val burstLen = 16
   val burstWid = log2Ceil(burstLen)
   val countWid = burstWid + 1
   require(totalNum % burstLen == 0)

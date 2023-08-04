@@ -7,6 +7,7 @@ import chisel3.util._
 import cache._
 import utils._
 import utils.BytesWordUtils._
+import difftest.DifftestUartBuffer
 
 /**
   * pass abort signal to cacheStage2 in this stage:in.wbRob.exception
@@ -202,16 +203,22 @@ class UartBuffer extends MycpuModule {
   asg(w.bits.strb, "b0001".U(4.W))
   asg(w.bits.last, false.B)
   asg(b.ready, false.B)
+  val diffOutFire = WireInit(false.B)
+  val diffOutNum  = WireInit(0.U)
 
   switch(state) {
     is(idle) {
       when(groupCnt =/= 0.U) {
+        diffOutFire := true.B
+        diffOutNum  := 15.U
         wReqInit((burstLen - 1).U)
         asg(groupCnt, groupCnt - 1.U + gCntInc.asUInt)
-      }
-      when(idleTime.inc() && ram.io.deq.valid) {
+      }.elsewhen(idleTime.inc() && ram.io.deq.valid) {
         assert(fewCnt =/= 0.U)
-        wReqInit(fewCnt)
+        diffOutFire := true.B
+        val tmp = fewCnt - 1.U
+        diffOutNum := tmp
+        wReqInit(tmp)
         asg(fewCnt, ZeroExt(fCntInc.asUInt, 4))
       }
     }
@@ -239,5 +246,20 @@ class UartBuffer extends MycpuModule {
         }
       }
     }
+  }
+  if (verilator) {
+    val diffUbuffer = Module(new DifftestUartBuffer)
+    diffUbuffer.io.clock    := clock
+    diffUbuffer.io.en       := !reset.asBool
+    diffUbuffer.io.awFire   := diffOutFire
+    diffUbuffer.io.awLen    := diffOutNum
+    diffUbuffer.io.enqFire  := io.enq.fire
+    diffUbuffer.io.curGroup := groupCnt
+    diffUbuffer.io.curFew   := fewCnt
+    diffUbuffer.io.state    := state
+    diffUbuffer.io.deqValid := ram.io.deq.valid
+    diffUbuffer.io.wFire    := io.dram.w.fire
+    diffUbuffer.io.wChar    := io.dram.w.bits.data
+    diffUbuffer.io.enqChar  := io.enq.bits
   }
 }

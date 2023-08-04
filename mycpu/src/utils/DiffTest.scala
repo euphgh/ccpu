@@ -59,6 +59,20 @@ class DiffArchHiloIO extends DifftestBundle {
   val lo = Input(UInt(32.W))
 }
 
+class DiffUartBufferIO extends DifftestBundle {
+  import backend.UartBuffer._
+  val curGroup = Input(UInt((log2Ceil(totalNum / burstLen)).W))
+  val curFew   = Input(UInt(burstWid.W))
+  val enqFire  = Input(Bool())
+  val enqChar  = Input(UInt(8.W))
+  val state    = Input(UInt(2.W))
+  val awFire   = Input(Bool())
+  val wFire    = Input(Bool())
+  val wChar    = Input(UInt(8.W))
+  val awLen    = Input(UInt(4.W))
+  val deqValid = Input(Bool())
+}
+
 class DiffArchCopIO extends DifftestBundle {
   val index    = Input(UInt(32.W))
   val random   = Input(UInt(32.W))
@@ -303,3 +317,4 @@ class DifftestSpecRAS extends DifftestBaseModule(new DiffSpecRASIO)
 class DifftestArchRAS extends DifftestBaseModule(new DiffArchRASIO)
 class DifftestLHTRead extends DifftestBaseModule(new DiffLHTReadIO)
 class DifftestBCache extends DifftestBaseModule(new DiffBCacheIO)
+class DifftestUartBuffer extends DifftestBaseModule(new DiffUartBufferIO)

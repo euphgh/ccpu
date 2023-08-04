@@ -71,6 +71,7 @@ class MemStage1 extends MycpuModule {
   val sqFireOut    = Wire(Bool())
   val sqBits       = sqDecp.bits
   val roBits       = roDecp.bits
+  val cModeNext    = RegInit(false.B)
 
   // TLB =============================================================
   val vTag   = roBits.vaddr(31, 12)
@@ -194,17 +195,7 @@ class MemStage1 extends MycpuModule {
         sqFireOut         := false.B
         cache1Update.isSQ := false.B
         cache1Update.req  := false.B
-      }.elsewhen(isUncache) {
-        state             := ucloadMode
-        toMem2.valid      := false.B
-        toStoreQ.valid    := false.B
-        sqDecp.ready      := true.B
-        roDecp.ready      := false.B
-        roFireOut         := false.B // must can not
-        sqFireOut         := false.B
-        cache1Update.isSQ := true.B
-        cache1Update.req  := wireSq.fire
-      }.otherwise {
+      }.elsewhen(roBits.isDirC || cModeNext) {
         // next
         toMem2.valid   := true.B
         toStoreQ.valid := false.B
@@ -226,6 +217,17 @@ class MemStage1 extends MycpuModule {
             state := storeMode
           }
         }
+      }.otherwise {
+        toMem2.valid      := false.B
+        toStoreQ.valid    := false.B
+        sqDecp.ready      := false.B
+        roDecp.ready      := false.B
+        roFireOut         := false.B // must can not
+        sqFireOut         := false.B
+        cache1Update.isSQ := false.B
+        cache1Update.req  := false.B
+        state             := Mux(isUncache, ucloadMode, cloadMode)
+        cModeNext         := true.B
       }
     }
     is(ucloadMode) {
@@ -419,6 +421,9 @@ class MemStage1 extends MycpuModule {
   }
   PipelineConnect(io.fromRO, roDecp, roFireOut, io.flush)
   PipelineConnect(io.fromSQ, sqDecp, sqFireOut, false.B)
+  when(roFireOut || sqFireOut || io.flush) {
+    cModeNext := false.B
+  }
 
   if (enableCacheInst) {
     cache1.io.in.bits.cacheInst.get <> wireRo.bits.cacheInst.get

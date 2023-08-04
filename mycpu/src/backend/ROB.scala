@@ -109,8 +109,9 @@ class ROB extends MycpuModule {
         })
       )
 
-      val eretFlush = Output(Bool()) //to CP0
-      val exCommit  = Valid(new ExCommitBundle) //to CP0
+      val eretFlush    = Output(Bool()) //to CP0
+      val exCommit     = Valid(new ExCommitBundle) //to CP0
+      val preEretFlush = Output(Bool())
 
       val flRecover          = Vec(retireNum, Valid(PRegIdx)) // FreeList recover Ports
       val mispreFlushBackend = Output(Bool()) //mispredict only FlushBackend
@@ -234,7 +235,9 @@ class ROB extends MycpuModule {
       (0 until retireNum).map(i =>
         (retireInst(i).isNoBrMis || retireInst(i).isMispredict || retireSpType(
           i
-        ) === SpecialType.CACHEINST) && readyRetire(i)
+        ) === SpecialType.CACHEINST || retireSpType(
+          i
+        ) === SpecialType.TLB || retireSpType(i) === SpecialType.MTC0) && readyRetire(i)
       )
     )
   )
@@ -331,18 +334,19 @@ class ROB extends MycpuModule {
   io.out.flushAll           := false.B
   addSource(io.out.flushAll, "ROB_FLUSH_ALL")
   io.out.robRedirect.flush := false.B
-  // val exerFlushReg = RegInit(false.B)
-  // val eretFlushReg = RegInit(false.B)
+  io.out.preEretFlush      := false.B
+
   asg(io.out.robRedirect.target, dstHB.value.bits)
   switch(state) {
     is(normal) {
       when(hasExer && firExEr <= firWaitNext && firExEr <= firSingle) {
         asg(state, exerFlush)
         asg(allowRobPop, VecInit(exerMask.asBools)) //mask itself and the inst behind
+        asg(io.out.preEretFlush, retireSpType(firExEr) === SpecialType.ERET)
       }.elsewhen(hasWaitNext && firWaitNext <= firSingle) {
         asg(
           state,
-          Mux(retireSpType(firWaitNext) === SpecialType.CACHEINST || retireInst(firWaitNext).isNoBrMis, ciNext, mpNext)
+          Mux(retireInst(firWaitNext).isMispredict, mpNext, ciNext)
         )
         asg(allowRobPop, VecInit(waitNextMask.asBools)) //mask the inst behind
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
@@ -388,9 +392,9 @@ class ROB extends MycpuModule {
       }
     }
     is(exerFlush) {
-      asg(state, exerRealFlush)
+      asg(state, normal)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
-      //io.out.flushAll := true.B
+      io.out.flushAll := true.B
       when(retireInst(0).exception.detect.happen || hasInt) { //exception
         io.out.exCommit.valid := true.B
         val exceptType = retireInst(0).exception.detect.excCode
@@ -401,11 +405,6 @@ class ROB extends MycpuModule {
         io.out.eretFlush := true.B
         allowRobPop(0)   := true.B
       }
-    }
-    is(exerRealFlush) {
-      asg(state, normal)
-      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
-      io.out.flushAll := true.B
     }
   }
   asg(robEntries.io.flush, io.out.mispreFlushBackend || io.out.flushAll)
@@ -498,12 +497,11 @@ class ROB extends MycpuModule {
     }
   }
   //flrstate: recover/normal
-
+  //REG for better frequency
+  val dperRdyReg = RegInit(false.B)
   when(flrState === recover) {
     flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
-    val dperRdy    = flrHeadPtr - flrTailPtr < (4 * retireNum).U
-    val dperRdyReg = RegInit(false.B)
-    dperRdyReg := dperRdy
+    dperRdyReg := remainNum < (4 * retireNum).U
     (0 until dispatchNum).foreach(i => {
       io.in.fromDispatcher(i).ready := dperRdyReg
     })
@@ -514,6 +512,7 @@ class ROB extends MycpuModule {
   }.otherwise {
     flrTailPtr := 0.U
     flrHeadPtr := 3.U
+    dperRdyReg := (robEntries.headIdx - robEntries.tailIdx) < (3 * retireNum).U
     (0 until retireNum).map(i => flrQueue(i) := Mux(mRe(i).valid, retireInst(i).uOp.prevPDest, 0.U(pRegAddrWidth.W)))
     when(robEntries.io.flush) {
       flrTailPtr := robEntries.tailIdx

@@ -30,7 +30,7 @@ object MduType extends ChiselEnum {
   def isC0Inst(op: MduType.Type): Bool = op === MTC0 || op === MFC0
 }
 object SpecialType extends ChiselEnum {
-  val NON, LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, CACHEINST, HB = Value
+  val NON, LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, CACHEINST, HB, TLB = Value
 }
 
 //not need now

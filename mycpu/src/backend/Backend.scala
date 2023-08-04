@@ -214,6 +214,7 @@ class Backend extends MycpuModule {
   asg(cp0In.eretFlush, robOut.eretFlush)
   asg(cp0In.exCommit, robOut.exCommit)
   asg(cp0In.extInt, io.extInt)
+  asg(cp0In.preEretFlush, robOut.preEretFlush)
 
   /**
     * redirect frontend

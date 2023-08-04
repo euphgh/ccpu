@@ -82,8 +82,9 @@ class MultiQueue[T <: Data](
 
   //assume input is 1..0..
   if (allIn) {
-    val enqValidNum = PopCount(io.push.map(_.valid))
-    (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(enqValidNum - 1.U)))
+    // do not allow 2 in when left 3, only when have enough space allow in
+    // val enqValidNum = PopCount(io.push.map(_.valid))
+    (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR((enqNum - 1).U)))
   } else {
     (0 until enqNum).foreach(i => io.push(i).ready := !(overflowR(i.U)))
   }

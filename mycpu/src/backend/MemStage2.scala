@@ -211,7 +211,7 @@ class UartBuffer extends MycpuModule {
       }
       when(idleTime.inc() && ram.io.deq.valid) {
         assert(fewCnt =/= 0.U)
-        wReqInit(fewCnt - 1.U)
+        wReqInit(fewCnt)
         asg(fewCnt, ZeroExt(fCntInc.asUInt, 4))
       }
     }

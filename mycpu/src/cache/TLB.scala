@@ -128,7 +128,7 @@ class TLB extends MycpuModule {
     asg(difftestTLB.io.vpn2, VecInit(entries.map(e => e.vpn2)))
     asg(difftestTLB.io.asid, VecInit(entries.map(e => e.asid)))
     difftestTLB.io.clock := clock
-    difftestTLB.io.en    := RegNext(tlbwiReq || tlbwrReq || reset.asBool)
+    difftestTLB.io.en    := RegNext(tlbwiReq || tlbwrReq, false.B)
     difftestTLB.io.rand  := RegNext(randomReg.random)
     asg(difftestTLB.io.iswr, RegNext(tlbwrReq))
     val mduPC = Wire(UWord)

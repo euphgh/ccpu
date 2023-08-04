@@ -170,7 +170,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val erl = Wire(Bool())
     val k0  = config0Reg.k0
     asg(erl, statusReg.erl)
-    val isDir = !(vaddr(31, 30) === "b10".U || erl)
+    val isDir = vaddr(31, 30) === "b10".U || erl
     val cattr = Mux(vaddr(29), CCAttr.Uncached, CCAttr.safe(k0)._1)
     outMem.isDirC := isDir && !CCAttr.isUnCache(cattr.asUInt)
 

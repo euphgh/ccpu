@@ -132,22 +132,20 @@ class SRATEntry extends MycpuBundle {
   val inPrf = Output(Bool())
 }
 
-// class ExceptionInfoBundle extends MycpuBundle {
-//   val happen  = Output(Bool())
-//   val isBd    = Output(Bool())
-//   val excCode = Output(ExcCode())
-//   val pc      = Output(UWord)
-//   val refill  = Output(Bool())
-// }
 //rsBasicEntry < rsOutIO(each rs may has extra)
 class RsBasicEntry extends MycpuBundle {
   val exDetect     = new DetectExInfoBundle
   val destAregAddr = Output(ARegIdx)
   val destPregAddr = Output(UInt(pRegAddrWidth.W))
-  val srcPregs     = Vec(srcDataNum, new SRATEntry)
-  val robIndex     = Output(ROBIdx)
-  val debugPC      = if (debug) Some(UWord) else None
-  val prevPDest    = Output(PRegIdx)
+
+  val robIndex = Output(ROBIdx)
+  val debugPC  = if (debug) Some(UWord) else None
+
+  val pSrcs     = Vec(srcDataNum, Output(PRegIdx))
+  val prevPDest = Output(PRegIdx)
+  val sratInPrf = Vec(srcDataNum, Output(Bool()))
+  val wbInPrf   = Vec(srcDataNum, Output(Bool()))
+  val grpInPrf  = Vec(srcDataNum, Output(Bool()))
 }
 
 /**
@@ -186,6 +184,7 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
 }
 class RsRealOutIO(kind: FuType.t) extends MycpuBundle {
   val origin    = new RsOutIO(kind: FuType.t)
+  val inPrf     = Output(Vec(srcDataNum, Bool()))
   val mayNeedBp = Output(Vec(srcDataNum, Bool()))
 }
 

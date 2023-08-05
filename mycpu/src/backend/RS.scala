@@ -11,17 +11,6 @@ class WakeUpBroadCast extends MycpuBundle {
     (Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx), Valid(PRegIdx))
 }
 
-/** rsEntry:
-  * basic
-  *   exception
-  *   decoded
-  *   destPregAddr
-  *   srcPregs
-  *   robIndex
-  * an option predictResult
-  * note that valid is decouple from rsEntry
-  */
-
 /**
   * allocate → writeIn - ready - select → readOp
   *
@@ -82,8 +71,15 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
 
   val srcsWaken = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B)))))
   val mayNeedBp = RegInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B)))))
-  val src1Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(0).inPrf | srcsWaken(i)(0))))
-  val src2Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => rsEntries(i).basic.srcPregs(1).inPrf | srcsWaken(i)(1))))
+  val inPrf     = WireInit(VecInit(Seq.fill(rsSize)(VecInit(Seq.fill(srcDataNum)(false.B)))))
+  val src1Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => inPrf(i)(0) | srcsWaken(i)(0))))
+  val src2Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => inPrf(i)(1) | srcsWaken(i)(1))))
+  (0 until rsSize).map(i => {
+    (0 until srcDataNum).map(j => {
+      val rsB = rsEntries(i).basic
+      inPrf(i)(j) := rsB.grpInPrf(j) & (rsB.wbInPrf(j) | rsB.sratInPrf(j))
+    })
+  })
 
   val isOldestVec = (0 until rsSize).map(i => rsEntries(i).basic.robIndex === io.in.oldestRobIdx)
   val blockVec    = WireInit(VecInit(Seq.fill(rsSize)(false.B)))
@@ -186,19 +182,19 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   )
   wakeUpBroad.foreach(e =>
     List.tabulate(rsSize)(j => {
-      val pSrcs = rsEntries(j).basic.srcPregs
+      val pSrcs = rsEntries(j).basic.pSrcs
       when(slotsValid(j) && e.valid && e.bits.orR) {
-        when(e.bits === pSrcs(0).pIdx) { srcsWaken(j)(0) := true.B }
-        when(e.bits === pSrcs(1).pIdx) { srcsWaken(j)(1) := true.B }
+        when(e.bits === pSrcs(0)) { srcsWaken(j)(0) := true.B }
+        when(e.bits === pSrcs(1)) { srcsWaken(j)(1) := true.B }
       }
     })
   )
   wakeUpByPass.foreach(e =>
     List.tabulate(rsSize)(j => {
-      val pSrcs = rsEntries(j).basic.srcPregs
+      val pSrcs = rsEntries(j).basic.pSrcs
       when(slotsValid(j) && e.valid && e.bits.orR) {
-        when(e.bits === pSrcs(0).pIdx) { mayNeedBp(j)(0) := true.B }
-        when(e.bits === pSrcs(1).pIdx) { mayNeedBp(j)(1) := true.B }
+        when(e.bits === pSrcs(0)) { mayNeedBp(j)(0) := true.B }
+        when(e.bits === pSrcs(1)) { mayNeedBp(j)(1) := true.B }
       }
     })
   )
@@ -252,6 +248,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   }
   originOut         := Mux1H(deqSel, rsEntries)
   outBits.mayNeedBp := Mux1H(deqSel, mayNeedBp)
+  outBits.inPrf     := Mux1H(deqSel, inPrf)
   when(io.out.fire) {
     (0 until rsSize).foreach(i => {
       when(deqSel(i)) {
@@ -264,21 +261,23 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     })
   }
   //listen to wPrfPIdx
-  val outSrcs   = originOut.basic.srcPregs
   val outNeedBp = outBits.mayNeedBp
+  val outInPrf  = outBits.inPrf
   List.tabulate(wBNum)(i =>
     List.tabulate(rsSize)(j => {
       val wprf = io.in.wPrfPIdx(i)
-      val mnBp = mayNeedBp(j)
-      val srcs = rsEntries(j).basic.srcPregs
+      val rsB  = rsEntries(j).basic
+      val srcs = rsB.pSrcs
       when(wprf.valid && slotsValid(j)) {
         (0 until srcDataNum).map(k => {
-          when(wprf.bits === srcs(k).pIdx) {
-            srcs(k).inPrf := true.B
-            mnBp(k)       := false.B
+          when(wprf.bits === srcs(k)) {
+            rsB.grpInPrf(k)  := true.B
+            rsB.sratInPrf(k) := true.B
+            rsB.wbInPrf(k)   := true.B
+            mayNeedBp(j)(k)  := false.B
             when(deqSel(j)) {
-              outSrcs(k).inPrf := true.B
-              outNeedBp(k)     := false.B //暂时没用上，但先加上
+              outInPrf(k)  := true.B
+              outNeedBp(k) := false.B //暂时没用上，但先加上
             }
           }
         })

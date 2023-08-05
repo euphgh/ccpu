@@ -296,7 +296,7 @@ class ROB extends MycpuModule {
 
   //automachine
   object RetireState extends ChiselEnum {
-    val normal, mpNext, misFlush, exerFlush, ciNext, exerRealFlush, exRealFlush, erRealFlush = Value
+    val normal, mpNext, misFlush, exerFlush, ciNext, exerRealFlush = Value
   }
   import RetireState._
   val hasExer     = exerVec.asUInt.orR
@@ -391,32 +391,6 @@ class ROB extends MycpuModule {
         findHBinRob              := false.B
       }
     }
-    // is(exerFlush) {
-    //   (0 until retireNum).map(i => allowRobPop(i) := false.B)
-    //   when(retireInst(0).exception.detect.happen || hasInt) { //exception
-    //     io.out.exCommit.valid := true.B
-    //     val exceptType = retireInst(0).exception.detect.excCode
-    //     when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr)) {
-    //       allowRobPop(0) := true.B
-    //     }
-    //     asg(state, exRealFlush)
-    //   }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
-    //     io.out.preEretFlush := true.B
-    //     allowRobPop(0)      := true.B
-    //     asg(state, erRealFlush)
-    //   }
-    // }
-    // is(exRealFlush) {
-    //   asg(state, normal)
-    //   (0 until retireNum).map(i => allowRobPop(i) := false.B)
-    //   io.out.flushAll := true.B
-    // }
-    // is(erRealFlush) {
-    //   asg(state, normal)
-    //   (0 until retireNum).map(i => allowRobPop(i) := false.B)
-    //   io.out.eretFlush := true.B
-    //   allowRobPop(0)   := true.B
-    // }
     is(exerFlush) {
       asg(state, exerRealFlush)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
@@ -431,6 +405,7 @@ class ROB extends MycpuModule {
         allowRobPop(0)   := true.B
       }
     }
+    //the real state to redirect
     is(exerRealFlush) {
       asg(state, normal)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)
@@ -556,6 +531,14 @@ class ROB extends MycpuModule {
     * Old Version
     * recover fl at current cycle when normal state:
     */
+  // when(robEntries.io.flush) {
+  //   (0 until robNum).foreach(i => {
+  //     flrQueue(i) := robEntries.allPDest(i)
+  //     flrHeadPtr  := robEntries.headIdx
+  //     flrTailPtr  := robEntries.tailIdx
+  //   })
+  //   flrState := recover
+  // }
   // when(flrState === recover) {
   //   val remainNum = flrHeadPtr - flrTailPtr
   //   val validPDestVec =

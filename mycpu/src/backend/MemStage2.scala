@@ -75,7 +75,7 @@ class MemStage2 extends MycpuModule {
   uBuffer.io.enq.valid := false.B
   asg(uBuffer.io.enq.bits, cinBit.fromStage1.dCacheReq.get.wWord(7, 0))
   when(inBits.isWuart && io.in.valid) {
-    io.in.ready          := uBuffer.io.enq.ready
+    io.in.ready          := uBuffer.io.enq.ready && io.out.ready
     io.doneSQ            := uBuffer.io.enq.ready
     uBuffer.io.enq.valid := inBits.isWuart
   }
@@ -158,14 +158,16 @@ class UartBuffer extends MycpuModule {
     val dram = new DramWriteIO
   })
   import UartBuffer._
+  val buf = Module(new Queue(UByte, 16))
+  io.enq <> buf.io.enq
   val ram = Module(new Queue(UByte, totalNum, false, false, true, false))
-  io.enq <> ram.io.enq
+  buf.io.deq <> ram.io.enq
   ram.io.deq.ready := false.B
   val groupCnt = RegInit(0.U((log2Ceil(totalNum / burstLen)).W))
   val fewCnt   = RegInit(0.U((burstWid).W))
   val idleTime = Counter(idleMax)
 
-  val fCntInc = io.enq.fire
+  val fCntInc = ram.io.enq.fire
   val gCntInc = fCntInc && (fewCnt === (burstLen - 1).U)
   when(fCntInc) { fewCnt := fewCnt + 1.U }
   when(gCntInc) { groupCnt := groupCnt + 1.U }
@@ -253,13 +255,13 @@ class UartBuffer extends MycpuModule {
     diffUbuffer.io.en       := !reset.asBool
     diffUbuffer.io.awFire   := diffOutFire
     diffUbuffer.io.awLen    := diffOutNum
-    diffUbuffer.io.enqFire  := io.enq.fire
+    diffUbuffer.io.enqFire  := ram.io.enq.fire
     diffUbuffer.io.curGroup := groupCnt
     diffUbuffer.io.curFew   := fewCnt
     diffUbuffer.io.state    := state
     diffUbuffer.io.deqValid := ram.io.deq.valid
     diffUbuffer.io.wFire    := io.dram.w.fire
     diffUbuffer.io.wChar    := io.dram.w.bits.data
-    diffUbuffer.io.enqChar  := io.enq.bits
+    diffUbuffer.io.enqChar  := ram.io.enq.bits
   }
 }

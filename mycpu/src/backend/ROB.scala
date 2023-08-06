@@ -345,7 +345,7 @@ class ROB extends MycpuModule {
   io.out.robRedirect.flush := false.B
   io.out.preEretFlush      := false.B
   val robRediTargetReg = RegInit(dstHB.value.bits)
-  io.out.robRedirect.target := 0.U(vaddrWidth.W)
+  io.out.robRedirect.target := robRediTargetReg
 
   val allowPopReg = RegInit(0.U(retireNum.W))
   when(state === preExEr | state === preNext | state === single | state === exerFlush) {
@@ -406,6 +406,7 @@ class ROB extends MycpuModule {
 
     is(mpNext) { //MISPRE(JRHB)转移而来
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
+      robRediTargetReg := dstHB.value.bits
       when(readyRetire(0)) {
         assert(retireInst(0).exception.basic.isBd)
         when(exerVec(0)) { //ds is exception
@@ -426,7 +427,6 @@ class ROB extends MycpuModule {
       asg(state, normal)
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
       io.out.mispreFlushBackend := true.B
-      asg(io.out.robRedirect.target, dstHB.value.bits)
       when(findHBinRob) {
         io.out.flushAll          := true.B
         io.out.robRedirect.flush := true.B
@@ -444,9 +444,8 @@ class ROB extends MycpuModule {
     //use reg to redirect
     is(ciFlush) {
       (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
-      io.out.robRedirect.target := robRediTargetReg
-      io.out.flushAll           := true.B
-      io.out.robRedirect.flush  := true.B
+      io.out.flushAll          := true.B
+      io.out.robRedirect.flush := true.B
       asg(state, normal)
     }
     is(exerFlush) {

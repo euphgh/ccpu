@@ -75,9 +75,11 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val src1Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => inPrf(i)(0) | srcsWaken(i)(0))))
   val src2Rdy   = WireInit(VecInit(List.tabulate(rsSize)(i => inPrf(i)(1) | srcsWaken(i)(1))))
   (0 until rsSize).map(i => {
+    val rsB = rsEntries(i).basic
     (0 until srcDataNum).map(j => {
-      val rsB = rsEntries(i).basic
-      inPrf(i)(j) := rsB.grpInPrf(j) & (rsB.wbInPrf(j) | rsB.sratInPrf(j))
+      val beenWb = WireInit(VecInit(List.tabulate(wBNum)(k => rsB.wbInfo(k) === rsB.pSrcs(j)))).asUInt.orR
+      inPrf(i)(j) := rsB.grpInPrf(j) & (beenWb | rsB.sratInPrf(j))
+      //inPrf(i)(j) := rsB.grpInPrf(j) & (rsB.wbInPrf(j) | rsB.sratInPrf(j))
     })
   })
 

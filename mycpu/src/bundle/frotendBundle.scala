@@ -146,6 +146,8 @@ class RsBasicEntry extends MycpuBundle {
   val sratInPrf = Vec(srcDataNum, Output(Bool()))
   val wbInPrf   = Vec(srcDataNum, Output(Bool()))
   val grpInPrf  = Vec(srcDataNum, Output(Bool()))
+
+  val wbInfo = Vec(wBNum, Output(PRegIdx))
 }
 
 /**

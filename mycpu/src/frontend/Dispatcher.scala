@@ -262,7 +262,7 @@ class Dispatcher extends MycpuModule {
   val decoder = List.fill(decodeNum)(Module(new Decoder()))
   val srat    = Module(new SRAT)
   val slots   = Wire(Vec(dispatchNum, new dispatchSlot))
-
+  val fuWb    = io.in.fuWbSrat
   List.tabulate(dispatchNum)(i => {
     //alias
     val toRsB     = slots(i).toRsBasic
@@ -283,10 +283,8 @@ class Dispatcher extends MycpuModule {
 
     //prevP and Psrcs
     slots(i).prevPDest := Mux(slots(i).grpWaw, slots(i).grpPrevPDest, slots(i).sratPrevPDest)
-    //MaskData(slots(i).grpPrevPDest, slots(i).sratPrevPDest, SignExt(slots(i).grpWaw, pRegAddrWidth))
     (0 until srcDataNum).map(j => {
       toRsB.pSrcs(j) := Mux(grpPsrcs(j).inPrf, sratPsrcs(j).pIdx, grpPsrcs(j).pIdx)
-      //MaskData(grpPsrcs(j).pIdx, sratPsrcs(j).pIdx, !SignExt(grpPsrcs(j).inPrf, pRegAddrWidth))
     })
 
     //default
@@ -297,6 +295,7 @@ class Dispatcher extends MycpuModule {
       grpPsrcs(j).pIdx  := 0.U(pRegAddrWidth.W)
       toRsB.wbInPrf(j)  := false.B
     })
+    (0 until wBNum).map(i => toRsB.wbInfo(i) := Mux(fuWb(i).valid, fuWb(i).bits.pDest, 0.U(pRegAddrWidth.W)))
     toRsB.destPregAddr := 0.U(pRegAddrWidth.W)
 
     //ready
@@ -416,7 +415,6 @@ class Dispatcher extends MycpuModule {
     slots(i).sratPrevPDest          := slotsRenamed(i)._2
   })
   //fuWb
-  val fuWb = io.in.fuWbSrat
   fuWb.foreach(w => {
     when(w.valid) {
       slots.foreach(s => {

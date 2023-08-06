@@ -139,6 +139,7 @@ class ROB extends MycpuModule {
     val allPDest  = IO(Vec(robNum, Output(PRegIdx)))
     val mispreIdx = IO(Input(ROBIdx))
     val dsAllow   = IO(Output(Bool()))
+    val next0Pc   = IO(Output(UWord))
     isEmpty := empty
     headIdx := headPtr
     tailIdx := tailPtr
@@ -160,7 +161,8 @@ class ROB extends MycpuModule {
       counterWidth - 1,
       0
     ) =/= mispreIdx + 1.U)
-
+    val next0 = ringBuffer(tailPtr + retireNum.U)
+    next0Pc := next0.exception.basic.pc
   }
   val mispreIdxReg = Module(new Mark(UInt(5.W)))
   mispreIdxReg.start.valid <> io.in.fromAluIsMisPre
@@ -296,7 +298,7 @@ class ROB extends MycpuModule {
 
   //automachine
   object RetireState extends ChiselEnum {
-    val normal, mpNext, misFlush, exerFlush, ciNext, exerRealFlush = Value
+    val normal, preExEr, preNext, single, mpNext, misFlush, exerFlush, ciNext, ciFlush, exerRealFlush = Value
   }
   import RetireState._
   val hasExer     = exerVec.asUInt.orR
@@ -306,8 +308,15 @@ class ROB extends MycpuModule {
   import utils._
   val normalSel        = PriorityVec(VecInit(exerVec.asUInt | singleRetireVec.asUInt, waitNextVec.asUInt))
   val exerMask         = ~PriorityMask(exerVec.asUInt)
-  val waitNextMask     = ~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
-  val singleRetireMask = ~Cat(PriorityMask(singleRetireVec.asUInt)(retireNum - 2, 0), 0.U(1.W))
+  val ciMask           = ~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 2, 0), 0.U(1.W)) //mask the inst behind
+  val singleRetireMask = ~Cat(PriorityMask(singleRetireVec.asUInt)(retireNum - 2, 0), 0.U(1.W)) //mask the inst behind
+  val mpMask           = Wire(Vec(retireNum, Bool()))
+  if (retireNum < 3) { (0 until retireNum).map(i => { mpMask(i) := true.B }) }
+  else { mpMask := (~Cat(PriorityMask(waitNextVec.asUInt)(retireNum - 3, 0), 0.U(2.W))).asBools } //mask ds behind
+  when(firWaitNext < (retireNum - 1).U) {
+    val dsIdx = firWaitNext + 1.U
+    mpMask(dsIdx) := doneMask(dsIdx) & !exerVec(dsIdx) & !singleRetireVec(dsIdx) //ds not retire in these situation
+  }
 
   // noBr   =======================================================
   val isFirPreTakeReg = RegInit(false.B)
@@ -335,49 +344,82 @@ class ROB extends MycpuModule {
   addSource(io.out.flushAll, "ROB_FLUSH_ALL")
   io.out.robRedirect.flush := false.B
   io.out.preEretFlush      := false.B
+  val robRediTargetReg = RegInit(dstHB.value.bits)
+  io.out.robRedirect.target := 0.U(vaddrWidth.W)
 
-  asg(io.out.robRedirect.target, dstHB.value.bits)
+  val allowPopReg = RegInit(0.U(retireNum.W))
+  when(state === preExEr | state === preNext | state === single | state === exerFlush) {
+    allowRobPop := VecInit(allowPopReg.asBools)
+  }
+  val sReVReg = RegInit(false.B)
   switch(state) {
     is(normal) {
+      when(hasExer | hasWaitNext | hasSingle) {
+        (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
+      }
       when(hasExer && firExEr <= firWaitNext && firExEr <= firSingle) {
-        asg(state, exerFlush)
-        asg(allowRobPop, VecInit(exerMask.asBools)) //mask itself and the inst behind
-        //asg(io.out.preEretFlush, retireSpType(firExEr) === SpecialType.ERET)
+        asg(state, preExEr)
+        allowPopReg := exerMask
       }.elsewhen(hasWaitNext && firWaitNext <= firSingle) {
-        asg(
-          state,
-          Mux(retireInst(firWaitNext).isMispredict, mpNext, ciNext)
-        )
-        asg(allowRobPop, VecInit(waitNextMask.asBools)) //mask the inst behind
+        asg(state, preNext)
+        allowPopReg := Mux(retireInst(firWaitNext).isMispredict, mpMask.asUInt, ciMask)
+        sReVReg     := hasSingle && (firWaitNext === firSingle)
         asg(findHBinRob, retireSpType(firWaitNext) === SpecialType.HB)
-        io.out.singleRetire.valid := hasSingle && (firWaitNext === firSingle) //nobrMis 指令可能是singleRetire指令
-        asg(isFirPreTakeReg, retireInst(firWaitNext).isFirPreTake)
-        asg(pcReg, retireInst(firWaitNext).exception.basic.pc)
       }.elsewhen(hasSingle) {
-        io.out.singleRetire.valid := true.B
-        asg(allowRobPop, VecInit(singleRetireMask.asBools))
+        asg(state, single)
+        allowPopReg := singleRetireMask
       }
     }
+
+    is(preExEr) {
+      asg(state, exerFlush)
+      allowPopReg := "b0000".U
+      val exceptType = retireInst(firExEr).exception.detect.excCode
+      when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr) || retireSpType(firExEr) === SpecialType.ERET) {
+        allowPopReg := "b0001".U
+      }
+    }
+    is(preNext) {
+      //mp:mask except|notDone ds and inst behind ds
+      //ci:mask inst behind
+      io.out.singleRetire.valid := sReVReg
+      //state transition
+      val firPreTake  = retireInst(firWaitNext).isFirPreTake
+      val nextInRob   = (robEntries.io.headPtr =/= robEntries.io.tailPtr + firWaitNext + 1.U)
+      val ciState     = Mux(firPreTake | nextInRob, ciFlush, ciNext)
+      val dsNotRetire = WireInit(firWaitNext === (retireNum - 1).U)
+      when(firWaitNext < (retireNum - 1).U) {
+        when(allowPopReg(firWaitNext + 1.U) === false.B) { dsNotRetire := true.B }
+      }
+      val mpState = Mux(dsNotRetire, mpNext, misFlush)
+      asg(state, Mux(retireInst(firWaitNext).isMispredict, mpState, ciState))
+      //nextEntry's index is tailPtr+retireNum
+      val nextEntryPc = WireInit(robEntries.next0Pc)
+      val firWnPc     = retireInst(firWaitNext).exception.basic.pc
+      when(firWaitNext =/= (retireNum - 1).U) { nextEntryPc := retirePcVal(firWaitNext + 1.U) }
+      robRediTargetReg := Mux(firPreTake, firWnPc + 4.U(32.W), nextEntryPc)
+    }
+    is(single) {
+      asg(state, normal)
+      io.out.singleRetire.valid := true.B
+    }
+
     is(mpNext) { //MISPRE(JRHB)转移而来
-      (0 until retireNum).map(i => asg(allowRobPop(i), false.B)) //default
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
       when(readyRetire(0)) {
         assert(retireInst(0).exception.basic.isBd)
         when(exerVec(0)) { //ds is exception
           asg(state, exerFlush)
+          allowPopReg := "b0000".U
+          val exceptType = retireInst(0).exception.detect.excCode
+          when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr) || retireSpType(firExEr) === SpecialType.ERET) {
+            allowPopReg := "b0001".U
+          }
         }.otherwise {
           asg(state, misFlush)
           allowRobPop(0)            := true.B
           io.out.singleRetire.valid := singleRetireVec(0)
         }
-      }
-    }
-    is(ciNext) {
-      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
-      asg(io.out.robRedirect.target, Mux(isFirPreTakeReg, pcReg + 4.U(32.W), retirePcVal(0))) //retirePcVal(0))
-      when(robEntries.io.headPtr =/= robEntries.io.tailPtr) {
-        io.out.flushAll          := true.B
-        io.out.robRedirect.flush := true.B
-        asg(state, normal)
       }
     }
     is(misFlush) {
@@ -391,21 +433,31 @@ class ROB extends MycpuModule {
         findHBinRob              := false.B
       }
     }
-    is(exerFlush) {
-      asg(state, exerRealFlush)
-      (0 until retireNum).map(i => allowRobPop(i) := false.B)
-      when(retireInst(0).exception.detect.happen || hasInt) { //exception
-        io.out.exCommit.valid := true.B
-        val exceptType = retireInst(0).exception.detect.excCode
-        when(exceptType.isOneOf(ExcCode.Sys, ExcCode.Bp, ExcCode.Tr)) {
-          allowRobPop(0) := true.B
-        }
-      }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
-        io.out.eretFlush := true.B
-        allowRobPop(0)   := true.B
+    //!(isFirPreTake or nextInRob) come to this state
+    is(ciNext) {
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
+      robRediTargetReg := retirePcVal(0)
+      when(robEntries.io.headPtr =/= robEntries.io.tailPtr) {
+        asg(state, ciFlush)
       }
     }
-    //the real state to redirect
+    //use reg to redirect
+    is(ciFlush) {
+      (0 until retireNum).map(i => asg(allowRobPop(i), false.B))
+      io.out.robRedirect.target := robRediTargetReg
+      io.out.flushAll           := true.B
+      io.out.robRedirect.flush  := true.B
+      asg(state, normal)
+    }
+    is(exerFlush) {
+      asg(state, exerRealFlush)
+      when(retireInst(0).exception.detect.happen || hasInt) { //exception
+        io.out.exCommit.valid := true.B
+      }.elsewhen(retireSpType(0) === SpecialType.ERET) { //eret
+        io.out.eretFlush := true.B
+      }
+    }
+    //state for exer to redirect
     is(exerRealFlush) {
       asg(state, normal)
       (0 until retireNum).map(i => allowRobPop(i) := false.B)

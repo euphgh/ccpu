@@ -42,7 +42,7 @@ class Divider extends MycpuModule {
       asg(signQ, (srcs(0)(31) ^ srcs(1)(31)) && isSign)
       asg(signR, srcs(0)(31) && isSign)
       cnt.reset()
-      state := Mux(io.flush, idle, Mux(io.in.valid, work, idle))
+      state := Mux(io.in.valid, work, idle)
       when(io.in.valid) {
         // printf(s"req Signal: %b\n", isSign)
         // printf(s"signQ: %b\n", signQ)
@@ -66,18 +66,21 @@ class Divider extends MycpuModule {
       y3 := y3 >> 2
       asg(quot, (quot << 2)(31, 0) | Cat(0.U(30.W), Cat(!sub3(64) || !sub2(64), !sub3(64) || (sub2(64) && !sub1(64)))))
       val wrap = cnt.inc()
-      state := Mux(io.flush, idle, Mux(wrap, finish, work))
+      state := Mux(wrap, finish, work)
       // printf(s"work count :%d\n", cnt.value)
       // printf(s"quotient :%x\n", quot)
       // printf(s"reminder :%x\n", x)
     }
     is(finish) {
-      io.out.valid := !io.flush
+      io.out.valid := true.B
       state        := idle
       // printf(s"finish count :%d\n", cnt.value)
       // printf(s"quotient :%x\n", quotient)
       // printf(s"reminder :%x\n", reminder)
     }
+  }
+  when(io.flush) {
+    state := idle
   }
   asg(quotient, Mux(signQ, ~quot + 1.U, quot))
   val xLow32 = x(31, 0)

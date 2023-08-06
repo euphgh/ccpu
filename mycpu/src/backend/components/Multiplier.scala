@@ -95,10 +95,10 @@ class MulComponent extends MycpuModule {
     }
     is(finish) {
       state        := run
-      io.out.valid := !io.flush
+      io.out.valid := true.B
     }
     is(addsub) {
-      state := Mux(io.flush, run, finish)
+      state := finish
       val uOp  = List(Cat(wirehi, wirelo), ip.io.P(63, 0))
       val sOp  = uOp.map(_.asSInt)
       val ures = Wire(UInt(64.W))

@@ -1,6 +1,9 @@
 BUILD_DIR = ./build
 TEST_DIR = ./test_run_dir
 MainModule = mycpu
+NUR_VIVADO = ~/nur-vivado-2019.2
+SUBMISSION = ~/nscscc2023_mips_group_qualifier_submission
+REPOT_PATH = ~/thuthesis
 TOPNAME = CCPU
 VSRC := $(BUILD_DIR)/mycpu_top.sv
 SSRC := $(shell find . -path '*/src/*' -name '*.scala')
@@ -36,8 +39,9 @@ macro:
 	rm -rf ./out
 	mill -i $(MainModule).test
 
-bsp:
-	mill -i mill.bsp.BSP/install
+package: 
+	bash ./scripts/package.sh 100 ~/nscscc2023_mips_group_qualifier_submission ~/nur-vivado-2019.2
+
 
 clean:
 	-rm -rf $(BUILD_DIR)

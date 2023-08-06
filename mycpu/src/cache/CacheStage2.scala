@@ -7,6 +7,7 @@ import chisel3._
 import chisel3.util._
 import utils.BytesWordUtils._
 import utils._
+import CacheUtils._
 import chisel3.util.experimental.BoringUtils._
 import difftest.DifftestCacheRun
 
@@ -96,32 +97,36 @@ class CacheStage2[T <: Data](
     LookupUInt(
       way,
       (0 until roads).map(i => {
-        i.U -> stage1.meta(i)
+        i.U -> readMetas(i)
       })
     )
   }
+  val readMetas    = Wire(Vec(roads, new CacheMeta(isDcache)))
+  val readDdata    = if (isDcache) Some(Wire(Vec(roads, UWord))) else None
+  val readIdata    = if (!isDcache) Some(Wire(Vec(roads, Vec(fetchNum, UWord)))) else None
+  val readDataline = if (isDcache) Some(Wire(Vec(roads, Vec(wordNum, UWord)))) else None
   // HIT Logic =================================================================
   val hitMask = VecInit((0 until roads).map(i => {
-    val meta = stage1.meta(i)
+    val meta = readMetas(i)
     (meta.tag === inBits.ptag) && meta.valid
   }))
   val hit = hitMask.asUInt.orR
   io.out.bits.toUser.foreach(_ := DontCare)
   if (isDcache) {
-    asg(outBits.ddata.get, Mux1H(hitMask, stage1.ddata.get)) //default
+    asg(outBits.ddata.get, Mux1H(hitMask, readDdata.get)) //default
   } else {
     // miscro decode
     (0 until fetchNum).foreach { i =>
       io.out.bits.toUser(i) := Mux1H(
         hitMask,
         (0 until roads).map(j => {
-          Mux(io.in.bits.cancel, 0.U.asTypeOf(userGen), trans(stage1.idata.get(j)(i)))
+          Mux(io.in.bits.cancel, 0.U.asTypeOf(userGen), trans(readIdata.get(j)(i)))
         })
       )
     } // default
     asg(
       outBits.idata.get,
-      Mux(inBits.cancel, VecInit.fill(fetchNum)(0.U(32.W)), Mux1H(hitMask, stage1.idata.get))
+      Mux(inBits.cancel, VecInit.fill(fetchNum)(0.U(32.W)), Mux1H(hitMask, readIdata.get))
     ) //default
   }
 
@@ -141,6 +146,8 @@ class CacheStage2[T <: Data](
   val writeState   = RegInit(wIdel)
   val ucState      = RegInit(ucIdel)
   val instrState   = RegInit(instrIdle)
+  val lastWmetas   = Reg(Vec(roads, new CacheMeta(isDcache)))
+  val lastWdatas   = Reg(Vec(roads, Vec(wordNum, UWord)))
   val wbBuffer     = Reg(Vec(wordNum, UWord))
   val wbAddr       = Reg(UWord)
   val readBuffer   = Reg(Vec(wordNum, UWord))
@@ -151,13 +158,13 @@ class CacheStage2[T <: Data](
   val w1meta       = Wire(Vec(roads, new DPWriteBus(new CacheMeta(isDcache), lineNum)))
   val victimWay    = roadSelector.way
   val validDirty =
-    if (isDcache) VecInit((0 until roads).map(i => stage1.meta(i).dirty.get && stage1.meta(i).valid)).asUInt
+    if (isDcache) VecInit((0 until roads).map(i => readMetas(i).dirty.get && readMetas(i).valid)).asUInt
     else 0.U(roads.W)
   val newLine = WireInit(0.U((dataWidth * wordNum).W)) //init
   if (isDcache) {
     val wordSel = lowAddr.offset >> 2
-    val oldWord = Mux(mainState === refill, readBuffer(wordSel), Mux1H(hitMask, stage1.ddata.get))
-    val oldLine = Mux(mainState === refill, readBuffer, Mux1H(hitMask, stage1.dataline.get))
+    val oldWord = Mux(mainState === refill, readBuffer(wordSel), Mux1H(hitMask, readDdata.get))
+    val oldLine = Mux(mainState === refill, readBuffer, Mux1H(hitMask, readDataline.get))
     val newWord = maskWord(dreq.wWord, dreq.wStrb).asUInt | maskWord(oldWord, ~dreq.wStrb).asUInt
     asg(
       newLine,
@@ -204,6 +211,18 @@ class CacheStage2[T <: Data](
     if (isDcache) asg(w1data(i).req.bits.data, newLineVec)
     else asg(w1data(i).req.bits.data, readBuffer)
     if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, stage1.dCacheReq.get.isWrite)
+    when(w1data(i).req.valid) { asg(lastWdatas(i), w1data(i).req.bits.data) }
+    when(w1meta(i).req.valid) { asg(lastWmetas(i), w1meta(i).req.bits.data) }
+    asg(readMetas(i), Mux(stage1.wMetasHit(i), lastWmetas(i), stage1.meta(i)))
+    if (isDcache) {
+      asg(readDdata.get(i), Mux(stage1.wDatasHit(i), selectWord(lowAddr.offset, lastWdatas(i)), stage1.ddata.get(i)))
+      asg(readDataline.get(i), Mux(stage1.wDatasHit(i), lastWdatas(i), stage1.dataline.get(i)))
+    } else {
+      asg(
+        readIdata.get(i),
+        Mux(stage1.wDatasHit(i), selectInstrGroup(lowAddr.offset, lastWdatas(i)), stage1.idata.get(i))
+      )
+    }
   })
   // Default Bus Assign ========================================================
   // >> AR channel =============================================================
@@ -256,10 +275,10 @@ class CacheStage2[T <: Data](
     asg(diffDCache.io.victimWay, victimWay)
     asg(
       diffDCache.io.tagFrom1,
-      VecInit(stage1.meta.map(m => Cat(m.tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W))))
+      VecInit(readMetas.map(m => Cat(m.tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W))))
     )
-    asg(diffDCache.io.validFrom1, VecInit(stage1.meta.map(_.valid)))
-    asg(diffDCache.io.dirtyFrom1, VecInit(stage1.meta.map(_.dirty.get)))
+    asg(diffDCache.io.validFrom1, VecInit(readMetas.map(_.valid)))
+    asg(diffDCache.io.dirtyFrom1, VecInit(readMetas.map(_.dirty.get)))
     asg(diffDCache.io.wbBuffer, wbBuffer)
     asg(diffDCache.io.wbAddr, wbAddr)
     if (enableCacheInst) {
@@ -303,7 +322,7 @@ class CacheStage2[T <: Data](
             (0 until roads).foreach(i => {
               w1data(i).req.valid     := hitMask(i) && dreq.isWrite
               w1meta(i).req.valid     := hitMask(i) && dreq.isWrite
-              w1meta(i).req.bits.data := dirtyMeta(inBits.fromStage1.meta(i))
+              w1meta(i).req.bits.data := dirtyMeta(readMetas(i))
             })
           }
         }.otherwise { //cache not hit
@@ -354,7 +373,7 @@ class CacheStage2[T <: Data](
         asg(
           wbAddr,
           Cat(
-            LookupUInt(victimWay, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
+            LookupUInt(victimWay, (0 until roads).map(i => i.U -> readMetas(i).tag)),
             lowAddr.index,
             0.U(cOffWid.W)
           )
@@ -558,7 +577,7 @@ class CacheStage2[T <: Data](
         asg(
           wbAddr,
           Cat(
-            LookupUInt(way, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
+            LookupUInt(way, (0 until roads).map(i => i.U -> readMetas(i).tag)),
             lowAddr.index,
             0.U(cOffWid.W)
           )

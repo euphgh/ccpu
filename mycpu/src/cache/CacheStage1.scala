@@ -89,13 +89,12 @@ class CacheStage1(
     metas(i).io.r(true.B, searchIndex)
     datas(i).io.r(true.B, Mux(r2data(i).req.valid, r2data(i).req.bits.setIdx, searchIndex))
     r2data(i).resp := datas(i).io.r.resp
-    val stageIndex      = if (isDcache) stageReg.rwReq.get.lowAddr.index else stageReg.ifReq.get.index
-    val writeFromStage2 = w2data(i).req.valid && (w2data(i).req.bits.setIdx === stageIndex)
+    val stageIndex = if (isDcache) stageReg.rwReq.get.lowAddr.index else stageReg.ifReq.get.index
     assert(Mux(w2data(i).req.valid, w2meta(i).req.valid, true.B))
     datas(i).io.w <> w2data(i)
     metas(i).io.w <> w2meta(i)
-    val metasOut = Mux(writeFromStage2, w2meta(i).req.bits.data, metas(i).io.r.resp.data)
-    val datasOut = Mux(writeFromStage2, w2data(i).req.bits.data, datas(i).io.r.resp.data)
+    val metasOut = metas(i).io.r.resp.data
+    val datasOut = datas(i).io.r.resp.data
     // out mates ====================================================
     io.out.meta(i) := metasOut
     // out datas and req ============================================
@@ -104,36 +103,19 @@ class CacheStage1(
       val selOffset = stageReg.rwReq.get.lowAddr.offset
       asg(
         io.out.ddata.get(i),
-        LookupUInt(
-          selOffset >> 2,
-          (0 until wordNum).map(j => {
-            j.U -> datasOut(j)
-          })
-        )
+        CacheUtils.selectWord(selOffset, datasOut)
       )
       asg(io.out.dataline.get(i), datasOut)
       asg(io.out.dCacheReq.get, stageReg.rwReq.get)
     } else {
       val selOffset = stageReg.ifReq.get.offset
-      asg(
-        io.out.idata.get(i),
-        LookupUInt(
-          selOffset >> 2,
-          (0 until wordNum).map(j => {
-            val dataLine = datasOut
-            j.U -> VecInit(
-              dataLine((j + 0) % wordNum),
-              dataLine((j + 1) % wordNum),
-              dataLine((j + 2) % wordNum),
-              dataLine((j + 3) % wordNum)
-            )
-          })
-        )
-      )
+      asg(io.out.idata.get(i), CacheUtils.selectInstrGroup(selOffset, datasOut))
       asg(io.out.iCacheReq.get, stageReg.ifReq.get)
     }
     if (enableCacheInst) {
       io.out.cacheInst.get := stageReg.cacheInst.get
     }
+    asg(io.out.wDatasHit(i), w2data(i).req.valid && (w2data(i).req.bits.setIdx === stageIndex))
+    asg(io.out.wMetasHit(i), w2meta(i).req.valid && (w2meta(i).req.bits.setIdx === stageIndex))
   })
 }

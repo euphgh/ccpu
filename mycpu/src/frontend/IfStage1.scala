@@ -127,7 +127,8 @@ class IfStage1 extends MycpuModule {
 
     val phtDiff = Module(new DifftestPHTWrite)
     asg(phtDiff.io.clock, clock)
-    asg(phtDiff.io.en, phtDiff.io.wen.asUInt.orR)
+    val phtWen = phtDiff.io.wen.asUInt.orR
+    asg(phtDiff.io.en, (phtWen || RegNext(phtWen)) && !reset.asBool)
     asg(phtDiff.io.tagIdx, io.phtWen.tagIdx)
     asg(phtDiff.io.instrOff, io.phtWen.instrOff)
     asg(phtDiff.io.wen, VecInit(io.phtWen.data.map(_.valid)))

@@ -292,7 +292,7 @@ class LocHisTab extends MycpuModule {
         tagsWData := getTag(writePCr)
         tagsWen   := true.B
 
-        asg(fastCntWData, 1.U(2.W))
+        asg(fastCntWData, Mux(realTakeR, 1.U(2.W), 0.U(2.W)))
         fastCntWen := true.B
 
         asg(cntWData, VecInit.fill(takeCntNum)(1.U(2.W)))

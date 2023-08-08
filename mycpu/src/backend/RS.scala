@@ -108,9 +108,22 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
 
   val slotsRdy = Wire(Vec(rsSize, Bool()))
   (0 until rsSize).foreach(i => {
-    val releaseCond = if (rsKind == FuType.Lsu) io.in.stqEmpty && isOldestVec(i) else isOldestVec(i)
+    val releaseCond =
+      if (rsKind == FuType.Lsu) io.in.stqEmpty && isOldestVec(i) else isOldestVec(i)
     slotsRdy(i) := src1Rdy(i) && src2Rdy(i) && slotsValid(i) && Mux(blockVec(i), releaseCond, true.B)
   })
+
+  val robNormalState = Wire(Bool())
+  BoringUtils.addSink(robNormalState, "normalState")
+  if (rsKind == FuType.Lsu) {
+    (0 until rsSize).foreach(i => {
+      when(rsEntries(i).uOp.memType.get === MemType.LL) {
+        when(!robNormalState) {
+          slotsRdy(i) := false.B
+        }
+      }
+    })
+  }
 
   /**
     * ageMask:

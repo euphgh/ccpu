@@ -41,7 +41,7 @@ class InstFetch extends MycpuModule {
   val preIfStage = Module(new PreIf)
   val ifStage1   = Module(new IfStage1)
   val ifStage2   = Module(new IfStage2)
-  val dsGoIf2    = WireInit(ifStage1.io.isDelaySlot && ifStage1.io.out.fire)
+  val dsGoIf2    = WireInit(ifStage1.io.out.fire)
 
   asg(
     preIfStage.io.in.redirect.target,
@@ -49,7 +49,7 @@ class InstFetch extends MycpuModule {
   )
   asg(
     preIfStage.io.in.redirect.flush,
-    io.redirect.flush || ifStage2.io.out.bits.dsDstRedir.flush || dsGoIf2
+    io.redirect.flush || ifStage2.io.out.bits.dsDstRedir.flush
   )
   asg(preIfStage.io.in.fromIf1, ifStage1.io.toPreIf)
   asg(preIfStage.io.in.isDSredir, ifStage2.io.out.bits.isDSredir && !io.redirect.flush)

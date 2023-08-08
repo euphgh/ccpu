@@ -188,7 +188,7 @@ class IfStage2 extends MycpuModule {
             asg(redirDst, alignPC)
             asg(outBits.isDSredir, true.B)
             asg(redirSet, true.B)
-            when(io.out.fire) { io.selfFlush := true.B }
+            when(io.dsGoIf2) { io.selfFlush := true.B }
             // Write BCache
             asg(io.bCacheW.valid, true.B)
             asg(io.bCacheW.bits.pc, BCache.cleanMask & inBits.pcVal)
@@ -196,16 +196,18 @@ class IfStage2 extends MycpuModule {
             // when ds come if2 in next cycle, should redirect target
             // waitDS state use instfetch signal, there use fire
             asg(redirDst, predDst)
-            when(io.out.fire) {
+            when(io.dsGoIf2) {
               predState := comeDS
               redirSet  := true.B
+            }.otherwise {
+              predState := waitDS
             }
           }
         }.otherwise {
           when(!bCacheHit) {
             asg(redirDst, predDst)
             asg(redirSet, true.B)
-            when(io.out.fire) { io.selfFlush := true.B }
+            when(io.dsGoIf2) { io.selfFlush := true.B }
             // Write BCache
             asg(io.bCacheW.valid, true.B)
             asg(io.bCacheW.bits.pc, inBits.pcVal)
@@ -217,13 +219,16 @@ class IfStage2 extends MycpuModule {
         when(inBits.bCacheDst.valid) {
           asg(redirDst, alignPC)
           asg(redirSet, true.B)
-          when(io.out.fire) { io.selfFlush := true.B }
+          when(io.dsGoIf2) { io.selfFlush := true.B }
         }
       }
     }
     is(waitDS) {
       asg(redirDst, savedPreDst)
-      when(io.dsGoIf2) { predState := comeDS }
+      when(io.dsGoIf2) {
+        predState := comeDS
+        asg(redirSet, true.B)
+      }
     }
     is(comeDS) {
       io.out.bits.predictResult(0).btbType := BtbType.non

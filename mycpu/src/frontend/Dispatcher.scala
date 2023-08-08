@@ -459,6 +459,7 @@ class Dispatcher extends MycpuModule {
     val toRobBits    = io.out.toRob(i).bits
     val toRobUop     = toRobBits.uOp
     val toRobExBasic = toRobBits.basicExInfo
+    val spType       = decoder(i).io.out.decoded.specialType
     asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
     //exception:pc and isBd
     asg(toRobExBasic.pc, slots(i).inst.basicInstInfo.pcVal)
@@ -466,8 +467,9 @@ class Dispatcher extends MycpuModule {
     //uOp
     asg(toRobUop.currADest, slots(i).inst.aRegsIdx.dest)
     asg(toRobUop.currPDest, slots(i).toRsBasic.destPregAddr)
-    asg(toRobUop.specialType, decoder(i).io.out.decoded.specialType)
+    asg(toRobUop.specialType, spType)
     asg(toRobUop.prevPDest, slots(i).prevPDest)
+    asg(toRobUop.isSingle, SpecialType.isSingle(spType))
     //noBrMis
     val preTaken       = slots(i).inst.predictResult.taken
     val noBrMisPredict = preTaken && slots(i).inst.realBrType === BranchType.NON

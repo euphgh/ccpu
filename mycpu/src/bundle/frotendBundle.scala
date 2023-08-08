@@ -195,6 +195,7 @@ class RobSavedUop extends MycpuBundle {
   val currPDest   = PRegIdx // updata A-RAT when retire
   val currADest   = ARegIdx // updata A-RAT when retire
   val specialType = SpecialType()
+  val isSingle    = Bool()
 }
 class DispatchToRobBundle extends MycpuBundle {
   val basicExInfo  = new BasicExInfoBundle //PC ALSO use as difftest check execution flow

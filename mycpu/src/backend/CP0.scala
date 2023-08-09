@@ -34,11 +34,10 @@ class Mtc0Bundle extends MycpuBundle {
 class CP0 extends BasicCOP(CP0Reset) with MycpuProperties {
   val io = IO(new Bundle {
     val in = new Bundle {
-      val eretFlush    = Input(Bool())
-      val extInt       = Input(UInt(6.W))
-      val mtc0         = Flipped(new Mtc0Bundle)
-      val exCommit     = Flipped(Valid(new ExCommitBundle))
-      val preEretFlush = Input(Bool())
+      val eretFlush = Input(Bool())
+      val extInt    = Input(UInt(6.W))
+      val mtc0      = Flipped(new Mtc0Bundle)
+      val exCommit  = Flipped(Valid(new ExCommitBundle))
     }
     val mfc0 = new Bundle {
       val addr  = Input(CP0Idx)

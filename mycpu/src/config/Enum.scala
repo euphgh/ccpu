@@ -31,6 +31,9 @@ object MduType extends ChiselEnum {
 }
 object SpecialType extends ChiselEnum {
   val NON, LOAD, STORE, MTC0, MTHI, MTLO, MULDIV, ERET, CACHEINST, HB, TLB = Value
+  def isSingle(op: SpecialType.Type) = {
+    op.isOneOf(MTC0, MTHI, MTLO, MULDIV)
+  }
 }
 
 //not need now
@@ -225,6 +228,9 @@ object ExcCode extends ChiselEnum {
   val CpU  = Value(0x0b.U)
   val Ov   = Value(0x0c.U)
   val Tr   = Value(0x0d.U)
+  def canRe(op: ExcCode.Type) = {
+    op.isOneOf(Sys, Bp, Tr)
+  }
 }
 
 object FrontExcCode extends ChiselEnum {

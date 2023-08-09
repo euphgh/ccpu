@@ -41,7 +41,7 @@ class CountLeadZero extends MycpuModule {
     }
     is(res) {
       state        := idle
-      io.out.valid := !io.flush
+      io.out.valid := true.B
     }
   }
   when(io.flush) { state := idle }

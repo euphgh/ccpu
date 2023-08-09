@@ -21,20 +21,13 @@ class MispreSignal extends MycpuBundle {
 }
 
 /**
-  * WAW
-  *  wb change inprf to true if(wb.p = srat(wb.a).p)
-  *  dest change inprf to false,change pIdx(younger has higher priority)
-  *
-  * RAW
-  *   (wb.a = someInst.a) & (wb.p = srat(wb.a).p) -> change in prf
-  *   dest.a = younger.a  -> change inprf and pdest and prev(younger higher priority)
-  *
-  * about InstARegsIdxBundle:(src0, src1, dest)
-  *      dest is 0 if !wen,else = destAreg
-  *      src is 0 if !needSrcAreg,else = srcAregs
-  *
-  * wb.valid is pipex_valid
-  * currPDest.valid is dper.slot fire
+  * inst just read from srat
+  *   WB and GRP write srat
+  *   inst take related info
+  *     WB->inprf
+  *     GRP->pdest|inprf|prevpdest
+  *       TODO:for now,not take the prevPdest and pDest to Rs
+  *             choose the right prevPdest and pDest
   */
 class SRAT extends MycpuModule {
   val io = IO(new Bundle {
@@ -48,9 +41,9 @@ class SRAT extends MycpuModule {
     val dest = Vec(
       renameNum,
       new Bundle {
+        val currPDest = Flipped(Valid(PRegIdx)) //to write in
         val currADest = Input(ARegIdx) //to get prev
         val prevPDest = Output(PRegIdx) //prev
-        val currPDest = Flipped(Valid(PRegIdx)) //to write in
       }
     )
     val wb      = Vec(wBNum, Flipped(Valid(new RATWriteBackIO)))
@@ -61,7 +54,7 @@ class SRAT extends MycpuModule {
   val pIdxMap = RegInit(VecInit((0 until aRegNum).map(i => i.U(pRegAddrWidth.W))))
   val inPrf   = RegInit(VecInit(Seq.fill(aRegNum)(true.B)))
 
-  //read from srat:lowest priority
+  //read from srat
   //num0 areg will get preg=0,inprf=1
   List.tabulate(renameNum)(i => {
     List.tabulate(srcDataNum)(j => {
@@ -71,21 +64,14 @@ class SRAT extends MycpuModule {
     io.dest(i).prevPDest := pIdxMap(io.dest(i).currADest)
   })
 
-  //wb change inprf:middle priority
-  //io.wb.valid is pipex_valid(whether has valid inst)
-  //aDest=0 actually not change anything
+  //wb change inprf:low priority
   List.tabulate(wBNum)(i =>
     when(io.wb(i).valid && (pIdxMap(io.wb(i).bits.aDest) === io.wb(i).bits.pDest)) {
       inPrf(io.wb(i).bits.aDest) := true.B
-      List.tabulate(renameNum)(j => {
-        List.tabulate(srcDataNum)(k =>
-          when(io.wb(i).bits.aDest === io.src(j).in(k)) { io.src(j).out(k).inPrf := true.B }
-        )
-      })
     }
   )
 
-  //dest change inprf:higest priority
+  //dest change inprf:high priority
   //io.dest.currPDest.valid = dper.slot.out.fire
   //if io.dest.currADest===0 ,means !wen
   //WAW(only last pDest write in)
@@ -93,18 +79,6 @@ class SRAT extends MycpuModule {
     when(io.dest(i).currPDest.valid & io.dest(i).currADest =/= 0.U) {
       pIdxMap(io.dest(i).currADest) := io.dest(i).currPDest.bits
       inPrf(io.dest(i).currADest)   := false.B
-
-      ((i + 1) until renameNum).map(j => {
-        List.tabulate(srcDataNum)(k => {
-          when(io.dest(i).currADest === io.src(j).in(k)) {
-            io.src(j).out(k).inPrf := false.B
-            io.src(j).out(k).pIdx  := io.dest(i).currPDest.bits
-          }
-          when(io.dest(i).currADest === io.dest(j).currADest) {
-            io.dest(j).prevPDest := io.dest(i).currPDest.bits
-          }
-        })
-      })
     }
   })
   when(io.recover.valid) {
@@ -180,20 +154,20 @@ class dispatchSlot extends MycpuBundle {
   val inst  = new InstBufferOutIO
   val valid = Output(Bool())
 
-  val pDestOk  = Output(Bool()) // not need pdest/related fl slot pop valid
-  val robReady = Output(Bool()) //rob是否有相应的空闲槽位，此处无需设置“leadingRobReady”
-  val rsReady  = Output(Bool()) //指令对应的rs是否"对其"ready(注意同类型指令只有第一条才会“得到”Rdy)
+  val pDestOk  = Output(Bool()) //not need pdest/related fl slot pop valid
+  val robReady = Output(Bool()) //rob是否有相应的空闲槽位
+  val rsReady  = Output(Bool()) //指令对应的rs是否"对其"ready
+  val readyGo  = Output(Bool())
 
-  val readyGo = Output(Bool())
+  val sratPsrcs     = Vec(srcDataNum, new SRATEntry)
+  val sratPrevPDest = Output(PRegIdx)
+  val grpPsrcs      = Vec(srcDataNum, new SRATEntry)
+  val grpPrevPDest  = Output(PRegIdx)
+  val grpWaw        = Output(Bool())
 
-  //  exceptDetect    decoder-Rs
-  //  destPregAddr    freelist-Rs & Rob
-  //  srcPregs        srat-Rs
-  //  robIndex        Rs
   val toRsBasic = new RsBasicEntry
   val decoded   = new DecodeInstInfoBundle
-  //srat-Rob
-  val prevPDest = PRegIdx
+  val prevPDest = Output(PRegIdx)
 }
 
 /**
@@ -294,23 +268,47 @@ class Dispatcher extends MycpuModule {
   val decoder = List.fill(decodeNum)(Module(new Decoder()))
   val srat    = Module(new SRAT)
   val slots   = Wire(Vec(dispatchNum, new dispatchSlot))
-
-  //just connect(combinational logic)
-  //input:ibf/rob/fl
+  val fuWb    = io.in.fuWbSrat
   List.tabulate(dispatchNum)(i => {
-    slots(i).inst  := io.in.fromInstBuffer(i).bits
-    slots(i).valid := io.in.fromInstBuffer(i).valid
+    //alias
+    val toRsB     = slots(i).toRsBasic
+    val grpPsrcs  = slots(i).grpPsrcs
+    val sratPsrcs = slots(i).sratPsrcs
+    val fromIbf   = io.in.fromInstBuffer(i)
 
-    slots(i).toRsBasic.destAregAddr := slots(i).inst.aRegsIdx.dest
-    slots(i).toRsBasic.destPregAddr := 0.U(pRegAddrWidth.W) //default
-    slots(i).toRsBasic.robIndex     := io.in.robIndex + i.U
-    slots(i).toRsBasic.prevPDest    := slots(i).prevPDest
+    //simple connect
+    slots(i).inst      := fromIbf.bits
+    slots(i).valid     := fromIbf.valid
+    toRsB.destAregAddr := slots(i).inst.aRegsIdx.dest
+    toRsB.robIndex     := io.in.robIndex + i.U
+    toRsB.prevPDest    := slots(i).prevPDest
+    (0 until srcDataNum).map(j => {
+      toRsB.grpInPrf(j)  := grpPsrcs(j).inPrf
+      toRsB.sratInPrf(j) := sratPsrcs(j).inPrf
+    })
 
-    if (debug) slots(i).toRsBasic.debugPC.get := io.in.fromInstBuffer(i).bits.basicInstInfo.pcVal
+    //prevP and Psrcs
+    slots(i).prevPDest := Mux(slots(i).grpWaw, slots(i).grpPrevPDest, slots(i).sratPrevPDest)
+    (0 until srcDataNum).map(j => {
+      toRsB.pSrcs(j) := Mux(grpPsrcs(j).inPrf, sratPsrcs(j).pIdx, grpPsrcs(j).pIdx)
+    })
 
-    slots(i).robReady := io.out.toRob(i).ready
-    slots(i).pDestOk  := (slots(i).inst.aRegsIdx.dest === 0.U) //default
-    slots(i).rsReady  := false.B //default
+    //default
+    slots(i).grpWaw       := false.B
+    slots(i).grpPrevPDest := 0.U(pRegAddrWidth.W)
+    (0 until srcDataNum).map(j => {
+      grpPsrcs(j).inPrf := true.B
+      grpPsrcs(j).pIdx  := 0.U(pRegAddrWidth.W)
+      toRsB.wbInPrf(j)  := false.B
+    })
+    (0 until wBNum).map(i => toRsB.wbInfo(i) := Mux(fuWb(i).valid, fuWb(i).bits.pDest, 0.U(pRegAddrWidth.W)))
+    toRsB.destPregAddr := 0.U(pRegAddrWidth.W)
+
+    //ready
+    slots(i).robReady            := io.out.toRob(i).ready
+    slots(i).pDestOk             := (slots(i).inst.aRegsIdx.dest === 0.U) //default
+    slots(i).rsReady             := false.B //default
+    if (debug) toRsB.debugPC.get := io.in.fromInstBuffer(i).bits.basicInstInfo.pcVal
   })
 
   //deal with rsReady
@@ -383,31 +381,6 @@ class Dispatcher extends MycpuModule {
       when(io.recoverSrat.valid) { asg(state, normal) }
     }
   }
-
-  // switch(state) {
-  //   is(normal) {
-  //     when(mispre.happen) {
-  //       when(!io.dsAllow) {
-  //         asg(state, waitDs)
-  //         asg(realTargetReg, mispre.realTarget)
-  //       }.otherwise {
-  //         asg(state, block)
-  //         asg(io.fronRedirect.flush, true.B)
-  //         asg(io.fronRedirect.target, mispre.realTarget)
-  //       }
-  //     }
-  //   }
-  //   is(waitDs) {
-  //     when(io.dsAllow) {
-  //       asg(state, block)
-  //       asg(io.fronRedirect.flush, true.B)
-  //       asg(io.fronRedirect.target, realTargetReg)
-  //     }
-  //   }
-  //   is(block) {
-  //     when(io.recoverSrat.valid) { asg(state, normal) }
-  //   }
-  // }
   when(io.in.flushBackend) { asg(state, normal) }
 
   //deal with readyGo
@@ -429,7 +402,14 @@ class Dispatcher extends MycpuModule {
     slots(i).decoded            := decoder(i).io.out.decoded
   })
 
-  //srat rename
+  /**
+    * rename
+    *   read from srat
+    *   fuwb->inprf
+    *   group raw->inprf|pidx prev
+    *   TODO:for now,take 3 inprf and choose 1 correct (pidx and prev) to Rs
+    */
+  //srat
   srat.io.wb <> io.in.fuWbSrat
   srat.io.recover <> io.recoverSrat
   val slotsAregsIdx = WireInit(VecInit((0 until dispatchNum).map(i => slots(i).inst.aRegsIdx)))
@@ -437,8 +417,47 @@ class Dispatcher extends MycpuModule {
   List.tabulate(dispatchNum)(i => {
     srat.io.dest(i).currPDest.bits  := slots(i).toRsBasic.destPregAddr
     srat.io.dest(i).currPDest.valid := io.out.toRob(i).fire //toRob.fire==slot(i).fire
-    slots(i).toRsBasic.srcPregs     := slotsRenamed(i)._1
-    slots(i).prevPDest              := slotsRenamed(i)._2
+    slots(i).sratPsrcs              := slotsRenamed(i)._1
+    slots(i).sratPrevPDest          := slotsRenamed(i)._2
+  })
+  //fuWb
+  fuWb.foreach(w => {
+    when(w.valid) {
+      slots.foreach(s => {
+        val pSrcs = s.sratPsrcs
+        val toRs  = s.toRsBasic
+        (0 until srcDataNum).map(i => {
+          when(pSrcs(i).pIdx === w.bits.pDest) {
+            toRs.wbInPrf(i) := true.B
+          }
+        })
+      })
+    }
+  })
+  //GROUP RAW
+  (0 until (renameNum - 1)).map(i => {
+    val (destP, destA) = (slots(i).toRsBasic.destPregAddr, slots(i).toRsBasic.destAregAddr)
+    when(destA.orR) {
+      ((i + 1) until renameNum).map(j => {
+        val sla          = slots(j).inst.aRegsIdx
+        val toRsB        = slots(j).toRsBasic
+        val aSrcs        = Wire(Vec(srcDataNum, ARegIdx))
+        val grpPsrcs     = slots(j).grpPsrcs
+        val grpPrevPDest = slots(j).grpPrevPDest
+        aSrcs(0) := sla.src0
+        aSrcs(1) := sla.src1
+        List.tabulate(srcDataNum)(k => {
+          when(destA === aSrcs(k)) {
+            grpPsrcs(k).inPrf := false.B
+            grpPsrcs(k).pIdx  := destP
+          }
+          when(destA === slots(j).inst.aRegsIdx.dest) {
+            slots(j).grpWaw := true.B
+            grpPrevPDest    := destP
+          }
+        })
+      })
+    }
   })
 
   //to rob
@@ -446,15 +465,17 @@ class Dispatcher extends MycpuModule {
     val toRobBits    = io.out.toRob(i).bits
     val toRobUop     = toRobBits.uOp
     val toRobExBasic = toRobBits.basicExInfo
+    val spType       = decoder(i).io.out.decoded.specialType
     asg(io.out.toRob(i).valid, slots(i).valid & slots(i).readyGo)
     //exception:pc and isBd
     asg(toRobExBasic.pc, slots(i).inst.basicInstInfo.pcVal)
     asg(toRobExBasic.isBd, slots(i).inst.isBd)
     //uOp
-    asg(toRobUop.prevPDest, slots(i).prevPDest)
     asg(toRobUop.currADest, slots(i).inst.aRegsIdx.dest)
     asg(toRobUop.currPDest, slots(i).toRsBasic.destPregAddr)
-    asg(toRobUop.specialType, decoder(i).io.out.decoded.specialType)
+    asg(toRobUop.specialType, spType)
+    asg(toRobUop.prevPDest, slots(i).prevPDest)
+    asg(toRobUop.isSingle, SpecialType.isSingle(spType))
     //noBrMis
     val preTaken       = slots(i).inst.predictResult.taken
     val noBrMisPredict = preTaken && slots(i).inst.realBrType === BranchType.NON

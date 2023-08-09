@@ -43,7 +43,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   if (debug) asg(outBits.debugPC.get, inBasic.debugPC.get)
 
   //处理readyGo
-  val pSrcs       = inBasic.srcPregs
+  val pSrcs       = inBasic.pSrcs
+  val inPrf       = inBits.inPrf
   val inMayNeedBp = inBits.mayNeedBp
   val byPassV     = WireInit(VecInit.fill(srcDataNum)(false.B))
   val byPassVReg  = RegInit(VecInit.fill(srcDataNum)(false.B))
@@ -52,7 +53,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     when(io.flush || io.out.fire) { byPassVReg(i) := false.B }
   })
   val dataRdy = WireInit(
-    VecInit((0 until srcDataNum).map(i => (!inMayNeedBp(i) | byPassV(i) | byPassVReg(i) | pSrcs(i).inPrf)))
+    VecInit((0 until srcDataNum).map(i => (!inMayNeedBp(i) | byPassV(i) | byPassVReg(i) | inPrf(i))))
   ).asUInt.andR
   val notDelayRead = WireInit(true.B) //MALU和LSU会对它赋值
   val readyGo      = dataRdy && notDelayRead
@@ -87,7 +88,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val bypass = io.datasFromBypass.get
     bypass.foreach(bp =>
       List.tabulate(srcDataNum)(i => {
-        when(bp.valid && bp.bits.pDest === pSrcs(i).pIdx && pSrcs(i).pIdx.orR) {
+        when(bp.valid && bp.bits.pDest === pSrcs(i) && pSrcs(i).orR) {
           asg(outSrcs(i), bp.bits.result)
           asg(byPassV(i), true.B)
         }

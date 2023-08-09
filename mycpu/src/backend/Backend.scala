@@ -121,11 +121,11 @@ class Backend extends MycpuModule {
 
   //FU read prf
   //0->malu  1->salu 2->lsu 3->mdu
-  val fuSrcPIdx = (0 until issueNum).map(i => fuIn(i).bits.origin.basic.srcPregs)
+  val fuSrcPIdx = (0 until issueNum).map(i => fuIn(i).bits.origin.basic.pSrcs)
   val fuRdata   = (0 until issueNum).map(i => fuIO(i).datasFromPrf)
   val raddrs    = Wire(Vec(issueNum, Vec(srcDataNum, PRegIdx)))
   (0 until issueNum).map(i => {
-    (0 until srcDataNum).map(j => raddrs(i)(j) := fuSrcPIdx(i)(j).pIdx)
+    (0 until srcDataNum).map(j => raddrs(i)(j) := fuSrcPIdx(i)(j))
   })
   val rdata = prf.read(raddrs)
   (0 until issueNum).map(i => {
@@ -214,7 +214,6 @@ class Backend extends MycpuModule {
   asg(cp0In.eretFlush, robOut.eretFlush)
   asg(cp0In.exCommit, robOut.exCommit)
   asg(cp0In.extInt, io.extInt)
-  asg(cp0In.preEretFlush, robOut.preEretFlush)
 
   /**
     * redirect frontend

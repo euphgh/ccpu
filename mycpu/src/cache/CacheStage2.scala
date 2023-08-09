@@ -129,7 +129,7 @@ class CacheStage2[T <: Data](
   }
 
   // Road Select Module ============================================================
-  val roadSelector = ReplacementPolicy.fromString("plru", roads)
+  val roadSelector = ReplacementPolicy.fromString("lru", roads)
   // automat =======================================================================
   val run :: miss :: readDram :: refill :: uncache :: instr :: Nil                                  = Enum(6)
   val wIdel :: wReq :: wData :: waitwBack :: Nil                                                    = Enum(4)
@@ -274,11 +274,11 @@ class CacheStage2[T <: Data](
     asg(diffDCache.io.isUncache, inBits.isUncached)
     asg(diffDCache.io.isWrite, stage1.dCacheReq.get.isWrite)
     asg(diffDCache.io.isHit, hitMask.asUInt.orR)
-    asg(diffDCache.io.hitWays, OHToUInt(hitMask.asUInt))
+    diffDCache.io.hitWays := OHToUInt(hitMask.asUInt)
     asg(diffDCache.io.retData, io.out.bits.ddata.get)
     diffDCache.io.writeState := writeState
     asg(diffDCache.io.writeData, stage1.dCacheReq.get.wWord)
-    asg(diffDCache.io.victimWay, victimWay)
+    diffDCache.io.victimWay := victimWay
     asg(
       diffDCache.io.tagFrom1,
       VecInit(stage1.meta.map(m => Cat(m.tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W))))
@@ -289,7 +289,7 @@ class CacheStage2[T <: Data](
     asg(diffDCache.io.wbAddr, wbAddr)
     if (enableCacheInst) {
       asg(diffDCache.io.instrOp, stage1.cacheInst.get.bits.op.asUInt)
-      asg(diffDCache.io.tagWay, tagWay)
+      diffDCache.io.tagWay := tagWay
       asg(diffDCache.io.instrState, instrState)
       asg(diffDCache.io.instrValid, stage1.cacheInst.get.valid)
     }

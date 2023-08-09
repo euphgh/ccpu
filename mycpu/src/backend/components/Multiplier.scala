@@ -32,15 +32,15 @@ class MultiplierIP extends BlackBox with HasBlackBoxInline {
       |); 
       |`else
       |    reg [65:0] seg0;
-      |    // reg [65:0] seg1;
+      |    reg [65:0] seg1;
       |    always @(posedge clk) begin
       |        if (!rst) begin
       |            seg0 <= 0;
-      |            // seg1 <= 0;
+      |            seg1 <= 0;
       |        end
       |        else begin
       |            seg0 <= {{33{A[32]}}, A} * {{33{B[32]}}, B};	// MyMultipler.scala:9:{20,34}
-      |            // seg1 <= seg0;
+      |            seg1 <= seg0;
       |        end
       |    end
       |    assign P = seg0;
@@ -83,15 +83,18 @@ class MulComponent extends MycpuModule {
   addSink(wirehi, "specHIdata")
   addSink(wirelo, "specLOdata")
   io.out.valid := false.B
-  val run :: addsub :: finish :: Nil = Enum(3)
+  val run :: addsub :: multi1 :: finish :: Nil = Enum(4)
   // state
   val state = RegInit(run)
   assert(~(io.out.valid & state =/= finish))
   switch(state) {
     is(run) {
       when(io.in.valid) {
-        state := Mux(add || sub, addsub, finish)
+        state := multi1
       }
+    }
+    is(multi1) {
+      state := Mux(add || sub, addsub, finish)
     }
     is(finish) {
       state        := run

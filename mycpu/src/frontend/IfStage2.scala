@@ -57,16 +57,15 @@ class IfStage2 extends MycpuModule {
   val alignMask = inBits.alMask
   val pc        = inBits.pcVal
   val bpuout    = io.out.bits.predictResult
-  val bpuSel    = inBits.bpuSel
   val bCMask    = Wire(Vec(fetchNum, Bool()))
   (0 until fetchNum).foreach(i => {
-    asg(bpuout(i), inBits.bpuRes(bpuSel(i)))
-    asg(bCMask(i), inBits.bCacheHit(bpuSel(i)))
+    asg(bpuout(i), inBits.bpuOut(i))
+    asg(bCMask(i), inBits.bCacheHit(i))
   })
   val validBranch = WireInit(VecInit.fill(fetchNum)(false.B))
   val takeMask    = Wire(Vec(fetchNum, Bool()))
   (0 until fetchNum).foreach(i => {
-    takeMask(i)    := inBits.bpuRes(bpuSel(i)).taken
+    takeMask(i)    := inBits.bpuOut(i).taken
     validBranch(i) := takeMask(i) && inBits.alMask(i)
   })
   def getByVB[T <: Data](a: Seq[T]) = {

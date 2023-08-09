@@ -95,7 +95,7 @@ object LocHisTab {
   val clrWidth: Int = 4
   val hisWidth: Int = 9
   val writeFirstUpdate = true
-  val writeFirstRead   = false
+  val writeFirstRead   = true
 
   val lhtTagWidth = 32 - idxWidth - 4
   val lhtTagLsb   = 32 - lhtTagWidth

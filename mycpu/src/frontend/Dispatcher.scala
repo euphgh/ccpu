@@ -244,6 +244,12 @@ class Dispatcher extends MycpuModule {
 
   //some inst can go to main/sub alurs;some can only goto sub aluRs
   val noInst = (dispatchNum).U
+  def isSSM = {
+    val slot0IsSub  = slots(0).inst.whichFu === ChiselFuType.SubALU
+    val slot1IsSub  = slots(1).inst.whichFu === ChiselFuType.SubALU
+    val slot2IsMain = slots(2).inst.whichFu === ChiselFuType.MainALU
+    slot0IsSub && slot1IsSub && slot2IsMain
+  }
   def getRsSel(rsType: UInt): UInt = PriorityEncoderOH(
     (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType(rsType) && slots(i).valid)).asUInt
   )
@@ -253,7 +259,7 @@ class Dispatcher extends MycpuModule {
     val subMask =
       (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType.SubALU && slots(i).valid)).asUInt
     val hasMain = mainMask.orR
-    Mux(hasMain, PriorityEncoderOH(mainMask), PriorityEncoderOH(subMask))
+    Mux(hasMain && !isSSM, PriorityEncoderOH(mainMask), SecondPriEncoder(subMask))
   }
   def getSubALUSlot(): UInt = {
     val mainMask =
@@ -261,7 +267,7 @@ class Dispatcher extends MycpuModule {
     val subMask =
       (0 until dispatchNum).map(i => (slots(i).inst.whichFu === ChiselFuType.SubALU && slots(i).valid)).asUInt
     val hasMain = mainMask.orR
-    Mux(hasMain, PriorityEncoderOH(subMask), SecondPriEncoder(subMask))
+    Mux(hasMain && !isSSM, PriorityEncoderOH(subMask), PriorityEncoderOH(subMask))
   }
 
   class FreeList extends MultiQueue(retireNum, dispatchNum, PRegIdx, freeListSize, false, true) {

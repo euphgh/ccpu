@@ -15,6 +15,7 @@ import chisel3.util.Valid
 import difftest.DifftestBackPred
 import frontend.PatternHistoryTable
 import frontend.RetAddrStack
+import frontend.RATWriteBackIO
 
 class Adder extends MycpuModule {
   val io = IO(new Bundle {
@@ -194,7 +195,9 @@ class Alu(main: Boolean) extends FuncUnit(if (main) FuType.MainAlu else FuType.S
 
   val bpuUpdate = if (main) Some(IO(new BpuUpdateIO)) else None
   val mispre    = if (main) Some(IO(new MispreSignal)) else None
+  val wSrat     = IO(Valid(new RATWriteBackIO))
 
+  wSrat := roStage.io.wSrat
   //stage connect
   val exeStageIO = Wire(new ExeStageIO(if (main) FuType.MainAlu else FuType.SubAlu))
   exeStageIO.out <> io.out

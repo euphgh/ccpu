@@ -7,15 +7,16 @@ import chisel3.util._
 import chisel3.util.experimental.BoringUtils
 import utils._
 import utils.BytesWordUtils._
+import frontend.RATWriteBackIO
 
 /**
   * prfData is read in "Backend",connect to io.in
   * instantiate stage in alu/mdu/lsu
   *
   * select src in this stage
-  * since we only care about the rob num in the bypass,we do not need to name bypass:
-  *        (0) is for extern
-  *        (1) is for inside
+  * Bypass:
+  *      前面的x条来自其他FU
+  *      最后一条来自本FU(如果需要)
   */
 
 class RoStage(fuKind: FuType.t) extends MycpuModule {
@@ -27,6 +28,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val datasFromPrf = Vec(srcDataNum, Input(UInt(dataWidth.W)))
     val datasFromBypass =
       if (FuType.needBpIn(fuKind)) Some(Flipped(Vec(FuType.bpNum(fuKind), Valid(new WPrfBundle)))) else None
+
+    val wSrat = Valid(new RATWriteBackIO) //only for malu and salu
   })
 
   //simple connect
@@ -204,10 +207,20 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   val wakeUpSource = Wire(Valid(PRegIdx))
   asg(wakeUpSource.bits, outBits.destPregAddr)
   asg(wakeUpSource.valid, io.out.fire)
-  if (fuKind == FuType.MainAlu) {
-    BoringUtils.addSource(wakeUpSource, "mAluRoWakeUp")
-  }
-  if (fuKind == FuType.SubAlu) {
-    BoringUtils.addSource(wakeUpSource, "sAluRoWakeUp")
+  // if (fuKind == FuType.MainAlu) {
+  //   BoringUtils.addSource(wakeUpSource, "mAluRoWakeUp")
+  // }
+  // if (fuKind == FuType.SubAlu) {
+  //   BoringUtils.addSource(wakeUpSource, "sAluRoWakeUp")
+  // }
+
+  //wsrat
+  //only malu and salu wsrat wen here
+  val wSratB = io.wSrat.bits
+  wSratB.aDest   := outBits.destAregAddr
+  wSratB.pDest   := outBits.destPregAddr
+  io.wSrat.valid := false.B //default
+  if (fuKind == FuType.MainAlu || fuKind == FuType.SubAlu) {
+    io.wSrat.valid := io.out.fire
   }
 }

@@ -74,16 +74,19 @@ class IfStage1 extends MycpuModule {
   val bpuRreq         = io.in.flush || io.out.ready
   val pc              = RegEnable(npc, PCReset, update)
   val iciTag          = RegEnable(usableCacheInst.bits.taglo, usableCacheInst.valid)
-  io.out.bits.bpuSel := VecInit.tabulate(fetchNum)(i => RegEnable(npc(3, 2) + i.U, PCReset(3, 2), update))
-  val isDelaySlot = RegEnable(io.in.isDelaySlot, false.B, update)
+  val bpuSel          = VecInit.tabulate(fetchNum)(i => RegEnable(npc(3, 2) + i.U, PCReset(3, 2), update))
+  val isDelaySlot     = RegEnable(io.in.isDelaySlot, false.B, update)
   asg(io.isDelaySlot, isDelaySlot)
   // BPU and BCache ===========================================
-  val ras    = Module(new RetAddrStack(true, retAddrStackSize))
-  val btb    = Module(new BranchTargetBuffer())
-  val pht    = Module(new PatternHistoryTable())
-  val lht    = Module(new LocHisTab())
-  val bpuRes = outBits.bpuRes
-  val bCache = Module(new BCache)
+  val ras     = Module(new RetAddrStack(true, retAddrStackSize))
+  val btb     = Module(new BranchTargetBuffer())
+  val pht     = Module(new PatternHistoryTable())
+  val lht     = Module(new LocHisTab())
+  val bpuRes  = Wire(Vec(fetchNum, new PredictResultBundle))
+  val bpuOut  = outBits.bpuOut
+  val bCache  = Module(new BCache)
+  val bHitRes = Wire(Vec(fetchNum, Bool()))
+  val bHitOut = outBits.bCacheHit
   (0 until fetchNum).foreach(i => {
     asg(bpuRes(i).btbType, btb.readRes(i).instType)
     asg(bpuRes(i).target, Mux(bpuRes(i).btbType =/= BtbType.jret, btb.readRes(i).target, ras.io.topData))
@@ -92,7 +95,11 @@ class IfStage1 extends MycpuModule {
     val isTakeBr = brTake && bpuRes(i).btbType === BtbType.b
     val isTakeJp = BtbType.isJump(bpuRes(i).btbType)
     asg(bpuRes(i).taken, isTakeJp || isTakeBr)
-    asg(outBits.bCacheHit(i), bpuRes(i).target === bCache.io.readRes.bits && bCache.io.readRes.valid)
+    asg(bHitRes(i), bpuRes(i).target === bCache.io.readRes.bits && bCache.io.readRes.valid)
+  })
+  (0 until fetchNum).foreach(i => {
+    asg(bpuOut(i), bpuRes(bpuSel(i)))
+    asg(bHitOut(i), bHitRes(bpuSel(i)))
   })
   bCache.io.write <> io.bCacheW
   asg(bCache.io.readAddr.bits, npc)
@@ -127,7 +134,8 @@ class IfStage1 extends MycpuModule {
 
     val phtDiff = Module(new DifftestPHTWrite)
     asg(phtDiff.io.clock, clock)
-    asg(phtDiff.io.en, phtDiff.io.wen.asUInt.orR)
+    val phtWen = phtDiff.io.wen.asUInt.orR
+    asg(phtDiff.io.en, (phtWen || RegNext(phtWen)) && !reset.asBool)
     asg(phtDiff.io.tagIdx, io.phtWen.tagIdx)
     asg(phtDiff.io.instrOff, io.phtWen.instrOff)
     asg(phtDiff.io.wen, VecInit(io.phtWen.data.map(_.valid)))

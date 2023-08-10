@@ -87,9 +87,8 @@ class FrontRedirctIO extends MycpuBundle {
 //can be slow, register will stage them
 class IfStage1OutIO extends MycpuBundle {
   val alMask = Output(UInt(fetchNum.W))
-  val bpuSel = Vec(fetchNum, Output(UInt(2.W)))
   // not order waiting
-  val bpuRes         = Vec(fetchNum, Output(new PredictResultBundle))
+  val bpuOut         = Vec(fetchNum, Output(new PredictResultBundle))
   val bCacheHit      = Input(Vec(fetchNum, Bool()))
   val pcVal          = Output(UInt(vaddrWidth.W))
   val tagOfInstGroup = Output(UInt(tagWidth.W))

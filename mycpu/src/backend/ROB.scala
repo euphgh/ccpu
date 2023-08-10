@@ -302,8 +302,8 @@ class ROB extends MycpuModule {
   scFailMark.start <> scFail
   addSink(scFail, "scFail")
   scFailMark.end := retireSpType(0) === SpecialType.STORE && io.out.multiRetire(0).fire //it issue when it's oldest
-  val robNormalState = WireInit(state === normal)
-  addSource(robNormalState, "normalState") //for ll
+  val letLLGoState = WireInit(state === normal | state === mpNext)
+  addSource(letLLGoState, "llgoState") //for ll
 
   // variable
   val nextInRobReg    = RegInit(false.B)
@@ -343,10 +343,10 @@ class ROB extends MycpuModule {
     * else if done->dsRetire firGo notSrev
     * else(not done)->mpnext noneGo notSrev
     */
-  def dealDs(ds: RobEntry, dsRetiring: Bool, dsPoped: Bool) = {
+  def dealDs(ds: RobEntry, dsRetiring: Bool, dsPoped: Bool, hasInt: Bool) = {
     val exType    = ds.exception.detect.excCode
     val dsDone    = Mux(dsPoped, ds.done, doneVec(0))
-    val isEx      = ds.exception.detect.happen & dsDone
+    val isEx      = (ds.exception.detect.happen | hasInt) & dsDone
     val isEr      = ds.uOp.specialType === SpecialType.ERET & dsDone
     val isExEr    = isEr | isEx
     val isSingle  = ds.uOp.isSingle & dsDone
@@ -468,7 +468,7 @@ class ROB extends MycpuModule {
       val ds                        = WireInit(0.U.asTypeOf(new RobEntry))
       val dsRetiring                = WireInit(false.B)
       val dsPoped                   = WireInit(false.B)
-      val deal                      = dealDs(ds, dsRetiring, dsPoped)
+      val deal                      = dealDs(ds, dsRetiring, dsPoped, hasInt = false.B) //hasInt=hasInt
       val isMis                     = retireReg(firIdxReg).isMispredict
       val (mpState, mpMulRe, mpSRe) = (deal._1, deal._2, deal._3)
       //for ci
@@ -501,7 +501,7 @@ class ROB extends MycpuModule {
     //come here when ds not done,trans to dsRetire or exer when dsDone
     is(mpNext) {
       val ds   = robPopInst(0)
-      val deal = dealDs(ds, dsRetiring = false.B, dsPoped = false.B)
+      val deal = dealDs(ds, dsRetiring = false.B, dsPoped = false.B, hasInt = false.B) //hasInt=hasInt
       when(robRdyGo(0)) { assert(ds.exception.basic.isBd) }
       state        := deal._1
       sReVReg      := deal._3

@@ -123,15 +123,16 @@ class Mdu extends FuncUnit(FuType.Mdu) {
     }
     is(block) {
       val validMask = VecInit(fuOutValid).asUInt
-      state := Mux(validMask.orR, run, block)
+      when(validMask.orR) { blockDone := true.B }
       assert(PopCount(validMask) < 2.U) // one hot must
       // want to faster
       blockRes             := HoldUnless(Mux1H(validMask, fuOutData), validMask.orR)
-      exeStageIO.out.valid := validMask.orR
+      exeStageIO.out.valid := validMask.orR || blockDone
     }
   }
-  when(io.flush) {
-    state := run
+  when(io.flush || io.out.fire) {
+    state     := run
+    blockDone := false.B
   }
 
 // all valid and ready ==================================================

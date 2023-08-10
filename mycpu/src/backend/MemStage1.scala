@@ -450,6 +450,7 @@ class MemStage1 extends MycpuModule {
   val llbitInMem1 = Wire(Bool())
   addSink(llbitInMem1, "llbit")
   toSQbits.scFail := !llbitInMem1 && roBits.memType === SC && !outEx.happen
+  toSQbits.isSC   := roBits.memType === SC && !outEx.happen
   val scFailMark = Wire(Valid(UInt(0.W)))
   scFailMark.bits  := DontCare
   scFailMark.valid := toStoreQ.fire && toSQbits.scFail && !io.flush

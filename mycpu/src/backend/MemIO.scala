@@ -79,4 +79,5 @@ class Mem1ToStqIO extends MycpuBundle {
   val wbInfo   = new WriteBackIO
   val exDetect = new DetectExInfoBundle
   val scFail   = Bool()
+  val isSC     = Bool()
 }

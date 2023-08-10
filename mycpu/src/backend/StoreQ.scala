@@ -8,11 +8,13 @@ import cache._
 import chisel3.util.experimental.BoringUtils._
 import utils.StoreQUtils._
 import utils._
+import frontend.RATWriteBackIO
 
 class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val fromMem1  = Flipped(Decoupled(new Mem1ToStqIO)) //mem1 ro store
     val writeBack = Decoupled(new FunctionUnitOutIO) //writeback
+    val wSrat     = Valid(new RATWriteBackIO)
 
     val retire   = Vec(retireNum, Input(Bool())) //from rob commit
     val retirePC = if (debug) Some(Input(Vec(retireNum, UWord))) else None
@@ -82,6 +84,10 @@ class StoreQueue(entries: Int) extends MycpuModule {
   wRob.exDetect       := m1DecpEx
   wRob.isMispredict   := false.B
   wRob.robIndex       := m1DecpWb.robIndex
+
+  io.wSrat.bits.aDest := m1DecpWb.destAregAddr
+  io.wSrat.bits.pDest := m1DecpWb.destPregAddr
+  io.wSrat.valid      := io.writeBack.fire && fromM1Decp.bits.isSC
 
   if (debug) wRob.debugPC.get := fromM1Decp.bits.stqEnq.debugPC.get
   //=================== retire =====================

@@ -84,7 +84,8 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // mem2 to outside
   dram <> memStage2.io.dmem
   memStage2.io.flush := io.flush
-  wSrat              := memStage2.io.wSrat
+  wSrat.bits         := Mux(storeQ.io.wSrat.valid, storeQ.io.wSrat.bits, memStage2.io.wSrat.bits)
+  wSrat.valid        := storeQ.io.wSrat.valid || memStage2.io.wSrat.valid
   io.out <> memStage3.io.out
 
   // storeQ to outside

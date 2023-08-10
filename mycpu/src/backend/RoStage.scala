@@ -203,7 +203,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
   //wake up others
   val wakeUpSource = Wire(Valid(PRegIdx))
   asg(wakeUpSource.bits, outBits.destPregAddr)
-  asg(wakeUpSource.valid, io.out.fire && outBits.destPregAddr.orR)
+  asg(wakeUpSource.valid, io.out.fire)
   if (fuKind == FuType.MainAlu) {
     BoringUtils.addSource(wakeUpSource, "mAluRoWakeUp")
   }

@@ -78,8 +78,8 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     val rsB = rsEntries(i).basic
     (0 until srcDataNum).map(j => {
       val beenWb = WireInit(VecInit(List.tabulate(wBNum)(k => rsB.wbInfo(k) === rsB.pSrcs(j)))).asUInt.orR
-      inPrf(i)(j) := rsB.grpInPrf(j) & (beenWb | rsB.sratInPrf(j))
-      //inPrf(i)(j) := rsB.grpInPrf(j) & (rsB.wbInPrf(j) | rsB.sratInPrf(j))
+      //inPrf(i)(j) := rsB.grpInPrf(j) & (beenWb | rsB.sratInPrf(j))
+      inPrf(i)(j) := rsB.grpInPrf(j) & (rsB.wbInPrf(j) | rsB.sratInPrf(j))
     })
   })
 
@@ -146,7 +146,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   //wake-up
   val wakeUpSource = Wire(Valid(PRegIdx))
   wakeUpSource.bits  := originOut.basic.destPregAddr
-  wakeUpSource.valid := io.out.fire && wakeUpSource.bits.orR
+  wakeUpSource.valid := io.out.fire
   if (rsKind == FuType.MainAlu) {
     val outAluType = originOut.uOp.aluType.get
     when(outAluType === AluType.MOVN || outAluType === AluType.MOVZ) {

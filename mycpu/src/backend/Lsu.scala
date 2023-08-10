@@ -7,6 +7,7 @@ import chisel3._
 import utils._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils._
+import frontend.RATWriteBackIO
 
 class Lsu extends FuncUnit(FuType.Lsu) {
   val tlb          = IO(new TLBSearchIO)
@@ -15,6 +16,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   val scommitPC    = if (debug) Some(IO(Vec(retireNum, Input(UWord)))) else None
   val stqEmpty     = IO(Bool())
   val oldestRobIdx = IO(Input(ROBIdx))
+  val wSrat        = IO(Valid(new RATWriteBackIO))
 
   // module and alias
   val memStage1 = Module(new MemStage1)
@@ -82,6 +84,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   // mem2 to outside
   dram <> memStage2.io.dmem
   memStage2.io.flush := io.flush
+  wSrat              := memStage2.io.wSrat
   io.out <> memStage3.io.out
 
   // storeQ to outside

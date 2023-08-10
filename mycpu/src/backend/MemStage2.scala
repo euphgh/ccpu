@@ -8,6 +8,7 @@ import cache._
 import utils._
 import utils.BytesWordUtils._
 import difftest.DifftestUartBuffer
+import frontend.RATWriteBackIO
 
 /**
   * pass abort signal to cacheStage2 in this stage:in.wbRob.exception
@@ -28,6 +29,7 @@ class MemStage2 extends MycpuModule {
   val io = IO(new Bundle {
     val in      = Flipped(Decoupled(new MemStage1OutIO))
     val out     = Decoupled(new MemStage2OutIO)
+    val wSrat   = Valid(new RATWriteBackIO)
     val querySQ = new QuerySQ
     val doneSQ  = Output(Bool()) //connect storeQ deq.back
     val donePC  = if (debug) Some(Output(UWord)) else None //connect storeQ deq.back
@@ -40,6 +42,10 @@ class MemStage2 extends MycpuModule {
   outBits.wbInfo     := inBits.wbInfo
   outBits.prevDstSrc := inBits.prevDstSrc
   outBits.exDetect   := inBits.exDetect
+  // write back to RS inPrf and SRAT
+  io.wSrat.bits.aDest := inBits.wbInfo.destAregAddr
+  io.wSrat.bits.pDest := inBits.wbInfo.destPregAddr
+  io.wSrat.valid      := io.out.fire
   when(inBits.memType === MemType.NON) {
     outBits.exDetect.happen := false.B
   }

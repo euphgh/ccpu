@@ -59,8 +59,8 @@ class Backend extends MycpuModule {
     */
   val wSrat = Wire(Vec(wBNum, Valid(new RATWriteBackIO)))
   wSrat(0) := mAluFU.wSrat
-  wSrat(1) := sAluFU.wSrat
-  wSrat(2) := lsuFU.wSrat //default
+  wSrat(1) := sAluFU.wSrat //default
+  wSrat(2) := lsuFU.wSrat
 
   //channel：writeBack at most wBNum=3 inst in 1 cycle
   val wPrf = Wire(Vec(wBNum, Valid(new WPrfBundle)))
@@ -76,18 +76,18 @@ class Backend extends MycpuModule {
     fuWb(i).ready := true.B
   })
 
-  //for mdu wb,be aware of mduWb.ready
+  //mdu wb use port_1,be aware of mduWb.ready
   val mduWSrat = Wire(new RATWriteBackIO)
   val mduWb    = mduFU.io.out
   mduWSrat.aDest := mduWb.bits.destAregAddr
   mduWSrat.pDest := mduWb.bits.wPrf.pDest
-  mduWb.ready    := !lsuFU.io.out.valid && !lsuFU.wSrat.valid
-  val mduWBits    = List(mduWb.bits.wPrf, mduWb.bits.wbRob, mduWSrat)
-  val lastChannel = List(wPrf(2), wRob(2), wSrat(2))
-  when(!lsuFU.io.out.valid && !lsuFU.wSrat.valid) {
+  mduWb.ready    := !sAluFU.io.out.valid && !sAluFU.wSrat.valid
+  val mduWBits = List(mduWb.bits.wPrf, mduWb.bits.wbRob, mduWSrat)
+  val channel1 = List(wPrf(1), wRob(1), wSrat(1))
+  when(!sAluFU.io.out.valid && !sAluFU.wSrat.valid) {
     List.tabulate(mduWBits.length)(i => {
-      asg(lastChannel(i).bits, mduWBits(i))
-      asg(lastChannel(i).valid, mduWb.valid)
+      asg(channel1(i).bits, mduWBits(i))
+      asg(channel1(i).valid, mduWb.valid)
     })
   }
 

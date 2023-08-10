@@ -237,7 +237,7 @@ class ROB extends MycpuModule {
 
   //automachine
   object RetireState extends ChiselEnum {
-    val normal, preExEr, exEr, exerFlush, preNext, mpNext, dsRetire, misFlush, ciNext, ciFlush = Value
+    val normal, single, preExEr, exEr, exerFlush, preNext, mpNext, dsRetire, misFlush, ciNext, ciFlush = Value
   }
   import RetireState._
   val state  = RegInit(normal)
@@ -334,6 +334,7 @@ class ROB extends MycpuModule {
   val multiReVReg     = RegInit(0.U(retireNum.W))
   val ciRediTargetReg = RegInit(0.U(vaddrWidth.W))
   val firIdxReg       = RegInit(retireNum.U(log2Up(retireNum + 1).W))
+  //for single state
   // init
   io.out.flushAll           := false.B
   io.out.eretFlush          := false.B
@@ -395,7 +396,6 @@ class ROB extends MycpuModule {
         sReVReg     := true.B
         multiReVReg := sReMask
         firIdxReg   := firSingle
-        allowRobPop := sReMask.asBools
       }.otherwise {
         sReVReg     := false.B
         multiReVReg := robRdyGo.asUInt
@@ -443,7 +443,6 @@ class ROB extends MycpuModule {
       //for mp
       val ds                        = WireInit(0.U.asTypeOf(new RobEntry))
       val dsRetiring                = WireInit(false.B)
-      val isEdge                    = WireInit(false.B)
       val dsPoped                   = WireInit(false.B)
       val deal                      = dealDs(ds, dsRetiring, dsPoped)
       val isMis                     = retireReg(firIdxReg).isMispredict

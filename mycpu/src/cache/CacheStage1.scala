@@ -75,6 +75,13 @@ class CacheStage1(
   val w2meta = List.fill(roads)(Wire(Flipped(new DPWriteBus(new CacheMeta(isDcache), lineNum))))
   val metas  = List.fill(roads)(Module(DualPortsSRAM(new CacheMeta(isDcache), lineNum, true, true)))
   val datas  = List.fill(roads)(Module(DualPortsSRAM(Vec(wordNum, UWord), lineNum, true, true)))
+
+  val w2offset = WireInit(0.U(cOffWid.W))
+  val w2Mask   = WireInit(0.U(4.W))
+  if (isDcache) {
+    addSink(w2offset, "DcacheStage2WriteOffset")
+    addSink(w2Mask, "DcacheStage2WriteMask")
+  }
   (0 until roads).foreach(i => {
     r2data(i).req.ready := true.B
     if (isDcache) {
@@ -89,7 +96,8 @@ class CacheStage1(
     metas(i).io.r(true.B, searchIndex)
     datas(i).io.r(true.B, Mux(r2data(i).req.valid, r2data(i).req.bits.setIdx, searchIndex))
     r2data(i).resp := datas(i).io.r.resp
-    val stageIndex = if (isDcache) stageReg.rwReq.get.lowAddr.index else stageReg.ifReq.get.index
+    val stageIndex  = if (isDcache) stageReg.rwReq.get.lowAddr.index else stageReg.ifReq.get.index
+    val stageOffset = if (isDcache) stageReg.rwReq.get.lowAddr.offset else stageReg.ifReq.get.offset
     assert(Mux(w2data(i).req.valid, w2meta(i).req.valid, true.B))
     datas(i).io.w <> w2data(i)
     metas(i).io.w <> w2meta(i)
@@ -116,6 +124,9 @@ class CacheStage1(
       io.out.cacheInst.get := stageReg.cacheInst.get
     }
     asg(io.out.wDatasHit(i), w2data(i).req.valid && (w2data(i).req.bits.setIdx === stageIndex))
+    asg(io.out.lowAddrHit(i), io.out.wDatasHit(i) && ((w2offset >> 2) === (stageOffset >> 2)))
+    asg(io.out.rawMask, w2Mask)
+    require(stageOffset.getWidth == w2offset.getWidth)
     asg(io.out.wMetasHit(i), w2meta(i).req.valid && (w2meta(i).req.bits.setIdx === stageIndex))
   })
 }

@@ -21,4 +21,8 @@ object BytesWordUtils {
   def maskWord(word: UInt, mask: UInt): Vec[UInt] = {
     maskWord(word2Bytes(word), mask)
   }
+  def mergeWords(oldWord: UInt, newWord: UInt, oldMask: UInt): UInt = {
+    maskWord(word2Bytes(oldWord), oldMask).asUInt |
+      maskWord(word2Bytes(newWord), ~oldMask).asUInt
+  }
 }

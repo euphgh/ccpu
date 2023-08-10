@@ -97,17 +97,15 @@ class CacheStage2[T <: Data](
     LookupUInt(
       way,
       (0 until roads).map(i => {
-        i.U -> readMetas(i)
+        i.U -> stage1.meta(i)
       })
     )
   }
-  val readMetas    = Wire(Vec(roads, new CacheMeta(isDcache)))
   val readDdata    = if (isDcache) Some(Wire(Vec(roads, UWord))) else None
-  val readIdata    = if (!isDcache) Some(Wire(Vec(roads, Vec(fetchNum, UWord)))) else None
   val readDataline = if (isDcache) Some(Wire(Vec(roads, Vec(wordNum, UWord)))) else None
   // HIT Logic =================================================================
   val hitMask = VecInit((0 until roads).map(i => {
-    val meta = readMetas(i)
+    val meta = stage1.meta(i)
     (meta.tag === inBits.ptag) && meta.valid
   }))
   val hit = hitMask.asUInt.orR
@@ -120,13 +118,13 @@ class CacheStage2[T <: Data](
       io.out.bits.toUser(i) := Mux1H(
         hitMask,
         (0 until roads).map(j => {
-          Mux(io.in.bits.cancel, 0.U.asTypeOf(userGen), trans(readIdata.get(j)(i)))
+          Mux(io.in.bits.cancel, 0.U.asTypeOf(userGen), trans(stage1.idata.get(j)(i)))
         })
       )
     } // default
     asg(
       outBits.idata.get,
-      Mux(inBits.cancel, VecInit.fill(fetchNum)(0.U(32.W)), Mux1H(hitMask, readIdata.get))
+      Mux(inBits.cancel, VecInit.fill(fetchNum)(0.U(32.W)), Mux1H(hitMask, stage1.idata.get))
     ) //default
   }
 
@@ -146,8 +144,8 @@ class CacheStage2[T <: Data](
   val writeState   = RegInit(wIdel)
   val ucState      = RegInit(ucIdel)
   val instrState   = RegInit(instrIdle)
-  val lastWmetas   = Reg(Vec(roads, new CacheMeta(isDcache)))
-  val lastWdatas   = Reg(Vec(roads, Vec(wordNum, UWord)))
+  val lastWdLine   = Reg(Vec(wordNum, UWord))
+  val lastWdWord   = Reg(UWord)
   val wbBuffer     = Reg(Vec(wordNum, UWord))
   val wbAddr       = Reg(UWord)
   val readBuffer   = Reg(Vec(wordNum, UWord))
@@ -155,12 +153,18 @@ class CacheStage2[T <: Data](
   val writeCounter = Counter(wordNum)
   val r1data       = Wire(Vec(roads, new DPReadBus(Vec(wordNum, UWord), lineNum)))
   val w1data       = Wire(Vec(roads, new DPWriteBus(Vec(wordNum, UWord), lineNum)))
+  val w1offset     = Wire(UInt(cOffWid.W))
+  val w1Mask       = Wire(UInt(4.W))
   val w1meta       = Wire(Vec(roads, new DPWriteBus(new CacheMeta(isDcache), lineNum)))
   val victimWay    = roadSelector.way
   val validDirty =
-    if (isDcache) VecInit((0 until roads).map(i => readMetas(i).dirty.get && readMetas(i).valid)).asUInt
+    if (isDcache)
+      VecInit(
+        (0 until roads).map(i => (stage1.meta(i).dirty.get || stage1.wMetasHit(i)) && stage1.meta(i).valid)
+      ).asUInt
     else 0.U(roads.W)
-  val newLine = WireInit(0.U((dataWidth * wordNum).W)) //init
+  val newLine    = WireInit(0.U((dataWidth * wordNum).W)) //init
+  val newLineVec = WireInit(VecInit.fill(wordNum)((0.U.asTypeOf(UWord))))
   if (isDcache) {
     val wordSel = lowAddr.offset >> 2
     val oldWord = Mux(mainState === refill, readBuffer(wordSel), Mux1H(hitMask, readDdata.get))
@@ -182,10 +186,17 @@ class CacheStage2[T <: Data](
           ((wordNum - 1).U -> Cat(newWord, VecInit((0 until wordNum - 1).map(oldLine(_))).asUInt))
       )
     )
+    (0 until wordNum).map(i => newLineVec(i) := newLine((i + 1) * 32 - 1, i * 32))
+    when(VecInit(w1data.map(_.req.valid)).asUInt.orR) {
+      asg(lastWdLine, newLineVec)
+      asg(lastWdWord, newWord)
+    }
   }
-  val newLineVec = Wire(Vec(wordNum, UWord))
-  (0 until wordNum).map(i => newLineVec(i) := newLine((i + 1) * 32 - 1, i * 32))
 
+  if (isDcache) {
+    addSource(w1offset, s"DcacheStage2WriteOffset")
+    addSource(w1Mask, s"DcacheStage2WriteMask")
+  }
   (0 until roads).foreach(i => {
     if (isDcache) {
       addSource(r1data(i), s"DcacheStage2ReadData$i")
@@ -206,23 +217,18 @@ class CacheStage2[T <: Data](
     asg(w1data(i).req.bits.setIdx, lowAddr.index)
     asg(w1meta(i).req.bits.data.tag, inBits.ptag)
     asg(w1meta(i).req.bits.data.valid, true.B)
+    asg(w1offset, lowAddr.offset)
+    asg(w1Mask, dreq.wStrb)
     // icache: refill read, dcache: refill read refill write, hit write
     // when refill read will readbuffer, refill write is newline, write hit is newline
-    if (isDcache) asg(w1data(i).req.bits.data, newLineVec)
-    else asg(w1data(i).req.bits.data, readBuffer)
-    if (isDcache) asg(w1meta(i).req.bits.data.dirty.get, stage1.dCacheReq.get.isWrite)
-    when(w1data(i).req.valid) { asg(lastWdatas(i), w1data(i).req.bits.data) }
-    when(w1meta(i).req.valid) { asg(lastWmetas(i), w1meta(i).req.bits.data) }
-    asg(readMetas(i), Mux(stage1.wMetasHit(i), lastWmetas(i), stage1.meta(i)))
     if (isDcache) {
-      asg(readDdata.get(i), Mux(stage1.wDatasHit(i), selectWord(lowAddr.offset, lastWdatas(i)), stage1.ddata.get(i)))
-      asg(readDataline.get(i), Mux(stage1.wDatasHit(i), lastWdatas(i), stage1.dataline.get(i)))
-    } else {
-      asg(
-        readIdata.get(i),
-        Mux(stage1.wDatasHit(i), selectInstrGroup(lowAddr.offset, lastWdatas(i)), stage1.idata.get(i))
-      )
-    }
+      asg(w1data(i).req.bits.data, newLineVec)
+      asg(w1meta(i).req.bits.data.dirty.get, stage1.dCacheReq.get.isWrite)
+      import BytesWordUtils._
+      val mergeMask = Mux(stage1.lowAddrHit(i), stage1.rawMask, 0.U)
+      asg(readDdata.get(i), mergeWords(lastWdWord, stage1.ddata.get(i), mergeMask))
+      asg(readDataline.get(i), Mux(stage1.wDatasHit(i), lastWdLine, stage1.dataline.get(i)))
+    } else asg(w1data(i).req.bits.data, readBuffer)
   })
   // Default Bus Assign ========================================================
   // >> AR channel =============================================================
@@ -275,10 +281,10 @@ class CacheStage2[T <: Data](
     asg(diffDCache.io.victimWay, victimWay)
     asg(
       diffDCache.io.tagFrom1,
-      VecInit(readMetas.map(m => Cat(m.tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W))))
+      VecInit(stage1.meta.map(m => Cat(m.tag, lowAddr.index, 0.U(lowAddr.offset.getWidth.W))))
     )
-    asg(diffDCache.io.validFrom1, VecInit(readMetas.map(_.valid)))
-    asg(diffDCache.io.dirtyFrom1, VecInit(readMetas.map(_.dirty.get)))
+    asg(diffDCache.io.validFrom1, VecInit(stage1.meta.map(_.valid)))
+    asg(diffDCache.io.dirtyFrom1, VecInit(validDirty.asBools))
     asg(diffDCache.io.wbBuffer, wbBuffer)
     asg(diffDCache.io.wbAddr, wbAddr)
     if (enableCacheInst) {
@@ -322,7 +328,7 @@ class CacheStage2[T <: Data](
             (0 until roads).foreach(i => {
               w1data(i).req.valid     := hitMask(i) && dreq.isWrite
               w1meta(i).req.valid     := hitMask(i) && dreq.isWrite
-              w1meta(i).req.bits.data := dirtyMeta(readMetas(i))
+              w1meta(i).req.bits.data := dirtyMeta(stage1.meta(i))
             })
           }
         }.otherwise { //cache not hit
@@ -373,7 +379,7 @@ class CacheStage2[T <: Data](
         asg(
           wbAddr,
           Cat(
-            LookupUInt(victimWay, (0 until roads).map(i => i.U -> readMetas(i).tag)),
+            LookupUInt(victimWay, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
             lowAddr.index,
             0.U(cOffWid.W)
           )
@@ -424,7 +430,7 @@ class CacheStage2[T <: Data](
         (0 until fetchNum).foreach(i => { outBits.toUser(i) := trans(refillOut(i)) })
       }
       // wait write ok to get next req
-      when(writeState === wIdel) {
+      when(writeState === wIdel && !firstRefillCycle) {
         mainState   := Mux(io.out.fire || !io.in.valid, run, refill)
         io.in.ready := io.out.ready
       }
@@ -577,7 +583,7 @@ class CacheStage2[T <: Data](
         asg(
           wbAddr,
           Cat(
-            LookupUInt(way, (0 until roads).map(i => i.U -> readMetas(i).tag)),
+            LookupUInt(way, (0 until roads).map(i => i.U -> stage1.meta(i).tag)),
             lowAddr.index,
             0.U(cOffWid.W)
           )

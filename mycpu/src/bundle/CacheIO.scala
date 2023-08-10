@@ -34,9 +34,11 @@ class CacheMeta(hasDirty: Boolean = false) extends MycpuBundle {
 class CacheStage1OutIO(roads: Int, wordNum: Int, isDcache: Boolean) extends MycpuBundle {
   val lineBytes = wordNum * 4
 
-  val meta      = Vec(roads, new CacheMeta(isDcache))
-  val wMetasHit = Vec(roads, Bool())
-  val wDatasHit = Vec(roads, Bool())
+  val meta       = Vec(roads, new CacheMeta(isDcache))
+  val wMetasHit  = Vec(roads, Bool())
+  val wDatasHit  = Vec(roads, Bool())
+  val lowAddrHit = Vec(roads, Bool())
+  val rawMask    = UInt(4.W)
   // ICache
   val idata     = if (!isDcache) Some(Vec(roads, Output(Vec(fetchNum, UWord)))) else None
   val iCacheReq = if (!isDcache) Some(new CacheLowAddr(lineBytes)) else None

@@ -52,38 +52,39 @@ class Backend extends MycpuModule {
   val flushBackend      = robOut.flushAll || robOut.mispreFlushBackend //flushBackend = robMisFlushBackend & robFlushALL
 
   /**
-    * 4 FU writeback
-    *   default:malu->0 sAlu->1 lsu->2
-    *   when(!other3 all wb):
-    *      mdu select a channel to wb
-    *      也可以简单点，限定LSU和MDU共用2号写回口
+    * wsrat
+    *   malu/salu write in ro
+    *   lsu write in mem2
+    *   mdu write in exe(when port 3 is not used by lsu)
     */
-  val fuWSrat = Wire(Vec(issueNum, new RATWriteBackIO))
-  (0 until issueNum).map(i => {
-    fuWSrat(i).aDest := fuWb(i).bits.destAregAddr
-    fuWSrat(i).pDest := fuWb(i).bits.wPrf.pDest
-  })
-  //channel：writeBack at most wBNum=3 inst in 1 cycle
-  val wPrf  = Wire(Vec(wBNum, Valid(new WPrfBundle)))
-  val wRob  = Wire(Vec(wBNum, Valid(new WbRobBundle)))
   val wSrat = Wire(Vec(wBNum, Valid(new RATWriteBackIO)))
-  //channel connect
+  wSrat(0) := mAluFU.wSrat
+  wSrat(1) := sAluFU.wSrat
+  wSrat(2) := lsuFU.wSrat //default
+
+  //channel：writeBack at most wBNum=3 inst in 1 cycle
+  val wPrf = Wire(Vec(wBNum, Valid(new WPrfBundle)))
+  val wRob = Wire(Vec(wBNum, Valid(new WbRobBundle)))
   List.tabulate(wBNum)(i => { //WBNUM=3
     val (wen, wBits) = (fuWb(i).valid, fuWb(i).bits)
-    val wSource      = List(wBits.wPrf, wBits.wbRob, fuWSrat(i))
-    val wDest        = List(wPrf(i), wRob(i), wSrat(i))
+    val wSource      = List(wBits.wPrf, wBits.wbRob)
+    val wDest        = List(wPrf(i), wRob(i))
     List.tabulate(wDest.length)(j => {
       asg(wDest(j).bits, wSource(j))
       asg(wDest(j).valid, wen)
     })
     fuWb(i).ready := true.B
   })
-  //for mdu wb
-  val mduWb = mduFU.io.out
-  mduWb.ready := !lsuFU.io.out.valid
-  val mduWBits    = List(mduWb.bits.wPrf, mduWb.bits.wbRob, fuWSrat(3))
+
+  //for mdu wb,be aware of mduWb.ready
+  val mduWSrat = Wire(new RATWriteBackIO)
+  val mduWb    = mduFU.io.out
+  mduWSrat.aDest := mduWb.bits.destAregAddr
+  mduWSrat.pDest := mduWb.bits.wPrf.pDest
+  mduWb.ready    := !lsuFU.io.out.valid && !lsuFU.wSrat.valid
+  val mduWBits    = List(mduWb.bits.wPrf, mduWb.bits.wbRob, mduWSrat)
   val lastChannel = List(wPrf(2), wRob(2), wSrat(2))
-  when(!lsuFU.io.out.valid) {
+  when(!lsuFU.io.out.valid && !lsuFU.wSrat.valid) {
     List.tabulate(mduWBits.length)(i => {
       asg(lastChannel(i).bits, mduWBits(i))
       asg(lastChannel(i).valid, mduWb.valid)
@@ -111,9 +112,9 @@ class Backend extends MycpuModule {
     rsIn.oldestRobIdx := robOut.oldestIdx
     rsIn.stqEmpty     := lsuFU.stqEmpty
     (0 until wBNum).map(j => {
-      val wbPIdx = rsIn.wPrfPIdx(j)
-      asg(wbPIdx.bits, wPrf(j).bits.pDest)
-      asg(wbPIdx.valid, wPrf(j).valid)
+      val wbPIdx = rsIn.wSratPIdx(j)
+      asg(wbPIdx.bits, wSrat(j).bits.pDest)
+      asg(wbPIdx.valid, wSrat(j).valid)
     })
     PipelineConnect(rsIO(i).out, fuIn(i), fuIO(i).roOutFire, flushBackend)
     fuIO(i).flush := flushBackend

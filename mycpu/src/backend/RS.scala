@@ -54,7 +54,7 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
   val io = IO(new Bundle {
     val in = new Bundle {
       val fromDispatcher = Flipped(Decoupled(new RsOutIO(rsKind)))
-      val wPrfPIdx       = Vec(wBNum, Flipped(Valid(PRegIdx)))
+      val wSratPIdx      = Vec(wBNum, Flipped(Valid(PRegIdx)))
       val flush          = Input(Bool()) //mispredict retire,exception,eret
       val oldestRobIdx   = Input(ROBIdx)
       val stqEmpty       = Input(Bool())
@@ -173,15 +173,16 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
     wakeUpReceive.fromSubAluIs := wakeUpSource
     BoringUtils.addSource(wakeUpSource, "sAluIsWakeUp")
   } else if (rsKind == FuType.Lsu) {
-    BoringUtils.addSink(wakeUpReceive.fromSubAluRo, "sAluRoWakeUp")
-    BoringUtils.addSink(wakeUpReceive.fromMainAluRo, "mAluRoWakeUp")
+    //BoringUtils.addSink(wakeUpReceive.fromSubAluRo, "sAluRoWakeUp")
+    //BoringUtils.addSink(wakeUpReceive.fromMainAluRo, "mAluRoWakeUp")
     BoringUtils.addSink(wakeUpReceive.fromLsu, "LsuM1WakeUp")
     //BoringUtils.addSink(wakeUpReceive.fromSubAluIs, "sAluIsWakeUp")
     //BoringUtils.addSink(wakeUpReceive.fromMainAluIs, "mAluIsWakeUp")
-  } else {
-    BoringUtils.addSink(wakeUpReceive.fromSubAluRo, "sAluRoWakeUp")
-    BoringUtils.addSink(wakeUpReceive.fromMainAluRo, "mAluRoWakeUp")
   }
+  // else {
+  //   BoringUtils.addSink(wakeUpReceive.fromSubAluRo, "sAluRoWakeUp")
+  //   BoringUtils.addSink(wakeUpReceive.fromMainAluRo, "mAluRoWakeUp")
+  // }
 
   val wakeUpByPass = List(
     wakeUpReceive.fromMainAluIs,
@@ -275,12 +276,12 @@ class RS(rsKind: FuType.t, rsSize: Int) extends MycpuModule {
       }
     })
   }
-  //listen to wPrfPIdx
+  //listen to wSratPIdx
   val outNeedBp = outBits.mayNeedBp
   val outInPrf  = outBits.inPrf
   List.tabulate(wBNum)(i =>
     List.tabulate(rsSize)(j => {
-      val wprf = io.in.wPrfPIdx(i)
+      val wprf = io.in.wSratPIdx(i)
       val rsB  = rsEntries(j).basic
       val srcs = rsB.pSrcs
       when(wprf.valid && slotsValid(j)) {

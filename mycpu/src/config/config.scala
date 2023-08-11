@@ -56,7 +56,7 @@ trait MycpuParam {
   val decodeNum   = 3
   val renameNum   = 3
   val dispatchNum = 3
-  val wBNum       = 4
+  val wBNum       = 3
   val issueNum    = 4 //should be 4
   val srcDataNum  = 2
   val retireNum   = 3 //should be 4

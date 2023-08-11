@@ -51,65 +51,22 @@ class Backend extends MycpuModule {
   val aluMisPre         = mAluFU.mispre.get
   val flushBackend      = robOut.flushAll || robOut.mispreFlushBackend //flushBackend = robMisFlushBackend & robFlushALL
 
-  //OLD VERSION
-  //ONLY 3 PORTS
-  // /**
-  //   * wsrat
-  //   *   malu/salu write in ro
-  //   *   lsu write in mem2
-  //   *   mdu write in exe(when port 3 is not used by lsu)
-  //   */
-  // val wSrat = Wire(Vec(wBNum, Valid(new RATWriteBackIO)))
-  // wSrat(0) := mAluFU.wSrat
-  // wSrat(1) := sAluFU.wSrat //default
-  // wSrat(2) := lsuFU.wSrat
-
-  // //channel：writeBack at most wBNum=3 inst in 1 cycle
-  // val wPrf = Wire(Vec(wBNum, Valid(new WPrfBundle)))
-  // val wRob = Wire(Vec(wBNum, Valid(new WbRobBundle)))
-  // List.tabulate(wBNum)(i => { //WBNUM=3
-  //   val (wen, wBits) = (fuWb(i).valid, fuWb(i).bits)
-  //   val wSource      = List(wBits.wPrf, wBits.wbRob)
-  //   val wDest        = List(wPrf(i), wRob(i))
-  //   List.tabulate(wDest.length)(j => {
-  //     asg(wDest(j).bits, wSource(j))
-  //     asg(wDest(j).valid, wen)
-  //   })
-  //   fuWb(i).ready := true.B
-  // })
-
-  // //mdu wb use port_1,be aware of mduWb.ready
-  // val mduWSrat = Wire(new RATWriteBackIO)
-  // val mduWb    = mduFU.io.out
-  // mduWSrat.aDest := mduWb.bits.destAregAddr
-  // mduWSrat.pDest := mduWb.bits.wPrf.pDest
-  // mduWb.ready    := !sAluFU.io.out.valid && !sAluFU.wSrat.valid
-  // val mduWBits = List(mduWb.bits.wPrf, mduWb.bits.wbRob, mduWSrat)
-  // val channel1 = List(wPrf(1), wRob(1), wSrat(1))
-  // when(!sAluFU.io.out.valid && !sAluFU.wSrat.valid) {
-  //   List.tabulate(mduWBits.length)(i => {
-  //     asg(channel1(i).bits, mduWBits(i))
-  //     asg(channel1(i).valid, mduWb.valid)
-  //   })
-  // }
-
   /**
-    * NEW VERSION
-    * 4 WB PORTS
-    * 4 FU writeback
-    *   default:malu->0 sAlu->1 lsu->2 mdu->3
+    * OLD VERSION
+    * ONLY 3 PORTS
     */
+  //wsrat:alu in ro,lsu and mdu use port2 when out_valid
   val wSrat = Wire(Vec(wBNum, Valid(new RATWriteBackIO)))
   wSrat(0)            := mAluFU.wSrat
-  wSrat(1)            := sAluFU.wSrat //default
-  wSrat(2)            := lsuFU.wSrat
-  wSrat(3).valid      := fuWb(3).valid
-  wSrat(3).bits.aDest := fuWb(3).bits.destAregAddr
-  wSrat(3).bits.pDest := fuWb(3).bits.wPrf.pDest
-  //prf and rob
+  wSrat(1)            := sAluFU.wSrat
+  wSrat(2).valid      := fuWb(2).valid //default:lsu
+  wSrat(2).bits.aDest := fuWb(2).bits.destAregAddr
+  wSrat(2).bits.pDest := fuWb(2).bits.wPrf.pDest
+
+  //channel：writeBack at most wBNum=3 inst in 1 cycle
   val wPrf = Wire(Vec(wBNum, Valid(new WPrfBundle)))
   val wRob = Wire(Vec(wBNum, Valid(new WbRobBundle)))
-  List.tabulate(wBNum)(i => { //WBNUM=4
+  List.tabulate(wBNum)(i => { //WBNUM=3
     val (wen, wBits) = (fuWb(i).valid, fuWb(i).bits)
     val wSource      = List(wBits.wPrf, wBits.wbRob)
     val wDest        = List(wPrf(i), wRob(i))
@@ -119,6 +76,48 @@ class Backend extends MycpuModule {
     })
     fuWb(i).ready := true.B
   })
+
+  //mdu wb use port_2,be aware of mduWb.ready
+  val mduWSrat = Wire(new RATWriteBackIO)
+  val mduWb    = mduFU.io.out
+  mduWSrat.aDest := mduWb.bits.destAregAddr
+  mduWSrat.pDest := mduWb.bits.wPrf.pDest
+  mduWb.ready    := !lsuFU.io.out.valid
+  val mduWBits = List(mduWb.bits.wPrf, mduWb.bits.wbRob, mduWSrat)
+  val channel2 = List(wPrf(2), wRob(2), wSrat(2))
+  when(!lsuFU.io.out.valid) {
+    List.tabulate(mduWBits.length)(i => {
+      asg(channel2(i).bits, mduWBits(i))
+      asg(channel2(i).valid, mduWb.valid)
+    })
+  }
+
+  /**
+    * NEW VERSION
+    * 4 WB PORTS
+    * 4 FU writeback
+    *   default:malu->0 sAlu->1 lsu->2 mdu->3
+    */
+  // val wSrat = Wire(Vec(wBNum, Valid(new RATWriteBackIO)))
+  // wSrat(0)            := mAluFU.wSrat
+  // wSrat(1)            := sAluFU.wSrat //default
+  // wSrat(2)            := lsuFU.wSrat
+  // wSrat(3).valid      := fuWb(3).valid
+  // wSrat(3).bits.aDest := fuWb(3).bits.destAregAddr
+  // wSrat(3).bits.pDest := fuWb(3).bits.wPrf.pDest
+  // //prf and rob
+  // val wPrf = Wire(Vec(wBNum, Valid(new WPrfBundle)))
+  // val wRob = Wire(Vec(wBNum, Valid(new WbRobBundle)))
+  // List.tabulate(wBNum)(i => { //WBNUM=4
+  //   val (wen, wBits) = (fuWb(i).valid, fuWb(i).bits)
+  //   val wSource      = List(wBits.wPrf, wBits.wbRob)
+  //   val wDest        = List(wPrf(i), wRob(i))
+  //   List.tabulate(wDest.length)(j => {
+  //     asg(wDest(j).bits, wSource(j))
+  //     asg(wDest(j).valid, wen)
+  //   })
+  //   fuWb(i).ready := true.B
+  // })
 
   //dispatcher
   dperIn.fromInstBuffer <> io.in

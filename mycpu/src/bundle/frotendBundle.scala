@@ -274,9 +274,12 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     else None
   val mem =
     if (kind == FuType.Lsu) Some(Output(new Bundle {
-      val cache  = Output(new CacheStage1In(true, DcachLineBytes)) //cache.rwReq.wWord is just src2?
-      val vaddr  = Output(UWord)
-      val isDirC = Output(Bool())
+      val cache    = Output(new CacheStage1In(true, DcachLineBytes)) //cache.rwReq.wWord is just src2?
+      val dirCattr = Output(CCAttr())
+      val isDir    = Output(Bool())
+
+      val carryOut  = Output(Bool())
+      val immOffset = Output(UInt(16.W))
     }))
     else None
 }

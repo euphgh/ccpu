@@ -72,17 +72,26 @@ class MemStage1 extends MycpuModule {
   val sqBits       = sqDecp.bits
   val roBits       = roDecp.bits
   val cModeNext    = RegInit(false.B)
+  val lowAddr      = roBits.rwReq.lowAddr
+  val imm          = SignExt(roBits.immOffset, 32)
+  val vTag         = roBits.srcData(0)(31, 12) + imm(31, 12) + roBits.carryOut
+  val vaddr        = Cat(vTag, lowAddr.index, lowAddr.offset)
+  val dirPaddr     = vaddr & "h1fff_ffff".U
+  val dirPtag      = dirPaddr(31, 12)
+  val isDir        = roBits.isDir
+  val isDirC       = isDir && !CCAttr.isUnCache(roBits.dirCattr.asUInt)
+  val isDirUc      = isDir && CCAttr.isUnCache(roBits.dirCattr.asUInt)
+  val isNextRo     = RegInit(false.B)
+  val dirTlbRes    = TLBSearchRes.dir(roBits.dirCattr, dirPtag)
 
   // TLB =============================================================
-  val vTag   = roBits.vaddr(31, 12)
-  val tlbRes = io.tlb.res
+  val tlbRes = Mux(isDir, dirTlbRes, RegNext(io.tlb.res))
   asg(io.tlb.req.bits, Cat(vTag, 0.U(12.W)))
   io.tlb.req.valid      := roDecp.valid
   toSQbits.stqEnq.pTag  := tlbRes.pTag
   toSQbits.stqEnq.cAttr := tlbRes.ccAttr
   //===================== Exception ===================================
   // only from RoStage has Exception, fromSQ no exception
-  val lowAddr    = roBits.rwReq.lowAddr
   val l2sb       = lowAddr.offset(1, 0)
   val isWriteReq = roBits.rwReq.isWrite
   val tlbExp     = Mux(tlbRes.refill, true.B, Mux(!tlbRes.hit, true.B, Mux(isWriteReq, !tlbRes.dirty, false.B)))
@@ -142,6 +151,8 @@ class MemStage1 extends MycpuModule {
   val sqDecpRdy    = !sqDecp.valid || toMem2.fire
   val roDecpRdy    = !roDecp.valid || toStoreQ.fire
   val storeModeRdy = sqDecpRdy && roDecpRdy
+  when(roDecp.valid) { isNextRo := true.B }
+  when(io.fromRO.fire) { isNextRo := false.B }
   switch(state) {
     is(storeMode) {
       when(nextIsLoad) {
@@ -177,7 +188,7 @@ class MemStage1 extends MycpuModule {
       asg(toC2Bits.dCacheReq.get, sqBits.rwReq)
       if (enableCacheInst) toC2Bits.cacheInst.get.valid := false.B
 
-      toStoreQ.valid := roDecp.valid
+      toStoreQ.valid := roDecp.valid && (isDir || isNextRo)
       // use roBits to StoreQ
       // const assign, not change
     }
@@ -195,7 +206,7 @@ class MemStage1 extends MycpuModule {
         sqFireOut         := false.B
         cache1Update.isSQ := false.B
         cache1Update.req  := false.B
-      }.elsewhen(roBits.isDirC || cModeNext) {
+      }.elsewhen(isDirC || cModeNext) {
         // next
         toMem2.valid   := true.B
         toStoreQ.valid := false.B
@@ -226,8 +237,8 @@ class MemStage1 extends MycpuModule {
         sqFireOut         := false.B
         cache1Update.isSQ := false.B
         cache1Update.req  := false.B
-        state             := Mux(isUncache, ucloadMode, cloadMode)
-        cModeNext         := true.B
+        state             := Mux(isDir || (isNextRo && isUncache), ucloadMode, cloadMode)
+        cModeNext         := isNextRo && !isUncache
       }
     }
     is(ucloadMode) {
@@ -421,6 +432,7 @@ class MemStage1 extends MycpuModule {
   }
   PipelineConnect(io.fromRO, roDecp, roFireOut, io.flush)
   PipelineConnect(io.fromSQ, sqDecp, sqFireOut, false.B)
+  when(io.flush) { isNextRo := false.B }
   when(roFireOut || sqFireOut || io.flush) {
     cModeNext := false.B
   }
@@ -438,7 +450,7 @@ class MemStage1 extends MycpuModule {
     val toICache1 = Wire(Valid(new ICacheInstIO))
     addSource(toICache1, "ICacheInstrReq")
     toICache1.bits.index := cache1.io.out.dCacheReq.get.lowAddr.index
-    toICache1.bits.taglo := roDecp.bits.vaddr
+    toICache1.bits.taglo := vaddr
     toICache1.bits.op    := cio.op
     toICache1.valid      := (state === cInstrGo) && CacheOp.isIop(cio.op) && !cInstrExc
   }

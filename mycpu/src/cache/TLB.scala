@@ -62,13 +62,10 @@ class TLB extends MycpuModule {
     val searchAddr = search(i).req.bits
     dir(i) := ((searchAddr(31, 30) === "b10".U) || erl || !search(i).req.valid)
     // direct result
-    val dirRes = Wire(new TLBSearchRes)
-    dirRes.refill := false.B
-    dirRes.hit    := true.B
-    dirRes.dirty  := true.B
-    asg(dirRes.pTag, getTag(searchAddr & "h1fff_ffff".U(32.W)))
-    dirRes.ccAttr := Mux(searchAddr(29), CCAttr.Uncached, CCAttr.safe(k0)._1)
-
+    val dirRes = TLBSearchRes.dir(
+      Mux(searchAddr(29), CCAttr.Uncached, CCAttr.safe(k0)._1),
+      getTag(searchAddr & "h1fff_ffff".U(32.W))
+    )
     // when not use tlb translate, use tlb for probe
     val reqVpn = Mux(dir(i), entryhiReg.vpn2, search(i).req.bits(31, 13))
     hitMask(i) := VecInit((0 until tlbEntriesNum).map(j => {

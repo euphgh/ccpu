@@ -61,13 +61,15 @@ class Divider extends MycpuModule {
       when(io.in.valid) { state := decode }
     }
     is(decode) {
-      val xCountZero = countFirstOne(x(63, 63 - shiftWidth + 1))
+      val isSub      = x(31, 0) < y1(61, 30)
       val yCountZero = countFirstOne(y1(63, 63 - shiftWidth + 1))
       val cntAdd     = (yCountZero + 1.U) >> 1
       dontTouch(cntAdd)
       dontTouch(yCountZero)
-      dontTouch(xCountZero)
-      when(xCountZero > yCountZero + 1.U) {
+      when(isSub) {
+        state := finish
+        x     := x << 32
+      }.elsewhen(shiftWidth.U > yCountZero + 1.U) {
         state  := shift
         xShift := x << (cntAdd << 1)
       }.otherwise {
@@ -88,8 +90,12 @@ class Divider extends MycpuModule {
         leftCnt := nextLeft
         x       := shiftByBits(x, shiftBits)
         xShift  := shiftByBits(xShift, shiftBits)
-        when(nextLeft === 0.U) { state := finish }
-      }.otherwise { state := work }
+        when(nextLeft === 0.U) {
+          state := finish
+        }.elsewhen(shiftBits < (shiftWidth >> 1).U) {
+          state := work
+        }
+      }.otherwise { assert(false.B) }
     }
     is(work) {
       asg(

@@ -175,7 +175,7 @@ class MemStage1 extends MycpuModule {
         }
       }.otherwise {
         // prev
-        roDecp.ready      := toStoreQ.ready || !roDecp.valid
+        roDecp.ready      := roDecpRdy
         sqDecp.ready      := toMem2.ready || !sqDecp.valid
         cache1Update.isSQ := true.B
         cache1Update.req  := wireSq.fire

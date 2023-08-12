@@ -40,6 +40,7 @@ class MemStage1InIO extends MycpuBundle {
   val cacheInst = if (enableCacheInst) Some(Flipped(Valid(new CacheInstBundle))) else None
   val carryOut  = Output(Bool())
   val immOffset = Output(UInt(16.W))
+  val rLowAddr  = Output(new CacheLowAddr(DcachLineBytes))
   val dirCattr  = CCAttr()
   val isDir     = Bool()
   val debugPC   = if (debug) Some(UWord) else None

@@ -42,6 +42,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1RO.bits.preDstSrc, roOutBits.prevData)
   asg(mem1RO.bits.rwReq, roOutBits.mem.get.cache.rwReq.get)
   asg(mem1RO.bits.immOffset, roOutBits.mem.get.immOffset)
+  asg(mem1RO.bits.rLowAddr, roOutBits.mem.get.lowAddr)
   asg(mem1RO.bits.carryOut, roOutBits.mem.get.carryOut)
   asg(mem1RO.bits.dirCattr, roOutBits.mem.get.dirCattr)
   asg(mem1RO.bits.isDir, roOutBits.mem.get.isDir)

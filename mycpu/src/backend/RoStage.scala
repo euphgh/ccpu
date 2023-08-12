@@ -183,8 +183,11 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     outMem.isDir    := isDir && mustInSeg
     outMem.dirCattr := cattr
 
+    outMem.lowAddr.offset := addrL12sb(DcacheOffsetWidth - 1, 0)
+    outMem.lowAddr.index  := addrL12sb(11, DcacheOffsetWidth)
+
     outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(DcacheOffsetWidth - 1, 0)
-    outMem.cache.rwReq.get.lowAddr.index  := addrL12sb(11, DcacheOffsetWidth)
+    outMem.cache.rwReq.get.lowAddr.index  := outSrcs(0)(11, DcacheOffsetWidth)
     outMem.cache.rwReq.get.isWrite        := inOrigin.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR, SC)
     outMem.cache.rwReq.get.wWord          := outSrcs(1)
     outMem.cache.rwReq.get.size           := DontCare

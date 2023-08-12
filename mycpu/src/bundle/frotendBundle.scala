@@ -276,6 +276,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     if (kind == FuType.Lsu) Some(Output(new Bundle {
       val cache    = Output(new CacheStage1In(true, DcachLineBytes)) //cache.rwReq.wWord is just src2?
       val dirCattr = Output(CCAttr())
+      val lowAddr  = Output(new CacheLowAddr(DcachLineBytes))
       val isDir    = Output(Bool())
 
       val carryOut  = Output(Bool())

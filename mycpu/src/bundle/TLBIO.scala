@@ -18,6 +18,19 @@ class TLBEntry extends MycpuBundle {
   val asid = UInt(8.W)
 }
 
+object TLBSearchRes {
+  def dir(cattr: CCAttr.Type, ptag: UInt) = {
+    val dirRes = Wire(new TLBSearchRes)
+    dirRes.refill := false.B
+    dirRes.hit    := true.B
+    dirRes.dirty  := true.B
+    dirRes.ccAttr := cattr
+    dirRes.pTag   := ptag
+    require(ptag.getWidth == 20)
+    dirRes
+  }
+}
+
 class TLBSearchRes extends MycpuBundle {
   val pTag   = UInt(tagWidth.W)
   val hit    = Bool()

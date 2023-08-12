@@ -58,7 +58,7 @@ class Mdu extends FuncUnit(FuType.Mdu) {
   val multRes = mul.io.out.bits
 
   // divider =========================================================
-  val div   = Module(new Divider)
+  val div   = Module(Divider())
   val divIn = div.io.in.bits
   divIn.isSign := mduType === DIV
   div.io.flush := io.flush

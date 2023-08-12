@@ -662,62 +662,65 @@ class ROB extends MycpuModule {
   }
   import FreeListRecover._
   val flrState = RegInit(FreeListRecover.idle)
-  //new Version
-  //if needed 1-cycle delay recover fl:
-  val remainNum = flrHeadPtr - flrTailPtr
-  val validPDestVec =
-    WireInit(VecInit((0 until retireNum).map(i => flrQueue(dontTouch(flrTailPtr + i.U)).orR && (i.U < remainNum))))
-  val pushFlNum = PopCount(validPDestVec)
-  val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
-  //get selVec
-  val tempValidVec =
-    WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
-  selVec(0) := PriorityEncoder(validPDestVec)
-  (1 until retireNum).map(i => {
-    val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
-    temp(selVec(i - 1)) := false.B
-    tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
-    selVec(i)           := PriorityEncoder(tempValidVec(i))
-  })
-  //valid and bits
-  (0 until retireNum).map { i =>
-    io.out.flRecover(i).valid := i.U < pushFlNum
-    io.out.flRecover(i).bits  := DontCare
-    when(io.out.flRecover(i).valid) {
-      io.out.flRecover(i).bits := flrQueue(dontTouch(flrTailPtr + selVec(i)))
-    }
-  }
-  //flrstate: recover/normal
-  //REG for better frequency
-  val dperRdyReg = RegInit(false.B)
-  when(flrState === recover) {
-    flrTailPtr := Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
-    dperRdyReg := remainNum < (4 * retireNum).U
-    (0 until dispatchNum).foreach(i => {
-      io.in.fromDispatcher(i).ready := dperRdyReg
-    })
-    when(flrHeadPtr === flrTailPtr) {
-      flrState   := idle
-      dperRdyReg := true.B
-    }
-  }.otherwise {
-    flrTailPtr := 0.U
-    flrHeadPtr := retireNum.U
-    dperRdyReg := (robEntries.headIdx - robEntries.tailIdx) < (3 * retireNum).U
-    (0 until retireNum).map(i =>
-      flrQueue(i) := Mux(mRe(i).valid & state =/= exEr, retireReg(i).uOp.prevPDest, 0.U(pRegAddrWidth.W))
-    )
 
-    /**
-      * handle situation in preExEr and preNext
-      *   wrong road inst will be poped(certainly not retire them)if its leading done==true
-      *   when flush,these inst'Pdest can't get in flQueue,so need to recover them in these 2 states
-      *   wrong inst include:
-      *     preExer:exerAndBehind
-      *     preNext:
-      *       ci:behind ci
-      *       mis:if ds exer dsAndBehind,else behindDs
-      */
+  /**
+    * new Version
+    *   use reg for freelist push valid and bits
+    */
+  val pushVReg   = RegInit(VecInit.fill(retireNum)(false.B))
+  val pushBReg   = RegInit(VecInit.fill(retireNum)(0.U(pRegAddrWidth.W)))
+  val dperRdyReg = RegInit(false.B)
+  val flRe       = io.out.flRecover
+  (0 until retireNum).map(i => {
+    flRe(i).valid := pushVReg(i)
+    flRe(i).bits  := pushBReg(i)
+  })
+
+  /**
+    * given a vec of bits(need to be all_0 when unvalid)
+    * gen a pushV and pushB for next cycle
+    *   only not zero bits is valid
+    */
+  def getPushFlVB(bits: Vec[UInt]) = {
+    val validVec  = WireInit(VecInit((0 until retireNum).map(i => bits(i).orR)))
+    val pushFlNum = PopCount(validVec)
+    val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum + 1).W)))
+    val pushV     = WireInit(VecInit((0 until retireNum).map(i => i.U < pushFlNum)))
+    val pushB     = WireInit(VecInit.fill(retireNum)(0.U(pRegAddrWidth.W)))
+    val tempValidVec =
+      WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validVec(j))))))
+    selVec(0) := PriorityEncoder(validVec)
+    (1 until retireNum).map(i => {
+      val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+      temp(selVec(i - 1)) := false.B
+      tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+      selVec(i)           := PriorityEncoder(tempValidVec(i))
+    })
+    (0 until retireNum).map(i => {
+      when(pushV(i)) {
+        pushB(i) := bits(selVec(i))
+      }
+    })
+    (pushB, pushV)
+  }
+
+  /** flr normal state
+    * should handle special situation in robState:(preExEr and preNext)
+    *   wrong road inst will be poped(certainly not retire them)if its leading done==true
+    *   when flush,these inst'Pdest can't get in flQueue,so need to recover them in these 2 states
+    *   wrong inst include:
+    *     preExer:exerAndBehind
+    *     preNext:
+    *       ci:behind ci
+    *       mis:if ds exer dsAndBehind,else behindDs(note that there is no dsWithInt in preNext)
+    */
+  val norP = WireInit(
+    VecInit(
+      (0 until retireNum).map(i => Mux(mRe(i).valid & state =/= exEr, retireReg(i).uOp.prevPDest, 0.U(pRegAddrWidth.W)))
+    )
+  )
+  val getNorVB = getPushFlVB(norP) //when flush, norP is the tail of rob.allPdest
+  when(flrState === idle) {
     val doneVec = WireInit(VecInit((0 until retireNum).map(i => retireReg(i).done)))
     val misIdx  = WireInit(2.U)
     when(firIdxReg + 1.U =/= retireNum.U) {
@@ -732,25 +735,165 @@ class ROB extends MycpuModule {
       (0 until retireNum).map(i => {
         when(i.U >= firIdxReg && (i.U - firIdxReg) >= idx) {
           val mask = !doneVec.asUInt(i, 0).andR
-          flrQueue(i) := Mux(mask, 0.U(pRegAddrWidth.W), retireReg(i).uOp.currPDest)
+          norP(i) := Mux(mask, 0.U(pRegAddrWidth.W), retireReg(i).uOp.currPDest)
         }
       })
     }
-
-    /**
-      * not poped ds is in rob when misflush
-      *   we can't let it get into flrQ(it should only push its prevPdest)
-      *   note that ->dsRetire->misflush only when ds not exEr
-      *     otherwise,it will ->exer->exerflush(get into flrQ and push its curPdest)
-      */
-    when(robEntries.io.flush) {
-      flrTailPtr := robEntries.tailIdx
-      flrHeadPtr := robEntries.headIdx
-      when(state === misFlush & !dsPopReg) { flrTailPtr := robEntries.tailIdx + 1.U }
-      (0 until robNum).foreach(i => { flrQueue(i) := robEntries.allPDest(i) })
-      flrState := recover
-    }
+    pushBReg := getNorVB._1
+    pushVReg := getNorVB._2
   }
+
+  /**
+    * flush
+    * not poped ds is in rob when misflush
+    *   we can't let it get into flrQ(it has pushed its prevPDest in preNext or dsRetire state)
+    *   note that -> misflush only when ds not exEr
+    *     otherwise,it will ->exer->exerflush(ds get into flrQ and push its curPDest)
+    * So,when misFlush,be aware of rob.tailIdx
+    *
+    * recover state
+    * t0:flush
+    *   use rob tail to cal next cycle pushB/pushV
+    *   cal flrQ Ptr and dperRdyReg
+    *   cal flrstate
+    * t1:recover state
+    *   use flrQueue tail to gen next cycle pushB/pushV
+    *   the cycle flrQueue empty,flrstate back to normal
+    */
+  when(robEntries.io.flush) {
+    assert(!multiReVReg.asUInt.orR)
+    val robRealTIdx = WireInit(robEntries.tailIdx)
+    when(state === misFlush & !dsPopReg) { robRealTIdx := robEntries.tailIdx + 1.U }
+    val robLeftNum = robEntries.headIdx - robRealTIdx
+    dperRdyReg := robLeftNum <= ((6 * retireNum).U)
+    flrTailPtr := Mux(robLeftNum < retireNum.U, robEntries.headIdx, robRealTIdx + retireNum.U)
+    flrHeadPtr := robEntries.headIdx
+    (0 until robNum).foreach(i => { flrQueue(i) := robEntries.allPDest(i) })
+    when(robLeftNum > retireNum.U) { flrState := recover }
+    (0 until retireNum).map(i =>
+      norP(i) := Mux(i.U < robLeftNum, robEntries.allPDest(dontTouch(i.U + robRealTIdx)), 0.U(pRegAddrWidth.W))
+    )
+  }
+  when(flrState === recover) {
+    assert(!robEntries.io.flush && !multiReVReg.asUInt.orR)
+    val flrRemainNum   = flrHeadPtr - flrTailPtr
+    val nextFlrTailPtr = Mux(flrRemainNum < retireNum.U, flrTailPtr + flrRemainNum, flrTailPtr + retireNum.U)
+    flrTailPtr := nextFlrTailPtr
+    dperRdyReg := flrRemainNum <= ((6 * retireNum).U)
+    (0 until dispatchNum).foreach(i => { io.in.fromDispatcher(i).ready := dperRdyReg })
+    when(flrHeadPtr === nextFlrTailPtr) { flrState := idle }
+    val recoverP = WireInit(
+      VecInit(
+        (0 until retireNum).map(i =>
+          Mux(i.U < flrRemainNum, flrQueue(dontTouch(flrTailPtr + i.U)), 0.U(pRegAddrWidth.W))
+        )
+      )
+    )
+    val getRecoverVB = getPushFlVB(recoverP)
+    pushBReg := getRecoverVB._1
+    pushVReg := getRecoverVB._2
+  }
+
+  //old Version
+  //if needed 1-cycle delay recover fl:
+  // val remainNum = flrHeadPtr - flrTailPtr
+  // val validPDestVec =
+  //   WireInit(VecInit((0 until retireNum).map(i => flrQueue(dontTouch(flrTailPtr + i.U)).orR && (i.U < remainNum))))
+  // val pushFlNum = PopCount(validPDestVec)
+  // val selVec    = WireInit(VecInit.fill(retireNum)(0.U(log2Up(retireNum).W)))
+  // //get selVec
+  // val tempValidVec =
+  //   WireInit(VecInit.fill(retireNum)(WireInit(VecInit((0 until retireNum).map(j => validPDestVec(j))))))
+  // selVec(0) := PriorityEncoder(validPDestVec)
+  // (1 until retireNum).map(i => {
+  //   val temp = WireInit(VecInit((0 until retireNum).map(j => tempValidVec(i - 1)(j))))
+  //   temp(selVec(i - 1)) := false.B
+  //   tempValidVec(i)     := (tempValidVec(i - 1).asUInt & temp.asUInt).asBools
+  //   selVec(i)           := PriorityEncoder(tempValidVec(i))
+  // })
+  // //valid and bits
+  // (0 until retireNum).map { i =>
+  //   io.out.flRecover(i).valid := i.U < pushFlNum
+  //   io.out.flRecover(i).bits  := DontCare
+  //   when(io.out.flRecover(i).valid) {
+  //     io.out.flRecover(i).bits := flrQueue(dontTouch(flrTailPtr + selVec(i)))
+  //   }
+  // }
+  // //flrstate: recover/normal
+  // //REG for better frequency
+  // val dperRdyReg = RegInit(false.B)
+  // when(flrState === recover) {
+  //   assert(!robEntries.io.flush)
+
+  //   val nextFlrTailPtr = Mux(remainNum < retireNum.U, flrTailPtr + remainNum, flrTailPtr + retireNum.U)
+  //   flrTailPtr := nextFlrTailPtr
+  //   dperRdyReg := remainNum <= (7 * retireNum).U
+  //   (0 until dispatchNum).foreach(i => { io.in.fromDispatcher(i).ready := dperRdyReg })
+
+  //   when(flrHeadPtr === nextFlrTailPtr) {
+  //     flrState   := idle
+  //     flrTailPtr := 0.U
+  //     flrHeadPtr := retireNum.U
+  //     (0 until retireNum).map(i =>
+  //       flrQueue(i) := Mux(mRe(i).valid & state =/= exEr, retireReg(i).uOp.prevPDest, 0.U(pRegAddrWidth.W))
+  //     )
+  //   }.otherwise {
+  //     assert(!multiReVReg.asUInt.orR)
+  //   }
+  // }.otherwise {
+  //   //normal state
+  //   flrTailPtr := 0.U
+  //   flrHeadPtr := retireNum.U
+  //   (0 until retireNum).map(i =>
+  //     flrQueue(i) := Mux(mRe(i).valid & state =/= exEr, retireReg(i).uOp.prevPDest, 0.U(pRegAddrWidth.W))
+  //   )
+
+  //   /**
+  //     * handle situation in preExEr and preNext
+  //     *   wrong road inst will be poped(certainly not retire them)if its leading done==true
+  //     *   when flush,these inst'Pdest can't get in flQueue,so need to recover them in these 2 states
+  //     *   wrong inst include:
+  //     *     preExer:exerAndBehind
+  //     *     preNext:
+  //     *       ci:behind ci
+  //     *       mis:if ds exer dsAndBehind,else behindDs
+  //     */
+  //   val doneVec = WireInit(VecInit((0 until retireNum).map(i => retireReg(i).done)))
+  //   val misIdx  = WireInit(2.U)
+  //   when(firIdxReg + 1.U =/= retireNum.U) {
+  //     val ds = retireReg(firIdxReg + 1.U)
+  //     when(ds.done && (ds.exception.detect.happen | ds.uOp.specialType === SpecialType.ERET)) {
+  //       misIdx := 1.U
+  //     }
+  //   }
+  //   val idx =
+  //     Mux(state === preExEr, 0.U, Mux(retireReg(firIdxReg).isMispredict, misIdx, 1.U))
+  //   when(state === preExEr | state === preNext) {
+  //     (0 until retireNum).map(i => {
+  //       when(i.U >= firIdxReg && (i.U - firIdxReg) >= idx) {
+  //         val mask = !doneVec.asUInt(i, 0).andR
+  //         flrQueue(i) := Mux(mask, 0.U(pRegAddrWidth.W), retireReg(i).uOp.currPDest)
+  //       }
+  //     })
+  //   }
+
+  //   /**
+  //     * not poped ds is in rob when misflush
+  //     *   we can't let it get into flrQ(it should only push its prevPdest)
+  //     *   note that ->dsRetire->misflush only when ds not exEr
+  //     *     otherwise,it will ->exer->exerflush(get into flrQ and push its curPdest)
+  //     */
+  //   when(robEntries.io.flush) {
+  //     assert(!multiReVReg.asUInt.orR)
+  //     val realRobTail = WireInit(robEntries.tailIdx)
+  //     dperRdyReg := (robEntries.headIdx - realRobTail) <= (6 * retireNum).U
+  //     flrTailPtr := realRobTail
+  //     flrHeadPtr := robEntries.headIdx
+  //     when(state === misFlush & !dsPopReg) { realRobTail := robEntries.tailIdx + 1.U }
+  //     (0 until robNum).foreach(i => { flrQueue(i) := robEntries.allPDest(i) })
+  //     flrState := recover
+  //   }
+  // }
 
   //DiffTest ===================================================
   import difftest.DifftestInstrCommit

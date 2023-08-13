@@ -181,21 +181,23 @@ class MemStage1 extends MycpuModule {
       when(nextIsLoad) {
         // prev
         when(storeModeRdy) {
-          roDecp.ready     := true.B
-          sqDecp.ready     := false.B
-          cache1Update.req := true.B
-          state            := cloadMode
-          roFireOut        := toStoreQ.fire
-          sqFireOut        := toMem2.fire
+          roDecp.ready := true.B
+          sqDecp.ready := false.B
+          state        := cloadMode
+          roFireOut    := toStoreQ.fire
+          sqFireOut    := toMem2.fire
         }.otherwise {
-          roDecp.ready     := false.B
-          sqDecp.ready     := !sqDecp.valid
-          cache1Update.req := wireSq.fire
-          roFireOut        := toStoreQ.fire
-          sqFireOut        := toMem2.fire
+          roDecp.ready := false.B
+          sqDecp.ready := !sqDecp.valid
+          roFireOut    := toStoreQ.fire
+          sqFireOut    := toMem2.fire
         }
-        cache1Update.which := useRO
-        when(!sqDecp.valid && roDecp.valid && !toStoreQ.ready) { cache1Update.which := useSQ }
+        cache1Update.req   := wireSq.fire || wireRo.fire
+        cache1Update.which := Mux(wireSq.fire, useSQ, useRO)
+        when(io.fromSQ.fire) {
+          assert(cache1Update.which === useSQ)
+          assert(cache1Update.req === true.B)
+        }
       }.otherwise {
         // prev
         roDecp.ready       := roDecpRdy

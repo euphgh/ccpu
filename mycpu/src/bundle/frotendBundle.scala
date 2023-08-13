@@ -5,6 +5,7 @@ import chisel3.util._
 import config._
 import cache._
 import decodemacro.MacroDecode
+import backend.mem.IndexPredictor
 
 /*==================== SOME BASIC BUNDLE ====================*/
 
@@ -175,6 +176,7 @@ class RsOutIO(kind: FuType.t) extends MycpuBundle {
   val c0Addr    = if (kind == FuType.Mdu) Some(Output(CP0Idx)) else None
   val immOffset = if (kind == FuType.Lsu || kind == FuType.SubAlu) Some(Output(UInt(immWidth.W))) else None
   val cacheOp   = if (kind == FuType.Lsu) Some(Output(CacheOp())) else None
+  val pcVal     = if (kind == FuType.Lsu) Some(Output(UWord)) else None
   val mAluExtra =
     if (kind == FuType.MainAlu) Some(new Bundle {
       val pcVal         = Output(UWord) //用于updateBpu.pc 以及计算 dsPc
@@ -276,8 +278,10 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
     if (kind == FuType.Lsu) Some(Output(new Bundle {
       val cache    = Output(new CacheStage1In(true, DcachLineBytes)) //cache.rwReq.wWord is just src2?
       val dirCattr = Output(CCAttr())
-      val lowAddr  = Output(new CacheLowAddr(DcachLineBytes))
+      val rLowAddr = Output(new CacheLowAddr(DcachLineBytes))
+      val mipOut   = Valid(new IndexPredictor.MIPOutIO)
       val isDir    = Output(Bool())
+      val pcVal    = Output(UWord)
 
       val carryOut  = Output(Bool())
       val immOffset = Output(UInt(16.W))

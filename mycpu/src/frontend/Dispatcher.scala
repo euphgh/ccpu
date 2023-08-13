@@ -524,6 +524,7 @@ class Dispatcher extends MycpuModule {
         asg(toRs(i).bits.immOffset.get, imm)
         asg(toRsBits.uOp.memType.get, thisSlot.decoded.memType)
         asg(toRsBits.cacheOp.get, CacheOp.safe(instr(20, 16))._1)
+        asg(toRsBits.pcVal.get, thisSlot.inst.basicInstInfo.pcVal)
       }
       if (rsKind(i) == FuType.SubAlu) {
         val instr = thisSlot.inst.basicInstInfo.instr

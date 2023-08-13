@@ -1,4 +1,4 @@
-package backend
+package backend.mem
 import bundle._
 import config._
 import chisel3._
@@ -9,6 +9,7 @@ import chisel3.util.experimental.BoringUtils._
 import utils.StoreQUtils._
 import utils._
 import frontend.RATWriteBackIO
+import backend.mem.{Mem1ToStqIO, QuerySQ, StoreQIO}
 
 class StoreQueue(entries: Int) extends MycpuModule {
   val io = IO(new Bundle {

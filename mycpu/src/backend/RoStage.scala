@@ -8,6 +8,8 @@ import chisel3.util.experimental.BoringUtils
 import utils._
 import utils.BytesWordUtils._
 import frontend.RATWriteBackIO
+import backend.mem.IndexPredictor
+import difftest.DifftestMemIndex
 
 /**
   * prfData is read in "Backend",connect to io.in
@@ -169,6 +171,19 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val belowUppBound = !outSrcs(0)(28, 15).andR
     val mustInSeg     = aboveLowBound && belowUppBound
 
+    // DCache Index Predictor ===================================
+    val mipWIO = Wire(Flipped(Valid(new IndexPredictor.WriteIO)))
+    BoringUtils.addSink(mipWIO, "MIP_WRITE_IO")
+    val mip = Module(new IndexPredictor)
+    mip.io.readReq := inOrigin.pcVal.get
+    mip.io.writeReq <> mipWIO
+    val mipRes = mip.io.readRes
+    asg(outMem.mipOut, mipRes)
+    // val toCacheIdx = outSrcs(0)(11, DcacheOffsetWidth)
+    val toCacheIdx = Mux(mipRes.valid, mipRes.bits.idx, outSrcs(0)(11, DcacheOffsetWidth))
+    // val toCacheIdx = Mux(mipRes.valid && mipRes.bits.cnt > 1.U, mipRes.bits.idx, outSrcs(0)(11, DcacheOffsetWidth))
+    outMem.pcVal := inOrigin.pcVal.get
+
     // in perf and func, no tlb, move dir in here
     import cop.{config0, status}
     val statusReg  = Wire(new status)
@@ -183,11 +198,32 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     outMem.isDir    := isDir && mustInSeg
     outMem.dirCattr := cattr
 
-    outMem.lowAddr.offset := addrL12sb(DcacheOffsetWidth - 1, 0)
-    outMem.lowAddr.index  := addrL12sb(11, DcacheOffsetWidth)
+    outMem.rLowAddr.offset := addrL12sb(DcacheOffsetWidth - 1, 0)
+    outMem.rLowAddr.index  := addrL12sb(11, DcacheOffsetWidth)
+
+    if (verilator) {
+      val diffMemIdx = Module(new DifftestMemIndex)
+      diffMemIdx.io.clock := clock
+      diffMemIdx.io.en    := io.out.fire || mip.io.writeReq.valid
+      // read
+      diffMemIdx.io.realIdx := outMem.rLowAddr.index
+      diffMemIdx.io.predIdx := toCacheIdx
+      diffMemIdx.io.readIdx := mip.io.readRes.bits.idx
+      diffMemIdx.io.pc      := inOrigin.pcVal.get
+      diffMemIdx.io.find    := mip.io.readRes.valid
+      diffMemIdx.io.cnt     := mip.io.readRes.bits.cnt
+      diffMemIdx.io.ren     := io.out.fire
+      // write
+      diffMemIdx.io.writeWen := mip.io.writeReq.valid
+      diffMemIdx.io.wPC      := mip.io.writeReq.bits.pc
+      diffMemIdx.io.wIndex   := mip.io.writeReq.bits.wData.idx
+      diffMemIdx.io.wCnt     := mip.io.writeReq.bits.wData.cnt
+      diffMemIdx.io.idxMatch := mip.io.writeReq.bits.idxMatch
+      diffMemIdx.io.tagMatch := mip.io.writeReq.bits.tagMatch
+    }
 
     outMem.cache.rwReq.get.lowAddr.offset := addrL12sb(DcacheOffsetWidth - 1, 0)
-    outMem.cache.rwReq.get.lowAddr.index  := outSrcs(0)(11, DcacheOffsetWidth)
+    outMem.cache.rwReq.get.lowAddr.index  := toCacheIdx
     outMem.cache.rwReq.get.isWrite        := inOrigin.uOp.memType.get.isOneOf(SB, SH, SW, SWL, SWR, SC)
     outMem.cache.rwReq.get.wWord          := outSrcs(1)
     outMem.cache.rwReq.get.size           := DontCare

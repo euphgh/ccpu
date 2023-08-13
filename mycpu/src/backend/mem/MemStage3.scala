@@ -1,4 +1,4 @@
-package backend
+package backend.mem
 
 import config._
 import chisel3._
@@ -7,6 +7,7 @@ import utils._
 import utils.BytesWordUtils._
 import bundle._
 import MemType._
+import backend.mem.WriteBackIO
 
 class MemStage2OutIO extends MycpuBundle {
   val wbInfo     = new WriteBackIO

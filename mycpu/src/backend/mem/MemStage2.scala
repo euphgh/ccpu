@@ -1,4 +1,4 @@
-package backend
+package backend.mem
 
 import bundle._
 import config._
@@ -9,6 +9,8 @@ import utils._
 import utils.BytesWordUtils._
 import difftest.DifftestUartBuffer
 import frontend.RATWriteBackIO
+import backend.mem.{MemStage1OutIO, QuerySQ}
+import backend.mem.MemStage2OutIO
 
 /**
   * pass abort signal to cacheStage2 in this stage:in.wbRob.exception

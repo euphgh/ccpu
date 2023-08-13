@@ -1,4 +1,4 @@
-package backend
+package backend.mem
 import bundle._
 import config._
 import chisel3._
@@ -7,6 +7,8 @@ import cache._
 import utils._
 import chisel3.util.experimental.BoringUtils._
 import chisel3.util.experimental.BoringUtils
+import backend.mem.{Mem1ToStqIO, MemStage1InIO, MemStage1OutIO, StoreQIO, WriteBackIO}
+import frontend.LocHisTab
 
 /**
   * for now,no load inst wake up
@@ -84,13 +86,23 @@ class MemStage1 extends MycpuModule {
   val isDirC       = isDir && !CCAttr.isUnCache(roBits.dirCattr.asUInt)
   val isDirUc      = isDir && CCAttr.isUnCache(roBits.dirCattr.asUInt)
   val dirTlbRes    = TLBSearchRes.dir(roBits.dirCattr, dirPtag)
-  val idxMiss      = roBits.srcData(0)(DcacheIndexWidth + DcacheOffsetWidth - 1, DcacheOffsetWidth) =/= realLAddr.index
+  val idxMiss      = predictLAddr.index =/= realLAddr.index
   val tlbStable    = isDir || tlbFinish
   val idxStable    = !idxMiss || reCacheOK
   val reCacheRW    = Wire(new CacheRWReq(DcachLineBytes))
   reCacheRW                := roDecp.bits.rwReq
   reCacheRW.lowAddr.index  := vaddr(DcacheIndexWidth + DcacheOffsetWidth - 1, DcacheOffsetWidth)
   reCacheRW.lowAddr.offset := vaddr(DcacheOffsetWidth - 1, 0)
+
+  // Mem Index Predict ==============================================
+  val mipWIO = Wire(Flipped(Valid(new IndexPredictor.WriteIO)))
+  BoringUtils.addSource(mipWIO, "MIP_WRITE_IO")
+  asg(mipWIO.valid, RegNext(io.fromRO.fire && !io.flush))
+  asg(mipWIO.bits.pc, roBits.pcVal)
+  asg(mipWIO.bits.wData.idx, realLAddr.index)
+  asg(mipWIO.bits.wData.cnt, roBits.mipOut.bits.cnt)
+  asg(mipWIO.bits.idxMatch, realLAddr.index === roBits.mipOut.bits.idx)
+  asg(mipWIO.bits.tagMatch, roBits.mipOut.valid)
 
   // TLB =============================================================
   val tlbRes = Mux(isDir, dirTlbRes, RegNext(io.tlb.res))

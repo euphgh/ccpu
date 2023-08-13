@@ -8,6 +8,7 @@ import utils._
 import chisel3.util._
 import chisel3.util.experimental.BoringUtils._
 import frontend.RATWriteBackIO
+import backend.mem._
 
 class Lsu extends FuncUnit(FuType.Lsu) {
   val tlb          = IO(new TLBSearchIO)
@@ -40,9 +41,11 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1RO.bits.memType, roOutBits.uOp.memType.get)
   asg(mem1RO.bits.srcData, roOutBits.srcData)
   asg(mem1RO.bits.preDstSrc, roOutBits.prevData)
+  asg(mem1RO.bits.pcVal, roOutBits.mem.get.pcVal)
   asg(mem1RO.bits.rwReq, roOutBits.mem.get.cache.rwReq.get)
   asg(mem1RO.bits.immOffset, roOutBits.mem.get.immOffset)
-  asg(mem1RO.bits.rLowAddr, roOutBits.mem.get.lowAddr)
+  asg(mem1RO.bits.rLowAddr, roOutBits.mem.get.rLowAddr)
+  asg(mem1RO.bits.mipOut, roOutBits.mem.get.mipOut)
   asg(mem1RO.bits.carryOut, roOutBits.mem.get.carryOut)
   asg(mem1RO.bits.dirCattr, roOutBits.mem.get.dirCattr)
   asg(mem1RO.bits.isDir, roOutBits.mem.get.isDir)

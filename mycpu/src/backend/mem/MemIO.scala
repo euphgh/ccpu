@@ -1,4 +1,4 @@
-package backend
+package backend.mem
 import chisel3._
 import chisel3.util._
 import cache._
@@ -41,8 +41,10 @@ class MemStage1InIO extends MycpuBundle {
   val carryOut  = Output(Bool())
   val immOffset = Output(UInt(16.W))
   val rLowAddr  = Output(new CacheLowAddr(DcachLineBytes))
+  val mipOut    = Flipped(Valid(new IndexPredictor.MIPOutIO))
   val dirCattr  = CCAttr()
   val isDir     = Bool()
+  val pcVal     = UWord
   val debugPC   = if (debug) Some(UWord) else None
 }
 

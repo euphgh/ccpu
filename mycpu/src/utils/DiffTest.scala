@@ -5,6 +5,7 @@ import chisel3.util._
 import chisel3.reflect._
 import chisel3.experimental.ExtModule
 import config.MycpuParam
+import backend.mem.UartBuffer
 
 trait DifftestWithClock {
   val clock = Input(Clock())
@@ -59,8 +60,26 @@ class DiffArchHiloIO extends DifftestBundle {
   val lo = Input(UInt(32.W))
 }
 
+class DiffMemIndexIO extends DifftestBundle with MycpuParam {
+  // read
+  val ren     = Input(Bool())
+  val pc      = Input(UWord)
+  val realIdx = Input(UInt(DcacheIndexWidth.W))
+  val predIdx = Input(UInt(DcacheIndexWidth.W))
+  val readIdx = Input(UInt(DcacheIndexWidth.W))
+  val find    = Input(Bool())
+  val cnt     = Input(UInt(2.W))
+  // write
+  val writeWen = Input(Bool())
+  val wPC      = Input(UWord)
+  val wIndex   = Input(UInt(DcacheIndexWidth.W))
+  val wCnt     = Input(UInt(2.W))
+  val idxMatch = Input(Bool())
+  val tagMatch = Input(Bool())
+}
+
 class DiffUartBufferIO extends DifftestBundle {
-  import backend.UartBuffer._
+  import backend.mem.UartBuffer._
   val curGroup = Input(UInt((log2Ceil(totalNum / burstLen)).W))
   val curFew   = Input(UInt(burstWid.W))
   val enqFire  = Input(Bool())
@@ -318,3 +337,4 @@ class DifftestArchRAS extends DifftestBaseModule(new DiffArchRASIO)
 class DifftestLHTRead extends DifftestBaseModule(new DiffLHTReadIO)
 class DifftestBCache extends DifftestBaseModule(new DiffBCacheIO)
 class DifftestUartBuffer extends DifftestBaseModule(new DiffUartBufferIO)
+class DifftestMemIndex extends DifftestBaseModule(new DiffMemIndexIO)

@@ -190,9 +190,9 @@ class MemStage1 extends MycpuModule {
           sqFireOut          := toMem2.fire
         }.otherwise {
           roDecp.ready       := false.B
-          sqDecp.ready       := toMem2.ready || !sqDecp.valid
-          cache1Update.which := useSQ
-          cache1Update.req   := wireSq.fire
+          sqDecp.ready       := false.B
+          cache1Update.which := DontCare
+          cache1Update.req   := false.B
           roFireOut          := toStoreQ.fire
           sqFireOut          := toMem2.fire
         }

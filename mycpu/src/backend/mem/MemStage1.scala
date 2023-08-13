@@ -263,12 +263,12 @@ class MemStage1 extends MycpuModule {
       }.otherwise {
         toMem2.valid       := false.B
         toStoreQ.valid     := false.B
-        sqDecp.ready       := true.B
+        sqDecp.ready       := false.B
         roDecp.ready       := false.B
         roFireOut          := false.B // must can not
         sqFireOut          := false.B
-        cache1Update.which := useSQ
-        cache1Update.req   := wireSq.fire
+        cache1Update.which := DontCare
+        cache1Update.req   := false.B
         state              := ucloadMode
       }
     }
@@ -278,18 +278,16 @@ class MemStage1 extends MycpuModule {
       val isOldest = io.oldestRobIdx === wbRobIdx
       when(io.stqEmpty && isOldest) {
         // prev
-        roDecp.ready := toMem2.ready
-        sqDecp.ready := toMem2.ready
+        roDecp.ready := false.B
+        sqDecp.ready := false.B
         // next
-        toMem2.valid   := true.B
-        toStoreQ.valid := false.B
-        roFireOut      := toMem2.fire
-        sqFireOut      := false.B
-        when(toMem2.fire) {
-          state              := Mux(nextIsLoad, cloadMode, storeMode)
-          cache1Update.which := Mux(nextIsLoad, useRO, useSQ)
-          cache1Update.req   := true.B
-        }
+        toMem2.valid       := true.B
+        toStoreQ.valid     := false.B
+        roFireOut          := toMem2.fire
+        sqFireOut          := false.B
+        cache1Update.which := DontCare
+        cache1Update.req   := false.B
+        when(toMem2.fire) { state := storeMode }
       }.otherwise {
         // prev
         cache1Update.which := useSQ
@@ -327,20 +325,11 @@ class MemStage1 extends MycpuModule {
       roFireOut      := true.B
       sqFireOut      := false.B // for not sq valid
       // prev
-      when(nextIsLoad) {
-        // state not change
-        cache1Update.req   := wireRo.fire
-        cache1Update.which := useRO
-        roDecp.ready       := toMem2.ready
-        sqDecp.ready       := false.B
-        state              := cloadMode
-      }.otherwise {
-        cache1Update.req   := wireSq.fire
-        cache1Update.which := useSQ
-        roDecp.ready       := toMem2.ready
-        sqDecp.ready       := toMem2.ready
-        state              := storeMode
-      }
+      cache1Update.req   := false.B
+      cache1Update.which := DontCare
+      roDecp.ready       := false.B
+      sqDecp.ready       := false.B
+      state              := storeMode
     }
   }
   when(io.flush) {

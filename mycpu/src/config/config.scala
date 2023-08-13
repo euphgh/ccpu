@@ -8,8 +8,8 @@ trait MycpuParam {
   val DcachLineBytes   = 64
   val basicBpuIdxWidth = 6
 
-  val IcachRoads       = 3
-  val DcachRoads       = 3
+  val IcachRoads       = 2
+  val DcachRoads       = 2
   val retAddrStackSize = 8
   val storeQSize       = 8
   val tlbEntriesNum    = 4

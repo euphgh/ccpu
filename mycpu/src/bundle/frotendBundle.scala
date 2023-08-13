@@ -282,6 +282,7 @@ class ReadOpStageOutIO(kind: FuType.t) extends MycpuBundle {
       val mipOut   = Valid(new IndexPredictor.MIPOutIO)
       val isDir    = Output(Bool())
       val pcVal    = Output(UWord)
+      val idxMiss  = Output(Bool())
 
       val carryOut  = Output(Bool())
       val immOffset = Output(UInt(16.W))

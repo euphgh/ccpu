@@ -200,6 +200,7 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
 
     outMem.rLowAddr.offset := addrL12sb(DcacheOffsetWidth - 1, 0)
     outMem.rLowAddr.index  := addrL12sb(11, DcacheOffsetWidth)
+    asg(outMem.idxMiss, addrL12sb(11, DcacheOffsetWidth) =/= toCacheIdx)
 
     if (verilator) {
       val diffMemIdx = Module(new DifftestMemIndex)

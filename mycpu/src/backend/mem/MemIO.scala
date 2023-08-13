@@ -42,6 +42,7 @@ class MemStage1InIO extends MycpuBundle {
   val immOffset = Output(UInt(16.W))
   val rLowAddr  = Output(new CacheLowAddr(DcachLineBytes))
   val mipOut    = Flipped(Valid(new IndexPredictor.MIPOutIO))
+  val idxMiss   = Output(Bool())
   val dirCattr  = CCAttr()
   val isDir     = Bool()
   val pcVal     = UWord

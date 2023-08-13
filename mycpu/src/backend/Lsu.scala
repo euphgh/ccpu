@@ -49,6 +49,7 @@ class Lsu extends FuncUnit(FuType.Lsu) {
   asg(mem1RO.bits.carryOut, roOutBits.mem.get.carryOut)
   asg(mem1RO.bits.dirCattr, roOutBits.mem.get.dirCattr)
   asg(mem1RO.bits.isDir, roOutBits.mem.get.isDir)
+  asg(mem1RO.bits.idxMiss, roOutBits.mem.get.idxMiss)
   asg(mem1RO.bits.cacheInst.get, roOutBits.mem.get.cache.cacheInst.get)
   asg(mem1SQ.bits.pTag, deqSQ.bits.pTag)
   asg(mem1SQ.bits.cAttr, deqSQ.bits.cAttr)

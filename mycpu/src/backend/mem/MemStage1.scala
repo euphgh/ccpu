@@ -76,7 +76,6 @@ class MemStage1 extends MycpuModule {
   val reCacheOK    = RegInit(false.B)
   val tlbFinish    = RegInit(false.B)
   val realLAddr    = roBits.rLowAddr
-  val predictLAddr = roBits.rwReq.lowAddr
   val imm          = SignExt(roBits.immOffset, 32)
   val vTag         = roBits.srcData(0)(31, 12) + imm(31, 12) + roBits.carryOut
   val vaddr        = Cat(vTag, realLAddr.index, realLAddr.offset)
@@ -86,7 +85,7 @@ class MemStage1 extends MycpuModule {
   val isDirC       = isDir && !CCAttr.isUnCache(roBits.dirCattr.asUInt)
   val isDirUc      = isDir && CCAttr.isUnCache(roBits.dirCattr.asUInt)
   val dirTlbRes    = TLBSearchRes.dir(roBits.dirCattr, dirPtag)
-  val idxMiss      = predictLAddr.index =/= realLAddr.index
+  val idxMiss      = roBits.idxMiss
   val tlbStable    = isDir || tlbFinish
   val idxStable    = !idxMiss || reCacheOK
   val reCacheRW    = Wire(new CacheRWReq(DcachLineBytes))
@@ -237,7 +236,7 @@ class MemStage1 extends MycpuModule {
         roDecp.ready       := false.B
         roFireOut          := false.B // must can not
         sqFireOut          := false.B
-        cache1Update.which := false.B
+        cache1Update.which := DontCare
         cache1Update.req   := false.B
       }.elsewhen(!isUncache) {
         // next
@@ -451,12 +450,9 @@ class MemStage1 extends MycpuModule {
   //======================== Cache Stage 1 ============================
   val cache1 = Module(new CacheStage1(DcachRoads, DcachLineBytes, true))
   cache1.io.in.valid := cache1Update.req
-  cache1.io.in.bits.rwReq.get := Mux1H(
-    Seq(
-      (cache1Update.which === useSQ)   -> wireSq.bits.rwReq,
-      (cache1Update.which === useRO)   -> wireRo.bits.rwReq,
-      (cache1Update.which === useSelf) -> reCacheRW
-    )
+  cache1.io.in.bits.rwReq.get := MuxCase(
+    wireSq.bits.rwReq,
+    Seq((cache1Update.which === useRO) -> wireRo.bits.rwReq, (cache1Update.which === useSelf) -> reCacheRW)
   )
 
   // to mem2

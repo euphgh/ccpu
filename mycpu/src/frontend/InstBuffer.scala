@@ -35,7 +35,7 @@ class InstBuffer extends MycpuModule {
     val flush = Input(Bool())
   })
   // sub decode ==================================================
-  val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 16, true))
+  val ib = Module(new MultiQueue(fetchNum, decodeNum, new InstBufferEntry, 8, true))
 
   // avoid icReq(if1) -> iCache data out(if2) -> instbuffer full ->
   // dispatch lsu -> lsu wait iCache instr finish

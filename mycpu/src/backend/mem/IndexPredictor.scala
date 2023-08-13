@@ -8,7 +8,7 @@ import utils._
 import frontend.LocHisTab
 
 object IndexPredictor {
-  val mipIdxWidth: Int = 6
+  val mipIdxWidth: Int = 5
   val mipTagWidth: Int = 32 - mipIdxWidth - 2
   import MycpuObject.DcacheIndexWidth
   def DCacheIdx = UInt(DcacheIndexWidth.W)

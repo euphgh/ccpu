@@ -180,8 +180,8 @@ class RoStage(fuKind: FuType.t) extends MycpuModule {
     val mipRes = mip.io.readRes
     asg(outMem.mipOut, mipRes)
     // val toCacheIdx = outSrcs(0)(11, DcacheOffsetWidth)
-    val toCacheIdx = Mux(mipRes.valid, mipRes.bits.idx, outSrcs(0)(11, DcacheOffsetWidth))
-    // val toCacheIdx = Mux(mipRes.valid && mipRes.bits.cnt > 1.U, mipRes.bits.idx, outSrcs(0)(11, DcacheOffsetWidth))
+    // val toCacheIdx = Mux(mipRes.valid, mipRes.bits.idx, outSrcs(0)(11, DcacheOffsetWidth))
+    val toCacheIdx = Mux(mipRes.valid && mipRes.bits.cnt > 1.U, mipRes.bits.idx, outSrcs(0)(11, DcacheOffsetWidth))
     outMem.pcVal := inOrigin.pcVal.get
 
     // in perf and func, no tlb, move dir in here

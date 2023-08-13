@@ -96,12 +96,14 @@ class MemStage1 extends MycpuModule {
 
   // Mem Index Predict ==============================================
   val mipWIO = Wire(Flipped(Valid(new IndexPredictor.WriteIO)))
+  val useMIP = roBits.mipOut.valid && roBits.mipOut.bits.cnt > 1.U
+  val cntAdd = (useMIP && !idxMiss) || (!useMIP && idxMiss)
   BoringUtils.addSource(mipWIO, "MIP_WRITE_IO")
   asg(mipWIO.valid, RegNext(io.fromRO.fire && !io.flush))
   asg(mipWIO.bits.pc, roBits.pcVal)
   asg(mipWIO.bits.wData.idx, realLAddr.index)
   asg(mipWIO.bits.wData.cnt, roBits.mipOut.bits.cnt)
-  asg(mipWIO.bits.idxMatch, realLAddr.index === roBits.mipOut.bits.idx)
+  asg(mipWIO.bits.idxMatch, cntAdd)
   asg(mipWIO.bits.tagMatch, roBits.mipOut.valid)
 
   // TLB =============================================================

@@ -135,7 +135,7 @@ class MemStage2 extends MycpuModule {
 }
 
 object UartBuffer {
-  val totalNum = 4096
+  val totalNum = 32
   val idleMax  = 1024
   val ubId     = 3
   val burstLen = 16

@@ -153,7 +153,7 @@ class IfStage2 extends MycpuModule {
     asg(frontPreDiff.io.en, io.out.fire)
   }
 
-  val bpuWQ = Module(new Queue(gen = new BtbWIO, entries = 4, hasFlush = false))
+  val bpuWQ = Module(new Queue(gen = new BtbWIO, entries = 2, hasFlush = false))
   asg(bpuWQ.io.enq.valid, io.out.fire)
   asg(bpuWQ.io.enq.bits.tagIdx, outBits.basicInstInfo(0).pcVal(31, instrOffMsb + 1))
   asg(bpuWQ.io.enq.bits.instrOff, VecInit(outBits.basicInstInfo.map(_.pcVal(instrOffMsb, instrOffLsb))))

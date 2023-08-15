@@ -166,7 +166,7 @@ class UartBuffer extends MycpuModule {
     val dram = new DramWriteIO
   })
   import UartBuffer._
-  val buf = Module(new Queue(UByte, 16))
+  val buf = Module(new Queue(UByte, 4))
   io.enq <> buf.io.enq
   val ram = Module(new Queue(UByte, totalNum, false, false, true, false))
   buf.io.deq <> ram.io.enq

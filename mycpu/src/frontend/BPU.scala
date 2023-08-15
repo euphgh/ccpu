@@ -48,27 +48,31 @@ class RetAddrStack(spec: Boolean, size: Int) extends MycpuModule {
       asg(io.topData, recoverData.stack(recoverData.ptr - 1.U))
       asg(updatePtr, recoverData.ptr)
     }
-    val diffSpecRAS = Module(new DifftestSpecRAS)
-    asg(diffSpecRAS.io.clock, clock)
-    asg(diffSpecRAS.io.en, io.pop || io.push.valid || recoverValid)
-    asg(diffSpecRAS.io.pushData, io.push.bits)
-    asg(diffSpecRAS.io.push, io.push.valid)
-    asg(diffSpecRAS.io.pop, io.pop)
-    asg(diffSpecRAS.io.topData, io.topData)
-    asg(diffSpecRAS.io.flush, recoverValid)
+    if (verilator) {
+      val diffSpecRAS = Module(new DifftestSpecRAS)
+      asg(diffSpecRAS.io.clock, clock)
+      asg(diffSpecRAS.io.en, io.pop || io.push.valid || recoverValid)
+      asg(diffSpecRAS.io.pushData, io.push.bits)
+      asg(diffSpecRAS.io.push, io.push.valid)
+      asg(diffSpecRAS.io.pop, io.pop)
+      asg(diffSpecRAS.io.topData, io.topData)
+      asg(diffSpecRAS.io.flush, recoverValid)
+    }
   } else {
     val recoverData = Wire(new RecoverIO)
     addSource(recoverData, "RASRecoverData")
     asg(recoverData.stack, stack)
     asg(recoverData.ptr, ptr)
 
-    val diffArchRAS = Module(new DifftestArchRAS)
-    asg(diffArchRAS.io.clock, clock)
-    asg(diffArchRAS.io.en, io.pop || io.push.valid)
-    asg(diffArchRAS.io.pushData, io.push.bits)
-    asg(diffArchRAS.io.push, io.push.valid)
-    asg(diffArchRAS.io.pop, io.pop)
-    asg(diffArchRAS.io.topData, io.topData)
+    if (verilator) {
+      val diffArchRAS = Module(new DifftestArchRAS)
+      asg(diffArchRAS.io.clock, clock)
+      asg(diffArchRAS.io.en, io.pop || io.push.valid)
+      asg(diffArchRAS.io.pushData, io.push.bits)
+      asg(diffArchRAS.io.push, io.push.valid)
+      asg(diffArchRAS.io.pop, io.pop)
+      asg(diffArchRAS.io.topData, io.topData)
+    }
   }
   when(io.push.valid) {
     asg(ptr, updatePtr + 1.U)
@@ -181,18 +185,22 @@ class LocHisTab extends MycpuModule {
   asg(writePC, Cat(update.tagIdx, update.instrOff(0), 0.U(2.W)))
   val writePCr = Reg(UWord); writePCr := writePC
 
-  val diffLht = Module(new DifftestLHTRead)
-  diffLht.io.clock := clock
-  diffLht.io.en    := readAddr(0).valid
-  asg(diffLht.io.outOK, RegNext(readAddr(0).valid))
+  if (verilator) {
+    val diffLht = Module(new DifftestLHTRead)
+    diffLht.io.clock := clock
+    diffLht.io.en    := readAddr(0).valid
+    asg(diffLht.io.outOK, RegNext(readAddr(0).valid))
+    (0 until fetchNum).foreach { i =>
+      asg(diffLht.io.readAddr(i), readAddr(i).bits)
+      asg(diffLht.io.readCnt(i), readRes(i).cnt)
+      asg(diffLht.io.readTake(i), readRes(i).take)
+    }
+  }
   assert(readAddr(1).valid === readAddr(0).valid)
   assert(readAddr(2).valid === readAddr(0).valid)
   assert(readAddr(3).valid === readAddr(0).valid)
   (0 until fetchNum).foreach(i => {
-    val readPC = RegEnable(readAddr(i).bits, readAddr(i).valid)
-    asg(diffLht.io.readAddr(i), readAddr(i).bits)
-    asg(diffLht.io.readCnt(i), readRes(i).cnt)
-    asg(diffLht.io.readTake(i), readRes(i).take)
+    val readPC  = RegEnable(readAddr(i).bits, readAddr(i).valid)
     val rPCIdx  = getIdx(readPC)
     val wPCIdx  = WireInit(getIdx(writePC))
     val wPCIdxR = WireInit(getIdx(writePCr))

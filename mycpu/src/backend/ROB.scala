@@ -115,6 +115,11 @@ class ROB extends MycpuModule {
       val robRedirect        = Output(new FrontRedirctIO) //serve as recover rat and hilo
     }
   })
+  if (debug) {
+    val instrNum      = RegInit(0.U(32.W))
+    val multCommitVec = VecInit(io.out.multiRetire.map(_.fire)).asUInt
+    when(multCommitVec.orR) { dontTouch(instrNum) := instrNum + PopCount(multCommitVec) }
+  }
 
   class ROBQueue extends MultiQueue(dispatchNum, retireNum, new RobEntry, robNum) {
     val wb = IO(

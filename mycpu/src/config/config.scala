@@ -13,6 +13,7 @@ trait MycpuParam {
   val retAddrStackSize = 8
   val storeQSize       = 8
   val tlbEntriesNum    = 4
+  val enableBCache     = true
   // General Parameter for mycpu
   val excCodeWidth = 5
   val PaddrWidth   = 32

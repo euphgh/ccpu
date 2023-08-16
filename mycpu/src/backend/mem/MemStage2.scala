@@ -102,10 +102,22 @@ class MemStage2 extends MycpuModule {
   ubaw.ready       := io.dmem.aw.ready && !dcaw.valid
   io.dmem.aw.bits  := Mux(dcaw.valid, dcaw.bits, ubaw.bits)
   // W ======================================================
+  val currWID  = RegInit(0.U)
+  val wBurstIn = RegInit(false.B)
+  when(io.dmem.w.fire && !io.dmem.w.bits.last) {
+    wBurstIn := true.B
+    currWID  := io.dmem.w.bits.id
+  }
+  when(io.dmem.w.fire && io.dmem.w.bits.last) { wBurstIn := false.B }
   io.dmem.w.valid := dcw.valid || ubw.valid
   dcw.ready       := io.dmem.w.ready
   ubw.ready       := io.dmem.w.ready && !dcw.valid
   io.dmem.w.bits  := Mux(dcw.valid, dcw.bits, ubw.bits)
+  when(wBurstIn) {
+    dcw.ready      := Mux(isDCacheId(currWID), io.dmem.w.ready, false.B)
+    ubw.ready      := Mux(isDCacheId(currWID), false.B, io.dmem.w.ready)
+    io.dmem.w.bits := Mux(isDCacheId(currWID), dcw.bits, ubw.bits)
+  }
   // B ======================================================
   io.dmem.b.ready := Mux(isDCacheId(io.dmem.b.bits.id), dcb.ready, ubb.ready)
   dcb.valid       := isDCacheId(io.dmem.b.bits.id) && io.dmem.b.valid
@@ -168,7 +180,7 @@ class UartBuffer extends MycpuModule {
   import UartBuffer._
   val buf = Module(new Queue(UByte, 4))
   io.enq <> buf.io.enq
-  val ram = Module(new Queue(UByte, totalNum, false, false, true, false))
+  val ram = Module(new Queue(UByte, totalNum, false, false, false, false))
   buf.io.deq <> ram.io.enq
   ram.io.deq.ready := false.B
   val groupCnt = RegInit(0.U((log2Ceil(totalNum / burstLen)).W))
